@@ -246,6 +246,12 @@ struct EuchreGame: GameEngine {
         return "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
     }
 
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        let winner = teamScores[0] >= 10 ? 0 : 1
+        return [[winner, winner + 2], [1 - winner, 3 - winner]]
+    }
+
     func redacted(for seat: Int) -> EuchreGame {
         var copy = self
         for other in 0..<4 where other != seat { copy.hands[other] = [] }

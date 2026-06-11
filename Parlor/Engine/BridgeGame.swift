@@ -338,6 +338,13 @@ struct BridgeGame: GameEngine {
         return "\(sideLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
     }
 
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        if teamScores[0] == teamScores[1] { return [[0, 1, 2, 3]] }
+        let winner = teamScores[0] > teamScores[1] ? 0 : 1
+        return [[winner, winner + 2], [1 - winner, 3 - winner]]
+    }
+
     func redacted(for seat: Int) -> BridgeGame {
         var copy = self
         for other in 0..<4 where other != seat {

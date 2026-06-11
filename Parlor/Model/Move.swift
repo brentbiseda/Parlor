@@ -69,6 +69,34 @@ enum EuchreCall: Codable, Hashable {
     case callTrump(Suit, alone: Bool)
 }
 
+enum FreeCellMove: Codable, Hashable {
+    case cascadeToFree(col: Int, cell: Int)
+    case cascadeToFoundation(col: Int)
+    /// Move the run of the top `count` cards of `from` onto `to`.
+    case cascadeToCascade(from: Int, count: Int, to: Int)
+    case freeToFoundation(cell: Int)
+    case freeToCascade(cell: Int, to: Int)
+}
+
+/// Pinball plays out in a physics scene; the engine just keeps score,
+/// so its "moves" are events reported by the table.
+enum PinballEvent: Codable, Hashable {
+    case score(Int)
+    case ballDrained
+}
+
+/// Breakout works like pinball: physics in the scene, score in the engine.
+enum BreakoutEvent: Codable, Hashable {
+    case score(Int)
+    case ballLost
+    case levelCleared
+}
+
+enum TetrisMove: Codable, Hashable {
+    case left, right, rotate, softDrop, hardDrop
+    case tick            // gravity step, driven by the view's timer
+}
+
 enum KlondikeMove: Codable, Hashable {
     case draw
     case resetStock
@@ -96,6 +124,10 @@ enum Move: Codable, Hashable {
     case resign
     // Solo games
     case klondike(KlondikeMove)
+    case freecell(FreeCellMove)
     case matchTiles(Int, Int)       // mahjong tile ids
     case shuffleRemaining           // mahjong rescue
+    case pinball(PinballEvent)
+    case breakout(BreakoutEvent)
+    case tetris(TetrisMove)
 }

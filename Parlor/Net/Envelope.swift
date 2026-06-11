@@ -1,11 +1,5 @@
 import Foundation
 
-struct PlayerInfo: Codable, Hashable, Identifiable {
-    var id: String          // stable per-install UUID
-    var name: String
-    var isBot = false
-}
-
 struct LobbyState: Codable, Hashable {
     var gameKind: GameKind
     var options = GameOptions()

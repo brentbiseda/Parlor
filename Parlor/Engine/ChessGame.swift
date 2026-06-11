@@ -300,4 +300,13 @@ struct ChessGame: GameEngine {
         if isDraw { return "Draw" }
         return nil
     }
+
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        if let resigned { return [[1 - resigned], [resigned]] }
+        if legalBoardMoves(for: currentPlayer).isEmpty, inCheck(currentPlayer) {
+            return [[1 - currentPlayer], [currentPlayer]]
+        }
+        return [[0, 1]]   // stalemate or other draw
+    }
 }

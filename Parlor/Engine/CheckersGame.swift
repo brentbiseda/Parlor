@@ -146,4 +146,11 @@ struct CheckersGame: GameEngine {
         }
         return nil
     }
+
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        if let resigned { return [[1 - resigned], [resigned]] }
+        if movesWithoutCapture >= 80 { return [[0, 1]] }
+        return [[1 - currentPlayer], [currentPlayer]]
+    }
 }

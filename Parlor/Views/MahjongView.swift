@@ -56,16 +56,15 @@ struct MahjongView: View {
         let isSelected = selectedTileID == tile.id
         let isHinted = hint.map { $0.0 == tile.id || $0.1 == tile.id } ?? false
         return RoundedRectangle(cornerRadius: 4)
-            .fill(free ? Color(red: 0.98, green: 0.96, blue: 0.88) : Color(red: 0.8, green: 0.77, blue: 0.68))
+            .fill(free ? Color(red: 0.99, green: 0.97, blue: 0.9) : Color(red: 0.78, green: 0.75, blue: 0.66))
             .overlay(
                 RoundedRectangle(cornerRadius: 4)
                     .strokeBorder(isSelected ? Color.blue : isHinted ? Color.orange : Color.black.opacity(0.35),
                                   lineWidth: isSelected || isHinted ? 2.5 : 1)
             )
             .overlay(
-                Text(tile.face.glyph)
-                    .font(.system(size: tileH * 0.62))
-                    .minimumScaleFactor(0.5)
+                TileFaceView(face: tile.face, height: tileH)
+                    .opacity(free ? 1 : 0.55)
             )
             .frame(width: tileW, height: tileH)
             .shadow(color: .black.opacity(0.35), radius: 1.5, x: 2, y: 2)
@@ -77,6 +76,7 @@ struct MahjongView: View {
         hint = nil
         guard let selected = selectedTileID, selected != tile.id else {
             selectedTileID = selectedTileID == tile.id ? nil : tile.id
+            if selectedTileID != nil { SoundFX.shared.play(.tileSelect) }
             return
         }
         if let first = game.tiles.first(where: { $0.id == selected }), first.face.matches(tile.face) {
@@ -84,6 +84,56 @@ struct MahjongView: View {
             selectedTileID = nil
         } else {
             selectedTileID = tile.id
+            SoundFX.shared.play(.tileSelect)
         }
+    }
+}
+
+/// High-contrast tile faces: bold colored rank + suit mark instead of the
+/// tiny monochrome Unicode mahjong glyphs.
+struct TileFaceView: View {
+    let face: MahjongGame.TileFace
+    let height: CGFloat
+
+    var body: some View {
+        switch face {
+        case .dots(let n):
+            numberFace(n, mark: "●", color: Color(red: 0.1, green: 0.35, blue: 0.75))
+        case .bamboo(let n):
+            numberFace(n, mark: "▮", color: Color(red: 0.1, green: 0.55, blue: 0.25))
+        case .characters(let n):
+            numberFace(n, mark: "万", color: Color(red: 0.75, green: 0.12, blue: 0.15))
+        case .wind(let n):
+            Text(["E", "S", "W", "N"][n])
+                .font(.system(size: height * 0.55, weight: .heavy, design: .serif))
+                .foregroundStyle(Color(red: 0.15, green: 0.2, blue: 0.45))
+                .minimumScaleFactor(0.5)
+        case .dragon(let n):
+            Text(["中", "發", "白"][n])
+                .font(.system(size: height * 0.5, weight: .heavy))
+                .foregroundStyle([Color(red: 0.75, green: 0.12, blue: 0.15),
+                                  Color(red: 0.1, green: 0.55, blue: 0.25),
+                                  Color(red: 0.45, green: 0.45, blue: 0.5)][n])
+                .minimumScaleFactor(0.5)
+        case .flower(let n):
+            Text(["🌸", "🌷", "🌼", "🌺"][n])
+                .font(.system(size: height * 0.48))
+                .minimumScaleFactor(0.5)
+        case .season(let n):
+            Text(["🌱", "☀️", "🍂", "❄️"][n])
+                .font(.system(size: height * 0.48))
+                .minimumScaleFactor(0.5)
+        }
+    }
+
+    private func numberFace(_ n: Int, mark: String, color: Color) -> some View {
+        VStack(spacing: -height * 0.06) {
+            Text("\(n)")
+                .font(.system(size: height * 0.42, weight: .heavy, design: .rounded))
+            Text(mark)
+                .font(.system(size: height * 0.26, weight: .bold))
+        }
+        .foregroundStyle(color)
+        .minimumScaleFactor(0.5)
     }
 }

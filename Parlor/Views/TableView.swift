@@ -9,7 +9,12 @@ struct TableView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                FeltBackground()
+                switch session.lobby.gameKind {
+                case .pinball, .breakout, .tetris:
+                    ArcadeBackground()
+                default:
+                    FeltBackground()
+                }
                 if session.game == nil {
                     LobbyWaitView(session: session)
                 } else {
@@ -21,6 +26,8 @@ struct TableView: View {
                 }
 
                 if let result = session.game?.resultText {
+                    ConfettiView()
+                        .allowsHitTesting(false)
                     resultBanner(result)
                 }
             }
@@ -31,15 +38,36 @@ struct TableView: View {
                     Button("Leave") { model.endSession() }
                         .tint(.white)
                 }
+                if session.supportsUndo {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button {
+                            session.undo()
+                        } label: {
+                            Image(systemName: "arrow.uturn.backward")
+                        }
+                        .tint(.white)
+                        .disabled(!session.canUndo)
+                    }
+                }
+                if model.activeMatch != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Label("Match", systemImage: "trophy.fill")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.yellow)
+                            .labelStyle(.titleAndIcon)
+                    }
+                }
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let game = session.game, game.resultText == nil {
                     Text(statusLine(game))
-                        .font(.footnote)
+                        .font(.footnote.weight(.medium))
                         .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 5)
+                        .background(.black.opacity(0.35), in: Capsule())
                         .padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
-                        .background(.black.opacity(0.25))
                 }
             }
             .alert("Oops", isPresented: Binding(
@@ -58,11 +86,11 @@ struct TableView: View {
 
     func statusLine(_ game: AnyGame) -> String {
         var line = game.statusText
-        if !game.isOver {
+        if !game.isOver, game.playerCount > 1 {
             let seat = game.currentPlayer
             if session.actionableSeat != nil {
                 line += " — your move"
-            } else if game.playerCount > 1 {
+            } else {
                 line += " — \(session.playerName(seat: game.controller(of: seat)))"
             }
         }
@@ -80,8 +108,20 @@ struct TableView: View {
             GoBoardView(session: session)
         case .solitaire:
             KlondikeView(session: session)
+        case .freecell:
+            FreeCellView(session: session)
         case .mahjong:
             MahjongView(session: session)
+        case .pinball:
+            // New session (play again) gets a fresh physics table.
+            PinballView(session: session)
+                .id(ObjectIdentifier(session))
+        case .breakout:
+            BreakoutView(session: session)
+                .id(ObjectIdentifier(session))
+        case .tetris:
+            TetrisView(session: session)
+                .id(ObjectIdentifier(session))
         }
     }
 
@@ -103,23 +143,36 @@ struct TableView: View {
     }
 
     func resultBanner(_ result: String) -> some View {
-        VStack(spacing: 14) {
+        VStack(spacing: 16) {
+            Image(systemName: "trophy.fill")
+                .font(.system(size: 40))
+                .foregroundStyle(.yellow)
+                .shadow(color: .yellow.opacity(0.5), radius: 10)
             Text(result)
                 .font(.title3.weight(.bold))
                 .multilineTextAlignment(.center)
+            if model.activeMatch != nil {
+                Text("Result recorded when you leave the table.")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
             HStack {
                 if session.role == .local {
                     Button("Play again") { model.playAgain() }
                         .buttonStyle(.borderedProminent)
                 }
-                Button("Leave table") { model.endSession() }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
+                Button(model.activeMatch != nil ? "Back to standings" : "Leave table") {
+                    model.endSession()
+                }
+                .buttonStyle(.bordered)
+                .tint(.white)
             }
         }
         .foregroundStyle(.white)
-        .padding(24)
-        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 16))
+        .padding(28)
+        .background(.ultraThinMaterial.shadow(.drop(color: .black.opacity(0.4), radius: 16)),
+                    in: RoundedRectangle(cornerRadius: 20))
+        .environment(\.colorScheme, .dark)
         .padding(30)
     }
 }

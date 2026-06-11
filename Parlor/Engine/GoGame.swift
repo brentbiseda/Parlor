@@ -16,6 +16,7 @@ struct GoGame: GameEngine {
     var koPoint: Point? = nil
     var resigned: Int? = nil
     var lastPlaced: Point? = nil
+    var moveCount = 0
     var komi: Double { 6.5 }
 
     init(size: Int = 9) {
@@ -110,11 +111,13 @@ struct GoGame: GameEngine {
             board = result.board
             lastPlaced = p
             consecutivePasses = 0
+            moveCount += 1
             currentPlayer = 1 - currentPlayer
         case .pass:
             consecutivePasses += 1
             koPoint = nil
             lastPlaced = nil
+            moveCount += 1
             currentPlayer = 1 - currentPlayer
         case .resign:
             resigned = currentPlayer
@@ -172,5 +175,13 @@ struct GoGame: GameEngine {
         if black == white { return "Draw at \(black)" }
         let winner = black > white ? "Black" : "White"
         return String(format: "%@ wins %.1f – %.1f (komi %.1f)", winner, max(black, white), min(black, white), komi)
+    }
+
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        if let resigned { return [[1 - resigned], [resigned]] }
+        let (black, white) = areaScores()
+        if black == white { return [[0, 1]] }
+        return black > white ? [[0], [1]] : [[1], [0]]
     }
 }

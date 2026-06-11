@@ -16,10 +16,15 @@ struct KlondikeGame: GameEngine {
     /// Foundations indexed by Suit.allCases order.
     var foundations: [[Card]] = Array(repeating: [], count: 4)
     var drawThree: Bool
+    /// Times allowed through the stock; 0 = unlimited.
+    var maxPasses: Int = 0
+    /// Completed trips through the stock (the deal itself is pass 1).
+    var passesUsed: Int = 1
     var moveCount = 0
 
-    init(drawThree: Bool = false) {
+    init(drawThree: Bool = false, maxPasses: Int = 0) {
         self.drawThree = drawThree
+        self.maxPasses = maxPasses
         var deck = Card.standardDeck().shuffled()
         tableau = (0..<7).map { col in
             var pile = TableauPile()
@@ -51,11 +56,16 @@ struct KlondikeGame: GameEngine {
         return tableau[column].faceDown.isEmpty && card.rank == .king
     }
 
+    /// Whether the stock may be flipped back over for another pass.
+    var canResetStock: Bool {
+        stock.isEmpty && !waste.isEmpty && (maxPasses == 0 || passesUsed < maxPasses)
+    }
+
     func legalMoves() -> [Move] {
         var moves: [Move] = []
         if !stock.isEmpty {
             moves.append(.klondike(.draw))
-        } else if !waste.isEmpty {
+        } else if canResetStock {
             moves.append(.klondike(.resetStock))
         }
         if let top = waste.last {
@@ -93,9 +103,10 @@ struct KlondikeGame: GameEngine {
             let n = drawThree ? min(3, stock.count) : 1
             for _ in 0..<n { waste.append(stock.removeLast()) }
         case .resetStock:
-            guard stock.isEmpty, !waste.isEmpty else { throw GameError.illegalMove }
+            guard canResetStock else { throw GameError.illegalMove }
             stock = waste.reversed()
             waste = []
+            passesUsed += 1
         case .wasteToFoundation:
             guard let top = waste.last, canPlaceOnFoundation(top) else { throw GameError.illegalMove }
             waste.removeLast()
@@ -138,7 +149,9 @@ struct KlondikeGame: GameEngine {
 
     var statusText: String {
         let done = foundations.reduce(0) { $0 + $1.count }
-        return "Foundations \(done)/52 · \(moveCount) moves"
+        var text = "Foundations \(done)/52 · \(moveCount) moves"
+        if maxPasses > 0 { text += " · pass \(min(passesUsed, maxPasses))/\(maxPasses)" }
+        return text
     }
 
     var resultText: String? {

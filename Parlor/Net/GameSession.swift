@@ -18,6 +18,8 @@ final class GameSession: ObservableObject {
     let transport: (any GameTransport)?
     let myID = Identity.playerID
     let myName: String
+    /// Stable across save/resume so suspended games upsert their entry.
+    private(set) var sessionID = UUID()
 
     @Published var lobby: LobbyState
     @Published var game: AnyGame?
@@ -28,6 +30,10 @@ final class GameSession: ObservableObject {
     @Published var revealedSeat: Int? = nil
     @Published var toast: String? = nil
     @Published var ended = false
+    /// Previous states for solo-game undo (local sessions only).
+    @Published private(set) var undoStack: [AnyGame] = []
+    /// Set once the finished game has been written to stats/league records.
+    var resultRecorded = false
 
     private var botGeneration = 0
 
@@ -51,6 +57,41 @@ final class GameSession: ObservableObject {
         if humans == 1 { revealedSeat = 0 }
         game = AnyGame.make(kind: kind, options: options)
         scheduleBotIfNeeded()
+    }
+
+    /// A league or tournament table: seats come in a fixed order and every
+    /// human seat lives on this device (bots fill the rest).
+    init(matchGame kind: GameKind, options: GameOptions, players: [PlayerInfo], myName: String) {
+        role = .local
+        transport = nil
+        self.myName = myName
+        lobby = LobbyState(gameKind: kind, options: options, hostID: Identity.playerID, players: players)
+        localHumanSeats = Set(players.indices.filter { !players[$0].isBot })
+        if localHumanSeats.count <= 1 { revealedSeat = localHumanSeats.first }
+        game = AnyGame.make(kind: kind, options: options)
+        scheduleBotIfNeeded()
+    }
+
+    /// Resume a suspended local table exactly where it left off.
+    init(resuming saved: SavedGame, myName: String) {
+        role = .local
+        transport = nil
+        self.myName = myName
+        sessionID = saved.id
+        lobby = LobbyState(gameKind: saved.kind, options: saved.options,
+                           hostID: Identity.playerID, players: saved.players)
+        localHumanSeats = Set(saved.players.indices.filter { !saved.players[$0].isBot })
+        if localHumanSeats.count <= 1 { revealedSeat = localHumanSeats.first }
+        game = saved.game
+        scheduleBotIfNeeded()
+    }
+
+    /// Snapshot for asynchronous play, or nil when there's nothing to keep
+    /// (networked tables and finished games can't be suspended).
+    func snapshot(match: ActiveMatch?) -> SavedGame? {
+        guard role == .local, let game, !game.isOver else { return nil }
+        return SavedGame(id: sessionID, kind: lobby.gameKind, options: lobby.options,
+                         players: lobby.players, game: game, match: match, savedAt: Date())
     }
 
     /// Host a networked table. The game starts when the host calls `startHostedGame`.
@@ -252,10 +293,65 @@ final class GameSession: ObservableObject {
 
     private func applyAndSync(_ move: Move) throws {
         guard var g = game else { return }
+        let before = g
         try g.applyValidated(move)
+        if supportsUndo {
+            undoStack.append(before)
+            if undoStack.count > 500 { undoStack.removeFirst() }
+        }
         game = g
+        playSound(for: move, finished: g.isOver)
         pushState()
         scheduleBotIfNeeded()
+    }
+
+    /// Table-wide sounds; arcade scenes (pinball, breakout, tetris) make
+    /// their own noises closer to the action.
+    private func playSound(for move: Move, finished: Bool) {
+        if finished {
+            if !lobby.gameKind.isSolo || lobby.gameKind == .solitaire
+                || lobby.gameKind == .freecell || lobby.gameKind == .mahjong {
+                SoundFX.shared.play(.win)
+            }
+            return
+        }
+        switch move {
+        case .playCard, .passCards:
+            SoundFX.shared.play(.cardPlay)
+        case .klondike(.draw), .klondike(.resetStock):
+            SoundFX.shared.play(.cardDraw)
+        case .klondike, .freecell:
+            SoundFX.shared.play(.cardPlay)
+        case .board, .place:
+            SoundFX.shared.play(.click)
+        case .matchTiles:
+            SoundFX.shared.play(.tileMatch)
+        case .shuffleRemaining:
+            SoundFX.shared.play(.cardDraw)
+        case .bid, .bridgeCall, .euchreCall:
+            SoundFX.shared.play(.click)
+        default:
+            break
+        }
+    }
+
+    // MARK: - Undo (solo games)
+
+    /// Solitaire-style games allow takebacks; multiplayer and arcade games don't.
+    var supportsUndo: Bool {
+        guard role == .local else { return false }
+        switch lobby.gameKind {
+        case .solitaire, .freecell, .mahjong: return true
+        default: return false
+        }
+    }
+
+    var canUndo: Bool { supportsUndo && !undoStack.isEmpty }
+
+    func undo() {
+        guard canUndo, let previous = undoStack.popLast() else { return }
+        game = previous
+        SoundFX.shared.play(.undo)
     }
 
     private func pushState() {
@@ -278,7 +374,8 @@ final class GameSession: ObservableObject {
             guard let self, generation == self.botGeneration,
                   let g = self.game, !g.isOver,
                   self.lobby.players[safe: g.controller(of: g.currentPlayer)]?.isBot == true,
-                  let move = Bot.chooseMove(for: g) else { return }
+                  let move = Bot.chooseMove(for: g, difficulty: self.lobby.options.botDifficulty)
+            else { return }
             try? self.applyAndSync(move)
         }
     }

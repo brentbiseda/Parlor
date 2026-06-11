@@ -34,6 +34,10 @@ protocol GameEngine: Codable {
     func redacted(for seat: Int) -> Self
     /// Seat that physically acts for `seat` (Bridge: declarer plays dummy).
     func controller(of seat: Int) -> Int
+    /// Final standings once `isOver`: seats grouped by finishing rank, best
+    /// group first; tied seats share a group. Empty while the game runs.
+    /// Leagues and tournaments use this to award points and advance players.
+    func ranking() -> [[Int]]
 }
 
 extension GameEngine {
@@ -41,6 +45,7 @@ extension GameEngine {
     var resultText: String? { nil }
     func redacted(for seat: Int) -> Self { self }
     func controller(of seat: Int) -> Int { seat }
+    func ranking() -> [[Int]] { isOver ? [Array(0..<playerCount)] : [] }
 
     func isLegal(_ move: Move) -> Bool { legalMoves().contains(move) }
 
@@ -65,6 +70,7 @@ struct AnyGame: Codable {
     var resultText: String? { engine.resultText }
     func legalMoves() -> [Move] { engine.legalMoves() }
     func controller(of seat: Int) -> Int { engine.controller(of: seat) }
+    func ranking() -> [[Int]] { engine.ranking() }
     func redacted(for seat: Int) -> AnyGame { AnyGame(redactedEngine(for: seat)) }
 
     mutating func applyValidated(_ move: Move) throws {
@@ -94,10 +100,14 @@ struct AnyGame: Codable {
         case .euchre: engine = try c.decode(EuchreGame.self, forKey: .data)
         case .bridge: engine = try c.decode(BridgeGame.self, forKey: .data)
         case .solitaire: engine = try c.decode(KlondikeGame.self, forKey: .data)
+        case .freecell: engine = try c.decode(FreeCellGame.self, forKey: .data)
         case .mahjong: engine = try c.decode(MahjongGame.self, forKey: .data)
         case .chess: engine = try c.decode(ChessGame.self, forKey: .data)
         case .checkers: engine = try c.decode(CheckersGame.self, forKey: .data)
         case .go: engine = try c.decode(GoGame.self, forKey: .data)
+        case .pinball: engine = try c.decode(PinballGame.self, forKey: .data)
+        case .breakout: engine = try c.decode(BreakoutGame.self, forKey: .data)
+        case .tetris: engine = try c.decode(TetrisGame.self, forKey: .data)
         }
     }
 
@@ -110,6 +120,10 @@ struct AnyGame: Codable {
         case let g as EuchreGame: try c.encode(g, forKey: .data)
         case let g as BridgeGame: try c.encode(g, forKey: .data)
         case let g as KlondikeGame: try c.encode(g, forKey: .data)
+        case let g as FreeCellGame: try c.encode(g, forKey: .data)
+        case let g as PinballGame: try c.encode(g, forKey: .data)
+        case let g as BreakoutGame: try c.encode(g, forKey: .data)
+        case let g as TetrisGame: try c.encode(g, forKey: .data)
         case let g as MahjongGame: try c.encode(g, forKey: .data)
         case let g as ChessGame: try c.encode(g, forKey: .data)
         case let g as CheckersGame: try c.encode(g, forKey: .data)
@@ -124,11 +138,16 @@ struct AnyGame: Codable {
         case .spades: return AnyGame(SpadesGame())
         case .euchre: return AnyGame(EuchreGame())
         case .bridge: return AnyGame(BridgeGame())
-        case .solitaire: return AnyGame(KlondikeGame(drawThree: options.klondikeDrawThree))
+        case .solitaire: return AnyGame(KlondikeGame(drawThree: options.klondikeDrawThree,
+                                                     maxPasses: options.klondikeMaxPasses))
+        case .freecell: return AnyGame(FreeCellGame())
         case .mahjong: return AnyGame(MahjongGame())
         case .chess: return AnyGame(ChessGame())
         case .checkers: return AnyGame(CheckersGame())
         case .go: return AnyGame(GoGame(size: options.goBoardSize))
+        case .pinball: return AnyGame(PinballGame())
+        case .breakout: return AnyGame(BreakoutGame())
+        case .tetris: return AnyGame(TetrisGame())
         }
     }
 }

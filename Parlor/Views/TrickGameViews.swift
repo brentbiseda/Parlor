@@ -123,6 +123,7 @@ struct TrickTableView: View {
                 let acting = session.actionableSeat != nil
 
                 VStack(spacing: 4) {
+                    scoreStrip(game: game, perspective: perspective)
                     opponentBadge(offset: 2, adapter: adapter, game: game)
                     HStack(alignment: .center) {
                         opponentBadge(offset: 1, adapter: adapter, game: game)
@@ -166,6 +167,67 @@ struct TrickTableView: View {
     }
 
     func seatName(_ seat: Int) -> String { session.playerName(seat: seat) }
+
+    // MARK: - Always-visible scores
+
+    /// Compact scoreboard pinned above the table, so nobody has to open the
+    /// Scores sheet to know where the game stands.
+    @ViewBuilder
+    func scoreStrip(game: AnyGame, perspective: Int) -> some View {
+        switch game.engine {
+        case let g as SpadesGame:
+            let us = perspective % 2
+            HStack(spacing: 8) {
+                scoreChip("Us", "\(g.teamScores[us])", detail: "\(g.teamBags[us]) bags", highlight: true)
+                Text("to 500").font(.caption2).foregroundStyle(.white.opacity(0.5))
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(g.teamBags[1 - us]) bags", highlight: false)
+            }
+        case let g as EuchreGame:
+            let us = perspective % 2
+            HStack(spacing: 8) {
+                scoreChip("Us", "\(g.teamScores[us])", detail: nil, highlight: true)
+                Text("to 10").font(.caption2).foregroundStyle(.white.opacity(0.5))
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: nil, highlight: false)
+            }
+        case let g as BridgeGame:
+            let us = perspective % 2
+            HStack(spacing: 8) {
+                scoreChip("Us", "\(g.teamScores[us])", detail: nil, highlight: true)
+                Text("deal \(min(g.dealNumber, 4))/4").font(.caption2).foregroundStyle(.white.opacity(0.5))
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: nil, highlight: false)
+            }
+        case let g as HeartsGame:
+            HStack(spacing: 6) {
+                ForEach(0..<4, id: \.self) { seat in
+                    scoreChip(String(seatName(seat).prefix(6)), "\(g.scores[seat])",
+                              detail: nil, highlight: seat == perspective)
+                }
+            }
+        default:
+            EmptyView()
+        }
+    }
+
+    func scoreChip(_ label: String, _ value: String, detail: String?, highlight: Bool) -> some View {
+        HStack(spacing: 5) {
+            Text(label)
+                .font(.caption2.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.75))
+            Text(value)
+                .font(.callout.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(highlight ? .yellow : .white)
+            if let detail {
+                Text(detail)
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(.black.opacity(highlight ? 0.4 : 0.25), in: Capsule())
+        .overlay(Capsule().strokeBorder(.white.opacity(highlight ? 0.3 : 0.12), lineWidth: 1))
+    }
 
     func opponentBadge(offset: Int, adapter: TrickGameAdapter, game: AnyGame) -> some View {
         let seat = (session.perspectiveSeat + offset) % 4

@@ -224,6 +224,12 @@ struct HeartsGame: GameEngine {
         return "\(winners.joined(separator: " & ")) win\(winners.count == 1 ? "s" : "") with \(best) points"
     }
 
+    func ranking() -> [[Int]] {
+        guard isOver else { return [] }
+        let byScore = Dictionary(grouping: 0..<4) { scores[$0] }
+        return byScore.keys.sorted().map { byScore[$0]!.sorted() }
+    }
+
     func redacted(for seat: Int) -> HeartsGame {
         var copy = self
         for other in 0..<4 where other != seat {

@@ -6,7 +6,8 @@ struct CardView: View {
 
     var body: some View {
         RoundedRectangle(cornerRadius: width * 0.12)
-            .fill(.white)
+            .fill(LinearGradient(colors: [.white, Color(white: 0.93)],
+                                 startPoint: .topLeading, endPoint: .bottomTrailing))
             .overlay(
                 RoundedRectangle(cornerRadius: width * 0.12)
                     .strokeBorder(Color.black.opacity(0.25), lineWidth: 1)
@@ -27,24 +28,83 @@ struct CardView: View {
             }
             .foregroundStyle(card.suit.isRed ? Color(red: 0.78, green: 0.1, blue: 0.13) : .black)
             .frame(width: width, height: width * 1.45)
-            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 1)
+            .shadow(color: .black.opacity(0.25), radius: 2, y: 1.5)
+    }
+}
+
+/// User-selectable card back designs (chosen in solitaire setup, used by
+/// every game that shows a face-down card).
+enum CardBack: String, CaseIterable, Identifiable {
+    case classic, crimson, forest, royal, midnight, fish, koi
+
+    var id: String { rawValue }
+    static let storageKey = "parlor.cardBack"
+
+    var title: String {
+        switch self {
+        case .classic: return "Classic"
+        case .crimson: return "Crimson"
+        case .forest: return "Forest"
+        case .royal: return "Royal"
+        case .midnight: return "Midnight"
+        case .fish: return "Fish"
+        case .koi: return "Koi Pond"
+        }
+    }
+
+    var colors: [Color] {
+        switch self {
+        case .classic: return [Color(red: 0.22, green: 0.33, blue: 0.65), Color(red: 0.13, green: 0.2, blue: 0.45)]
+        case .crimson: return [Color(red: 0.7, green: 0.12, blue: 0.18), Color(red: 0.42, green: 0.05, blue: 0.1)]
+        case .forest: return [Color(red: 0.12, green: 0.45, blue: 0.25), Color(red: 0.05, green: 0.27, blue: 0.14)]
+        case .royal: return [Color(red: 0.42, green: 0.2, blue: 0.65), Color(red: 0.24, green: 0.1, blue: 0.4)]
+        case .midnight: return [Color(red: 0.15, green: 0.17, blue: 0.22), Color(red: 0.05, green: 0.06, blue: 0.09)]
+        case .fish: return [Color(red: 0.0, green: 0.45, blue: 0.6), Color(red: 0.0, green: 0.25, blue: 0.4)]
+        case .koi: return [Color(red: 0.95, green: 0.5, blue: 0.25), Color(red: 0.7, green: 0.25, blue: 0.1)]
+        }
+    }
+
+    /// Emoji motif drawn in the middle (nil = classic suit watermark).
+    var motif: String? {
+        switch self {
+        case .fish: return "🐟"
+        case .koi: return "🎏"
+        case .midnight: return "🌙"
+        default: return nil
+        }
     }
 }
 
 struct FaceDownCardView: View {
     var width: CGFloat = 52
+    /// Fixed style for previews; nil follows the user's chosen back.
+    var styleOverride: CardBack? = nil
+    @AppStorage(CardBack.storageKey) private var backRaw = CardBack.classic.rawValue
+
+    private var back: CardBack { styleOverride ?? CardBack(rawValue: backRaw) ?? .classic }
 
     var body: some View {
         RoundedRectangle(cornerRadius: width * 0.12)
-            .fill(LinearGradient(colors: [Color(red: 0.22, green: 0.33, blue: 0.65), Color(red: 0.13, green: 0.2, blue: 0.45)],
+            .fill(LinearGradient(colors: back.colors,
                                  startPoint: .topLeading, endPoint: .bottomTrailing))
             .overlay(
                 RoundedRectangle(cornerRadius: width * 0.12)
                     .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
                     .padding(width * 0.07)
             )
+            .overlay {
+                if let motif = back.motif {
+                    Text(motif)
+                        .font(.system(size: width * 0.42))
+                        .opacity(0.85)
+                } else {
+                    Image(systemName: "suit.club.fill")
+                        .font(.system(size: width * 0.32))
+                        .foregroundStyle(.white.opacity(0.22))
+                }
+            }
             .frame(width: width, height: width * 1.45)
-            .shadow(color: .black.opacity(0.18), radius: 1.5, y: 1)
+            .shadow(color: .black.opacity(0.25), radius: 2, y: 1.5)
     }
 }
 
@@ -147,7 +207,25 @@ extension Color {
 
 struct FeltBackground: View {
     var body: some View {
-        LinearGradient(colors: [.tableFelt, .tableFeltDark], startPoint: .top, endPoint: .bottom)
-            .ignoresSafeArea()
+        ZStack {
+            LinearGradient(colors: [.tableFelt, .tableFeltDark], startPoint: .top, endPoint: .bottom)
+            // Soft table lamp falloff toward the edges.
+            RadialGradient(colors: [.white.opacity(0.10), .clear, .black.opacity(0.25)],
+                           center: .center, startRadius: 40, endRadius: 520)
+        }
+        .ignoresSafeArea()
+    }
+}
+
+struct ArcadeBackground: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(colors: [Color(red: 0.1, green: 0.08, blue: 0.22),
+                                    Color(red: 0.04, green: 0.03, blue: 0.1)],
+                           startPoint: .top, endPoint: .bottom)
+            RadialGradient(colors: [Color(red: 0.5, green: 0.2, blue: 0.8).opacity(0.25), .clear],
+                           center: .top, startRadius: 0, endRadius: 500)
+        }
+        .ignoresSafeArea()
     }
 }
