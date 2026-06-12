@@ -24,11 +24,13 @@ struct AvatarView: View {
     }
 }
 
-/// Manage local identities and switch who "you" are.
+/// Manage local identities, switch who "you" are, and pick the table look.
 struct ProfilesView: View {
     @EnvironmentObject var profiles: ProfileStore
     @Environment(\.dismiss) private var dismiss
     @State private var editing: PlayerProfile? = nil
+    @AppStorage(FeltTheme.storageKey) private var feltRaw = FeltTheme.classic.rawValue
+    @AppStorage(CardBack.storageKey) private var cardBack = CardBack.classic.rawValue
 
     var body: some View {
         NavigationStack {
@@ -84,6 +86,60 @@ struct ProfilesView: View {
                     editing = fresh
                 } label: {
                     Label("New profile", systemImage: "person.badge.plus")
+                }
+
+                Section("Table felt") {
+                    HStack(spacing: 12) {
+                        ForEach(FeltTheme.allCases) { theme in
+                            VStack(spacing: 5) {
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(LinearGradient(colors: theme.colors,
+                                                         startPoint: .top, endPoint: .bottom))
+                                    .frame(width: 58, height: 42)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(Color.accentColor,
+                                                          lineWidth: feltRaw == theme.rawValue ? 3 : 0)
+                                    )
+                                Text(theme.title)
+                                    .font(.caption2)
+                                    .foregroundStyle(feltRaw == theme.rawValue ? .primary : .secondary)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.7)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .onTapGesture {
+                                feltRaw = theme.rawValue
+                                SoundFX.shared.play(.click)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+
+                Section("Card back") {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 12) {
+                            ForEach(CardBack.allCases) { style in
+                                VStack(spacing: 4) {
+                                    FaceDownCardView(width: 44, styleOverride: style)
+                                        .overlay(
+                                            RoundedRectangle(cornerRadius: 44 * 0.12)
+                                                .strokeBorder(Color.accentColor,
+                                                              lineWidth: cardBack == style.rawValue ? 3 : 0)
+                                        )
+                                    Text(style.title)
+                                        .font(.caption2)
+                                        .foregroundStyle(cardBack == style.rawValue ? .primary : .secondary)
+                                }
+                                .onTapGesture {
+                                    cardBack = style.rawValue
+                                    SoundFX.shared.play(.click)
+                                }
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
                 }
             }
             .navigationTitle("Profiles")

@@ -8,6 +8,8 @@ final class AppModel: ObservableObject {
     @Published var showJoinSheet = false
     @Published var toast: String?
     @Published var activeMatch: ActiveMatch?
+    /// Most recently played games, newest first, for the home quick-launch row.
+    @Published private(set) var recentKinds: [GameKind] = []
 
     let competitions = CompetitionStore()
     let stats = StatsStore()
@@ -18,6 +20,8 @@ final class AppModel: ObservableObject {
     private var sharePlayTask: Task<Void, Never>?
 
     init() {
+        recentKinds = (UserDefaults.standard.stringArray(forKey: "parlor.recents") ?? [])
+            .compactMap(GameKind.init(rawValue:))
         listenForSharePlay()
         // Simulated (bot-only) league & tournament matches still move ratings.
         competitions.onSimulatedResult = { [weak self] kind, participants, seatRanking in
@@ -44,13 +48,22 @@ final class AppModel: ObservableObject {
 
     func startLocal(kind: GameKind, options: GameOptions, humanCount: Int) {
         activeMatch = nil
+        noteRecent(kind)
         session = GameSession(localGame: kind, options: options, humanCount: humanCount, myName: displayName)
     }
 
     func hostNearby(kind: GameKind, options: GameOptions) {
         activeMatch = nil
+        noteRecent(kind)
         let transport = MultipeerTransport(hostingGame: kind, hostName: displayName)
         session = GameSession(hosting: kind, options: options, transport: transport, myName: displayName)
+    }
+
+    private func noteRecent(_ kind: GameKind) {
+        recentKinds.removeAll { $0 == kind }
+        recentKinds.insert(kind, at: 0)
+        recentKinds = Array(recentKinds.prefix(8))
+        UserDefaults.standard.set(recentKinds.map(\.rawValue), forKey: "parlor.recents")
     }
 
     func joinNearby(table: DiscoveredTable, browser: MultipeerTransport) {
@@ -105,6 +118,7 @@ final class AppModel: ObservableObject {
         case let g as MuncherGame: return g.score > 0 || g.lives < 3
         case let g as HopperGame: return g.score > 0 || g.lives < 3
         case let g as CentipedeGame: return g.score > 0 || g.livesLost > 0
+        case let g as SnakeGame: return g.score > 0 || g.lives < 3
         case let g as FootballGame: return g.kicksTaken > 0
         case let g as BaseballGame: return g.pitchesSeen > 0
         case let g as SoccerGame: return g.yourShots > 0
@@ -185,6 +199,7 @@ final class AppModel: ObservableObject {
             case let g as MuncherGame: won = false; score = g.score
             case let g as HopperGame: won = false; score = g.score
             case let g as CentipedeGame: won = false; score = g.score
+            case let g as SnakeGame: won = false; score = g.score
             case let g as FootballGame: won = false; score = g.score
             case let g as BaseballGame: won = false; score = g.score
             case let g as SoccerGame: won = g.won
@@ -248,6 +263,9 @@ final class AppModel: ObservableObject {
         case let g as CentipedeGame where g.score > 0:
             leaderboards.record(kind: .centipede, playerName: playerName, value: g.score,
                                 detail: "wave \(g.level)")
+        case let g as SnakeGame where g.score > 0:
+            leaderboards.record(kind: .snake, playerName: playerName, value: g.score,
+                                detail: "\(g.body.count) segments")
         case let g as FootballGame where g.score > 0:
             leaderboards.record(kind: .football, playerName: playerName, value: g.score,
                                 detail: "\(g.made) of \(FootballGame.kicksPerGame)")

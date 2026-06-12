@@ -147,6 +147,9 @@ struct TableView: View {
         case .centipede:
             CentipedeView(session: session)
                 .id(ObjectIdentifier(session))
+        case .snake:
+            SnakeView(session: session)
+                .id(ObjectIdentifier(session))
         case .football:
             FootballView(session: session)
                 .id(ObjectIdentifier(session))

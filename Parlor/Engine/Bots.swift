@@ -39,6 +39,16 @@ enum Bot {
             return .euchreCall(euchreBotCall(game: g))
         case let g as GoGame:
             return goBotMove(game: g, difficulty: .normal)
+        case is UnoGame, is EightsGame:
+            // Casual but not silly: play a random card when one is playable
+            // rather than drawing for no reason.
+            let moves = game.legalMoves()
+            let plays = moves.filter {
+                if case .uno(.play) = $0 { return true }
+                if case .eights(.play) = $0 { return true }
+                return false
+            }
+            return plays.randomElement() ?? moves.randomElement()
         default:
             let moves = game.legalMoves().filter { $0 != .resign }
             return moves.randomElement() ?? game.legalMoves().first

@@ -5,6 +5,7 @@ struct MuncherView: View {
     @ObservedObject var session: GameSession
     @State private var lastScore = 0
     @State private var lastLives = 3
+    @State private var paused = false
 
     var game: MuncherGame? { session.game?.engine as? MuncherGame }
 
@@ -33,7 +34,7 @@ struct MuncherView: View {
             let level = game?.level ?? 1
             let interval = max(0.11, 0.2 * pow(0.93, Double(level - 1)))
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            guard let before = game, !before.isOver else { continue }
+            guard !paused, let before = game, !before.isOver else { continue }
             session.submit(.maze(.tick))
             guard let after = game else { continue }
             if after.lives < lastLives {
@@ -143,6 +144,8 @@ struct MuncherView: View {
         .aspectRatio(CGFloat(MuncherGame.width) / CGFloat(MuncherGame.height), contentMode: .fit)
         .background(.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.2), lineWidth: 1.5))
+        .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
+        .overlay { PausedCurtain(paused: $paused) }
         .gesture(
             DragGesture(minimumDistance: 12)
                 .onEnded { value in

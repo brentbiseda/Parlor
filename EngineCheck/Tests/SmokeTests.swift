@@ -55,6 +55,35 @@ final class SmokeTests: XCTestCase {
     func testMinesweeperPlayout() { for _ in 0..<3 { playOut(.minesweeper, maxMoves: 200) } }
     func testMuncher() { playOut(.muncher, maxMoves: 20000) }
     func testHopper() { playOut(.hopper, maxMoves: 20000) }
+    func testSnakePlayout() { playOut(.snake, maxMoves: 20000) }
+
+    func testSnakeRules() throws {
+        var game = SnakeGame()
+        XCTAssertEqual(game.body.count, 3)
+        // Holds still until steered.
+        let restingHead = game.body[0]
+        try game.applyValidated(.snake(.tick))
+        XCTAssertEqual(game.body[0], restingHead)
+        try game.applyValidated(.snake(.turn(.right)))
+        // Plant food directly right of the head and eat it.
+        let head = game.body[0]
+        game.food = head + 1
+        let scoreBefore = game.score
+        try game.applyValidated(.snake(.tick))
+        XCTAssertGreaterThan(game.score, scoreBefore)
+        XCTAssertGreaterThan(game.growth, 0)
+        // Reversal must be ignored.
+        try game.applyValidated(.snake(.turn(.left)))   // opposite of .right
+        try game.applyValidated(.snake(.tick))
+        XCTAssertEqual(game.direction, .right)
+        // Running into the right border drains a life.
+        let lives = game.lives
+        for _ in 0..<SnakeGame.width {
+            if game.isOver || game.lives < lives { break }
+            try game.applyValidated(.snake(.tick))
+        }
+        XCTAssertLessThan(game.lives, lives)
+    }
     func testUno() { for _ in 0..<3 { playOut(.uno) } }
     func testEights() { for _ in 0..<3 { playOut(.eights) } }
     func testGoFish() { for _ in 0..<3 { playOut(.gofish) } }

@@ -10,6 +10,7 @@ struct TetrisView: View {
     @State private var lastLines = 0
     @State private var lastPieces = 0
     @State private var lineFlash = false
+    @State private var paused = false
 
     var game: TetrisGame? { session.game?.engine as? TetrisGame }
 
@@ -46,13 +47,13 @@ struct TetrisView: View {
             let level = game?.level ?? 1
             let interval = max(0.12, 0.85 * pow(0.82, Double(level - 1)))
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            guard let game, !game.isOver else { continue }
+            guard !paused, let game, !game.isOver else { continue }
             submit(.tick)
         }
     }
 
     private func submit(_ move: TetrisMove) {
-        guard let before = game, !before.isOver else { return }
+        guard !paused, let before = game, !before.isOver else { return }
         session.submit(.tetris(move))
         guard let after = game else { return }
         if after.isOver {
@@ -141,6 +142,8 @@ struct TetrisView: View {
                 .fill(.white.opacity(lineFlash ? 0.22 : 0))
                 .animation(.easeOut(duration: 0.22), value: lineFlash)
         )
+        .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
+        .overlay { PausedCurtain(paused: $paused) }
         .gesture(boardGesture)
     }
 

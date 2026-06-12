@@ -5,6 +5,7 @@ struct HopperView: View {
     @ObservedObject var session: GameSession
     @State private var lastLives = 3
     @State private var lastPads = 0
+    @State private var paused = false
 
     var game: HopperGame? { session.game?.engine as? HopperGame }
 
@@ -22,7 +23,7 @@ struct HopperView: View {
     private func clock() async {
         while !Task.isCancelled {
             try? await Task.sleep(nanoseconds: 240_000_000)
-            guard let before = game, !before.isOver else { continue }
+            guard !paused, let before = game, !before.isOver else { continue }
             session.submit(.hopper(.tick))
             guard let after = game else { continue }
             if after.lives < lastLives {
@@ -36,7 +37,7 @@ struct HopperView: View {
     }
 
     private func hop(_ direction: GridDirection) {
-        guard let before = game, !before.isOver else { return }
+        guard !paused, let before = game, !before.isOver else { return }
         session.submit(.hopper(.hop(direction)))
         guard let after = game else { return }
         if after.lives < lastLives {
@@ -149,6 +150,8 @@ struct HopperView: View {
         .aspectRatio(CGFloat(HopperGame.width) / CGFloat(HopperGame.height), contentMode: .fit)
         .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.2), lineWidth: 1.5))
+        .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
+        .overlay { PausedCurtain(paused: $paused) }
         .gesture(
             DragGesture(minimumDistance: 12)
                 .onEnded { value in

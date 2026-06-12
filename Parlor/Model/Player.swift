@@ -90,7 +90,7 @@ extension GameKind {
     /// Games with a numeric record table, and what it measures.
     var leaderboardTitle: String? {
         switch self {
-        case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper, .centipede:
+        case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper, .centipede, .snake:
             return "High scores"
         case .football: return "Best kicking days"
         case .baseball: return "Longest derby days"
@@ -110,7 +110,7 @@ extension GameKind {
 
     func leaderboardLabel(for value: Int) -> String {
         switch self {
-        case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper, .centipede, .football:
+        case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper, .centipede, .snake, .football:
             return "\(value) pts"
         case .baseball: return "\(value) ft"
         case .solitaire, .freecell: return "\(value) moves"

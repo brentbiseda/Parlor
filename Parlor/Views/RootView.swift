@@ -33,6 +33,10 @@ struct RootView: View {
                             continueSection
                         }
 
+                        if !model.recentKinds.isEmpty {
+                            recentsRow
+                        }
+
                         competeSection
 
                         ForEach(GameKind.Section.allCases) { section in
@@ -152,6 +156,51 @@ struct RootView: View {
         }
     }
 
+    /// One-tap relaunch of the games you actually play.
+    var recentsRow: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("Recents", symbol: "clock.arrow.circlepath")
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 14) {
+                    ForEach(model.recentKinds) { kind in
+                        Button {
+                            launch(kind)
+                        } label: {
+                            VStack(spacing: 5) {
+                                Image(systemName: kind.symbolName)
+                                    .font(.title3)
+                                    .frame(width: 52, height: 52)
+                                    .background(
+                                        LinearGradient(colors: [kind.tileColor, kind.tileColor.opacity(0.65)],
+                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                                        in: Circle()
+                                    )
+                                    .overlay(Circle().strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                                Text(kind.title)
+                                    .font(.caption2)
+                                    .lineLimit(1)
+                            }
+                            .foregroundStyle(.white)
+                            .frame(width: 64)
+                        }
+                        .buttonStyle(PressableTileStyle())
+                    }
+                }
+                .padding(.horizontal, 2)
+            }
+        }
+    }
+
+    private func launch(_ kind: GameKind) {
+        if kind.hasSoloSetup {
+            soloSetupKind = kind
+        } else if kind.isSolo {
+            model.startLocal(kind: kind, options: GameOptions(), humanCount: 1)
+        } else {
+            setupKind = kind
+        }
+    }
+
     var competeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             sectionTitle("Compete", symbol: "trophy.fill")
@@ -196,13 +245,7 @@ struct RootView: View {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
                 ForEach(GameKind.allCases.filter { $0.section == section }) { kind in
                     Button {
-                        if kind.hasSoloSetup {
-                            soloSetupKind = kind
-                        } else if kind.isSolo {
-                            model.startLocal(kind: kind, options: GameOptions(), humanCount: 1)
-                        } else {
-                            setupKind = kind
-                        }
+                        launch(kind)
                     } label: {
                         GameTile(kind: kind,
                                  statsLine: stats.stats(for: kind).summary,
@@ -298,6 +341,7 @@ extension GameKind {
         case .muncher: return Color(red: 0.85, green: 0.7, blue: 0.1)
         case .hopper: return Color(red: 0.2, green: 0.6, blue: 0.3)
         case .centipede: return Color(red: 0.4, green: 0.65, blue: 0.2)
+        case .snake: return Color(red: 0.2, green: 0.7, blue: 0.45)
         case .football: return Color(red: 0.45, green: 0.3, blue: 0.2)
         case .baseball: return Color(red: 0.7, green: 0.25, blue: 0.2)
         case .soccer: return Color(red: 0.15, green: 0.55, blue: 0.4)

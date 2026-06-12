@@ -131,6 +131,12 @@ enum HopperMove: Codable, Hashable {
     case tick
 }
 
+/// Snake: steer and let the clock slither.
+enum SnakeMove: Codable, Hashable {
+    case turn(GridDirection)
+    case tick
+}
+
 /// Scorekeeping events reported by the arcade & sports scenes
 /// (Centipede, Football, Baseball, Soccer, Hockey).
 enum ArcadeEvent: Codable, Hashable {
@@ -211,6 +217,7 @@ enum Move: Codable, Hashable {
     case minesweeper(MinesweeperMove)
     case maze(MazeMove)
     case hopper(HopperMove)
+    case snake(SnakeMove)
     case arcade(ArcadeEvent)        // centipede, football, baseball, soccer, hockey
     // Shedding & fishing card games
     case uno(UnoMove)

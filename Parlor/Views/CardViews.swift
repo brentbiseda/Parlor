@@ -290,13 +290,45 @@ extension Color {
     static let tableFeltDark = Color(red: 0.06, green: 0.28, blue: 0.15)
 }
 
+/// User-selectable table felt, shared by every card/board/tile table.
+enum FeltTheme: String, CaseIterable, Identifiable {
+    case classic, midnight, burgundy, charcoal
+
+    static let storageKey = "parlor.felt"
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .classic: return "Casino Green"
+        case .midnight: return "Midnight Blue"
+        case .burgundy: return "Burgundy"
+        case .charcoal: return "Charcoal"
+        }
+    }
+
+    var colors: [Color] {
+        switch self {
+        case .classic: return [.tableFelt, .tableFeltDark]
+        case .midnight: return [Color(red: 0.09, green: 0.2, blue: 0.4),
+                                Color(red: 0.04, green: 0.1, blue: 0.22)]
+        case .burgundy: return [Color(red: 0.42, green: 0.1, blue: 0.15),
+                                Color(red: 0.24, green: 0.05, blue: 0.08)]
+        case .charcoal: return [Color(red: 0.22, green: 0.23, blue: 0.25),
+                                Color(red: 0.1, green: 0.1, blue: 0.12)]
+        }
+    }
+}
+
 struct FeltBackground: View {
     /// Card tables get a stitched inlay ring around the play area.
     var inlay: Bool = false
+    @AppStorage(FeltTheme.storageKey) private var feltRaw = FeltTheme.classic.rawValue
+
+    private var theme: FeltTheme { FeltTheme(rawValue: feltRaw) ?? .classic }
 
     var body: some View {
         ZStack {
-            LinearGradient(colors: [.tableFelt, .tableFeltDark], startPoint: .top, endPoint: .bottom)
+            LinearGradient(colors: theme.colors, startPoint: .top, endPoint: .bottom)
             // Soft table lamp falloff toward the edges.
             RadialGradient(colors: [.white.opacity(0.10), .clear, .black.opacity(0.25)],
                            center: .center, startRadius: 40, endRadius: 520)

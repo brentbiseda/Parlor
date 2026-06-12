@@ -1,9 +1,9 @@
 # Parlor
 
-A SwiftUI iOS app with **25 games**: cards and boards with people nearby,
+A SwiftUI iOS app with **26 games**: cards and boards with people nearby,
 over FaceTime, on one shared phone, or solo against bots — plus leagues,
 knockout tournaments, Elo rankings, leaderboards, player profiles,
-suspend-and-resume play, synthesized sound effects, a five-game arcade, and
+suspend-and-resume play, synthesized sound effects, a six-game arcade, and
 a sports corner.
 
 **Card games:** Hearts · Spades · Euchre · Bridge · Wildcard (UNO-style) ·
@@ -12,7 +12,7 @@ Crazy Eights · Go Fish
 **Solitaire & puzzles:** Klondike · FreeCell · Mahjongg · Blocks
 (tetrominoes) · Capsules (pill-dropping virus buster) · Minesweeper
 **Arcade:** Pinball (10 themed tables) · Breakout · Muncher (maze chase) ·
-Hopper (road & river) · Centipede
+Hopper (road & river) · Centipede · Nibbles (snake)
 **Sports:** Field Goal · Home Run Derby · Penalty Shootout · Air Hockey
 
 ## Running the app
@@ -44,7 +44,9 @@ through SharePlay instead.)
 - **Profiles** — multiple local identities with a name, symbol, and color.
   The active profile (switchable from the home-screen chip) is your name at
   every table. Pass-and-play guests, league entrants, and bots get directory
-  entries automatically, so everyone shows up in the rankings.
+  entries automatically, so everyone shows up in the rankings. The same
+  sheet picks the **table felt** (casino green, midnight blue, burgundy,
+  charcoal) and the card back.
 - **Rankings** — per-game Elo ratings (start 1200, K=24, split pairwise
   across opponents so a 4-player table moves ratings like a head-to-head
   game). Every finished competitive game updates ratings — humans and bots,
@@ -85,6 +87,9 @@ through SharePlay instead.)
   pulse on Blocks line clears, dressed sports venues (yard numbers and hash
   marks, a penalty box and spot, foul lines and infield dirt), a
   hearts-broken indicator, and bots that pause a human beat before moving.
+  Tick-driven games (Blocks, Capsules, Muncher, Hopper, Nibbles) all have a
+  pause button; the home screen adds a one-tap **Recents** row and 🔥 win
+  streaks on game tiles.
 
 ## Leagues & tournaments
 
@@ -166,6 +171,10 @@ stats shown on the home screen tiles.
   distance, 320+ feet clears the fence and banks the footage.
 - **Penalty Shootout** — five shots (swipe to place, keeper reads the
   middle), then five saves (tap where to dive). Win, lose, or share honors.
+- **Nibbles** — classic snake with three lives and cycling wall layouts
+  (open field, bar, pillars, cross) every six bites. The snake waits for
+  your first steer, grows three segments per apple, and the clock speeds up
+  each level. Swipe or use the arrows; pausable.
 - **Air Hockey** — physics rink, drag your striker, the bot tracks the puck
   in its half and skates harder when you're ahead (rubber-banding).
   First to seven, anti-stall serves.

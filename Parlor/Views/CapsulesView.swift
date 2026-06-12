@@ -8,6 +8,7 @@ struct CapsulesView: View {
     @State private var dragSteps: CGFloat = 0
     @State private var lastViruses = -1
     @State private var lastPills = 0
+    @State private var paused = false
 
     var game: CapsulesGame? { session.game?.engine as? CapsulesGame }
 
@@ -37,13 +38,13 @@ struct CapsulesView: View {
             let level = game?.level ?? 1
             let interval = max(0.16, 0.8 * pow(0.85, Double(level - 1)))
             try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            guard let game, !game.isOver else { continue }
+            guard !paused, let game, !game.isOver else { continue }
             submit(.tick)
         }
     }
 
     private func submit(_ move: TetrisMove) {
-        guard let before = game, !before.isOver else { return }
+        guard !paused, let before = game, !before.isOver else { return }
         session.submit(.capsules(move))
         guard let after = game else { return }
         if after.cleared {
@@ -130,6 +131,8 @@ struct CapsulesView: View {
         .aspectRatio(CGFloat(CapsulesGame.width) / CGFloat(CapsulesGame.height), contentMode: .fit)
         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.25), lineWidth: 1.5))
+        .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
+        .overlay { PausedCurtain(paused: $paused) }
         .gesture(boardGesture)
     }
 
