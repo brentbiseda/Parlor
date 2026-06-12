@@ -202,6 +202,13 @@ struct TrickTableView: View {
                     scoreChip(String(seatName(seat).prefix(6)), "\(g.scores[seat])",
                               detail: nil, highlight: seat == perspective)
                 }
+                if g.heartsBroken && g.phase == .playing {
+                    Image(systemName: "heart.slash.fill")
+                        .font(.caption)
+                        .foregroundStyle(.red)
+                        .padding(5)
+                        .background(.black.opacity(0.3), in: Circle())
+                }
             }
         default:
             EmptyView()
@@ -267,15 +274,32 @@ struct TrickTableView: View {
         .frame(maxWidth: 320)
     }
 
+    /// Played cards spring in from their seat's side of the table.
     func trickArea(adapter: TrickGameAdapter, perspective: Int) -> some View {
         ZStack {
             ForEach(adapter.trick, id: \.seat) { play in
                 let relative = (play.seat - perspective + 4) % 4
                 CardView(card: play.card, width: 46)
                     .offset(trickOffset(relative))
+                    .transition(
+                        .offset(entryOffset(relative))
+                        .combined(with: .scale(scale: 1.25))
+                        .combined(with: .opacity)
+                    )
             }
         }
         .frame(height: 130)
+        .animation(.spring(response: 0.32, dampingFraction: 0.8), value: adapter.trick.count)
+    }
+
+    /// Where a card flies in from, by relative seat (0 = you, going clockwise).
+    func entryOffset(_ relative: Int) -> CGSize {
+        switch relative {
+        case 0: return CGSize(width: 0, height: 160)
+        case 1: return CGSize(width: -180, height: 0)
+        case 2: return CGSize(width: 0, height: -160)
+        default: return CGSize(width: 180, height: 0)
+        }
     }
 
     func trickOffset(_ relative: Int) -> CGSize {

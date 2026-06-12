@@ -154,7 +154,7 @@ struct RootView: View {
 
     var competeSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle("Compete")
+            sectionTitle("Compete", symbol: "trophy.fill")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)],
                       spacing: 12) {
                 NavigationLink(value: "leagues") {
@@ -186,12 +186,13 @@ struct RootView: View {
                                          Color(red: 0.45, green: 0.12, blue: 0.18)])
                 }
             }
+            .buttonStyle(PressableTileStyle())
         }
     }
 
     func gameSection(_ section: GameKind.Section) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            sectionTitle(section.rawValue)
+            sectionTitle(section.rawValue, symbol: sectionSymbol(section))
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 160), spacing: 12)], spacing: 12) {
                 ForEach(GameKind.allCases.filter { $0.section == section }) { kind in
                     Button {
@@ -207,16 +208,42 @@ struct RootView: View {
                                  statsLine: stats.stats(for: kind).summary,
                                  bestLine: stats.bestLine(for: kind))
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableTileStyle())
                 }
             }
         }
     }
 
-    func sectionTitle(_ text: String) -> some View {
-        Text(text)
-            .font(.title3.weight(.bold))
-            .foregroundStyle(.white)
+    func sectionSymbol(_ section: GameKind.Section) -> String {
+        switch section {
+        case .cards: return "suit.club.fill"
+        case .boards: return "checkerboard.rectangle"
+        case .puzzles: return "puzzlepiece.fill"
+        case .arcade: return "gamecontroller.fill"
+        case .sports: return "sportscourt.fill"
+        }
+    }
+
+    func sectionTitle(_ text: String, symbol: String? = nil) -> some View {
+        HStack(spacing: 7) {
+            if let symbol {
+                Image(systemName: symbol)
+                    .font(.subheadline)
+                    .foregroundStyle(.white.opacity(0.55))
+            }
+            Text(text)
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+        }
+    }
+}
+
+/// Tiles squish slightly under the finger.
+struct PressableTileStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.96 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.7), value: configuration.isPressed)
     }
 }
 
@@ -228,6 +255,20 @@ struct HomeBackground: View {
                            startPoint: .top, endPoint: .bottom)
             RadialGradient(colors: [.white.opacity(0.07), .clear],
                            center: .top, startRadius: 0, endRadius: 420)
+            // Faint scattered suit watermarks.
+            GeometryReader { geo in
+                ForEach(Array(["♠", "♥", "♦", "♣", "♠", "♦"].enumerated()), id: \.offset) { i, suit in
+                    var generator = SplitMix64(seed: UInt64(i + 7) &* 0x9E3779B97F4A7C15)
+                    let x = CGFloat(generator.unit()) * geo.size.width
+                    let y = CGFloat(generator.unit()) * geo.size.height
+                    let rotation = Double(generator.unit()) * 50 - 25
+                    Text(suit)
+                        .font(.system(size: 90 + CGFloat(generator.unit()) * 70))
+                        .foregroundStyle(.white.opacity(0.025))
+                        .rotationEffect(.degrees(rotation))
+                        .position(x: x, y: y)
+                }
+            }
         }
         .ignoresSafeArea()
     }
@@ -249,6 +290,18 @@ extension GameKind {
         case .pinball: return Color(red: 0.45, green: 0.2, blue: 0.75)
         case .breakout: return Color(red: 0.15, green: 0.5, blue: 0.75)
         case .tetris: return Color(red: 0.8, green: 0.35, blue: 0.55)
+        case .uno: return Color(red: 0.8, green: 0.15, blue: 0.25)
+        case .eights: return Color(red: 0.3, green: 0.35, blue: 0.75)
+        case .gofish: return Color(red: 0.0, green: 0.55, blue: 0.65)
+        case .capsules: return Color(red: 0.85, green: 0.4, blue: 0.2)
+        case .minesweeper: return Color(red: 0.35, green: 0.55, blue: 0.35)
+        case .muncher: return Color(red: 0.85, green: 0.7, blue: 0.1)
+        case .hopper: return Color(red: 0.2, green: 0.6, blue: 0.3)
+        case .centipede: return Color(red: 0.4, green: 0.65, blue: 0.2)
+        case .football: return Color(red: 0.45, green: 0.3, blue: 0.2)
+        case .baseball: return Color(red: 0.7, green: 0.25, blue: 0.2)
+        case .soccer: return Color(red: 0.15, green: 0.55, blue: 0.4)
+        case .hockey: return Color(red: 0.25, green: 0.45, blue: 0.7)
         }
     }
 }

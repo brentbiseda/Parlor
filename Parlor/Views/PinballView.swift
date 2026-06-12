@@ -410,7 +410,33 @@ final class PinballScene: SKScene, SKPhysicsContactDelegate {
             | Category.drain | Category.spinner | Category.tunnel
         ball.physicsBody = body
         addChild(ball)
+        attachTrail(to: ball)
         self.ball = ball
+    }
+
+    /// A fading comet trail in the theme's accent color.
+    private func attachTrail(to node: SKNode) {
+        if sparkTexture == nil {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 8, height: 8))
+            let image = renderer.image { ctx in
+                ctx.cgContext.setFillColor(UIColor.white.cgColor)
+                ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 8, height: 8))
+            }
+            sparkTexture = SKTexture(image: image)
+        }
+        let trail = SKEmitterNode()
+        trail.particleTexture = sparkTexture
+        trail.particleBirthRate = 50
+        trail.particleLifetime = 0.32
+        trail.particleAlpha = 0.32
+        trail.particleAlphaSpeed = -1.1
+        trail.particleScale = 0.42
+        trail.particleScaleSpeed = -1.1
+        trail.particleColor = theme.flipper
+        trail.particleColorBlendFactor = 1
+        trail.targetNode = self     // particles stay behind as the ball moves
+        trail.zPosition = -0.5
+        node.addChild(trail)
     }
 
     private var ballOnPlunger: Bool {

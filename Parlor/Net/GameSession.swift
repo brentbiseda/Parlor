@@ -330,6 +330,12 @@ final class GameSession: ObservableObject {
             SoundFX.shared.play(.cardDraw)
         case .bid, .bridgeCall, .euchreCall:
             SoundFX.shared.play(.click)
+        case .uno(.play), .eights(.play):
+            SoundFX.shared.play(.cardPlay)
+        case .uno(.draw), .eights(.draw):
+            SoundFX.shared.play(.cardDraw)
+        case .fish:
+            SoundFX.shared.play(.cardPlay)
         default:
             break
         }
@@ -337,20 +343,36 @@ final class GameSession: ObservableObject {
 
     // MARK: - Undo (solo games)
 
-    /// Solitaire-style games allow takebacks; multiplayer and arcade games don't.
+    /// Solitaire-style games allow takebacks, and so do the board games when
+    /// a lone human faces bots (a friendly "let me try that again").
+    /// Multiplayer-vs-human and arcade games don't.
     var supportsUndo: Bool {
         guard role == .local else { return false }
         switch lobby.gameKind {
-        case .solitaire, .freecell, .mahjong: return true
-        default: return false
+        case .solitaire, .freecell, .mahjong:
+            return true
+        case .chess, .checkers, .go:
+            return lobby.players.filter { !$0.isBot }.count == 1
+        default:
+            return false
         }
     }
 
     var canUndo: Bool { supportsUndo && !undoStack.isEmpty }
 
     func undo() {
-        guard canUndo, let previous = undoStack.popLast() else { return }
-        game = previous
+        guard canUndo else { return }
+        if lobby.gameKind.isSolo {
+            if let previous = undoStack.popLast() { game = previous }
+        } else {
+            // Take back past the bots' replies to the human's last decision.
+            while let previous = undoStack.popLast() {
+                game = previous
+                let seat = previous.controller(of: previous.currentPlayer)
+                if localHumanSeats.contains(seat) { break }
+            }
+        }
+        botGeneration += 1   // discard any bot move queued before the takeback
         SoundFX.shared.play(.undo)
     }
 
@@ -370,7 +392,8 @@ final class GameSession: ObservableObject {
         botGeneration += 1
         let generation = botGeneration
         Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 700_000_000)
+            // A touch of variance reads as "thinking" rather than clockwork.
+            try? await Task.sleep(nanoseconds: UInt64.random(in: 450_000_000...950_000_000))
             guard let self, generation == self.botGeneration,
                   let g = self.game, !g.isOver,
                   self.lobby.players[safe: g.controller(of: g.currentPlayer)]?.isBot == true,

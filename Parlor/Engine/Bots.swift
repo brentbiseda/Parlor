@@ -82,9 +82,71 @@ enum Bot {
             return hardCheckersMove(g)
         case let g as GoGame:
             return goBotMove(game: g, difficulty: .hard)
+        case let g as UnoGame:
+            return hardUnoMove(g)
+        case let g as EightsGame:
+            return hardEightsMove(g)
+        case let g as GoFishGame:
+            return hardGoFishMove(g)
         default:
             return nil   // bidding phases & solo games fall through to normal
         }
+    }
+
+    // MARK: - Shedding & fishing games
+
+    /// Dump expensive action cards early, keep wilds for emergencies, and
+    /// declare the color we hold the most of.
+    static func hardUnoMove(_ g: UnoGame) -> Move? {
+        let seat = g.currentPlayer
+        let legal = g.legalCards(for: seat)
+        guard !legal.isEmpty else {
+            return g.drewThisTurn ? .uno(.pass) : .uno(.draw)
+        }
+        func colorCount(_ color: UnoColor) -> Int {
+            g.hands[seat].filter { $0.color == color }.count
+        }
+        let bestColor = UnoColor.allCases.max { colorCount($0) < colorCount($1) } ?? .red
+        // Prefer colored cards (saving wilds), action cards before numbers.
+        let colored = legal.filter { $0.color != nil }
+        if let pick = colored.max(by: { $0.points < $1.points }) {
+            return .uno(.play(pick, declared: nil))
+        }
+        let wild = legal.first { $0.color == nil }
+        return wild.map { .uno(.play($0, declared: bestColor)) }
+    }
+
+    /// Save eights for when we're stuck; otherwise shed the priciest card.
+    static func hardEightsMove(_ g: EightsGame) -> Move? {
+        let seat = g.currentPlayer
+        let legal = g.legalCards(for: seat)
+        let nonEights = legal.filter { $0.rank != .eight }
+        if let pick = nonEights.max(by: { $0.rank.rawValue < $1.rank.rawValue }) {
+            return .eights(.play(pick, nominated: nil))
+        }
+        if let eight = legal.first {
+            let suits = Dictionary(grouping: g.hands[seat].filter { $0.rank != .eight }, by: \.suit)
+            let best = suits.max { $0.value.count < $1.value.count }?.key ?? eight.suit
+            return .eights(.play(eight, nominated: best))
+        }
+        if g.drewThisTurn || g.stock.isEmpty { return .eights(.pass) }
+        return .eights(.draw)
+    }
+
+    /// Ask for a rank we're closest to booking, from a random live hand.
+    /// (Random target/rank choice matters: a deterministic asker can chase
+    /// the wrong player forever once the stock runs dry.)
+    static func hardGoFishMove(_ g: GoFishGame) -> Move? {
+        let seat = g.currentPlayer
+        let counts = Dictionary(grouping: g.hands[seat], by: \.rank)
+        guard let bestCount = counts.values.map(\.count).max() else {
+            return g.legalMoves().randomElement()
+        }
+        let candidates = counts.filter { $0.value.count >= max(bestCount - 1, 1) }.keys
+        guard let rank = candidates.randomElement(),
+              let target = (0..<4).filter({ $0 != seat && !g.hands[$0].isEmpty }).randomElement()
+        else { return g.legalMoves().randomElement() }
+        return .fish(.ask(seat: target, rank: rank))
     }
 
     // MARK: - Hearts judgment

@@ -92,9 +92,86 @@ enum BreakoutEvent: Codable, Hashable {
     case levelCleared
 }
 
+/// Shared by Blocks (tetrominoes) and Capsules (pill-dropping) — same controls.
 enum TetrisMove: Codable, Hashable {
     case left, right, rotate, softDrop, hardDrop
     case tick            // gravity step, driven by the view's timer
+}
+
+/// Four-way movement for the tick-based maze and crossing games.
+enum GridDirection: String, Codable, Hashable, CaseIterable {
+    case up, down, left, right
+
+    var dx: Int { self == .left ? -1 : (self == .right ? 1 : 0) }
+    var dy: Int { self == .up ? -1 : (self == .down ? 1 : 0) }
+    var opposite: GridDirection {
+        switch self {
+        case .up: return .down
+        case .down: return .up
+        case .left: return .right
+        case .right: return .left
+        }
+    }
+}
+
+enum MinesweeperMove: Codable, Hashable {
+    case reveal(x: Int, y: Int)
+    case flag(x: Int, y: Int)
+}
+
+/// Muncher (maze chase): steer and let the clock run.
+enum MazeMove: Codable, Hashable {
+    case go(GridDirection)
+    case tick
+}
+
+/// Hopper (road & river crossing): hop or let traffic move.
+enum HopperMove: Codable, Hashable {
+    case hop(GridDirection)
+    case tick
+}
+
+/// Scorekeeping events reported by the arcade & sports scenes
+/// (Centipede, Football, Baseball, Soccer, Hockey).
+enum ArcadeEvent: Codable, Hashable {
+    case score(Int)
+    case opponentScore(Int)
+    case attempt             // a kick, pitch, or penalty consumed
+    case lifeLost
+    case levelUp
+}
+
+enum UnoColor: String, Codable, Hashable, CaseIterable {
+    case red, yellow, green, blue
+}
+
+enum UnoValue: Codable, Hashable, Equatable {
+    case number(Int)         // 0–9
+    case skip, reverse, drawTwo
+    case wild, wildDrawFour
+}
+
+struct UnoCard: Codable, Hashable, Identifiable {
+    /// Unique per physical card so duplicates in hand stay distinct.
+    var id: Int
+    var color: UnoColor?     // nil = wild
+    var value: UnoValue
+}
+
+enum UnoMove: Codable, Hashable {
+    case play(UnoCard, declared: UnoColor?)
+    case draw
+    case pass                // keep a drawn-but-unwanted card
+}
+
+enum EightsMove: Codable, Hashable {
+    case play(Card, nominated: Suit?)   // suit choice rides along with an 8
+    case draw
+    case pass                           // stock empty and nothing playable
+}
+
+enum GoFishMove: Codable, Hashable {
+    case ask(seat: Int, rank: Rank)
 }
 
 enum KlondikeMove: Codable, Hashable {
@@ -130,4 +207,13 @@ enum Move: Codable, Hashable {
     case pinball(PinballEvent)
     case breakout(BreakoutEvent)
     case tetris(TetrisMove)
+    case capsules(TetrisMove)
+    case minesweeper(MinesweeperMove)
+    case maze(MazeMove)
+    case hopper(HopperMove)
+    case arcade(ArcadeEvent)        // centipede, football, baseball, soccer, hockey
+    // Shedding & fishing card games
+    case uno(UnoMove)
+    case eights(EightsMove)
+    case fish(GoFishMove)
 }

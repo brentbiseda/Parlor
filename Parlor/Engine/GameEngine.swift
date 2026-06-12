@@ -85,6 +85,9 @@ struct AnyGame: Codable {
         case let g as SpadesGame: return g.redacted(for: seat)
         case let g as EuchreGame: return g.redacted(for: seat)
         case let g as BridgeGame: return g.redacted(for: seat)
+        case let g as UnoGame: return g.redacted(for: seat)
+        case let g as EightsGame: return g.redacted(for: seat)
+        case let g as GoFishGame: return g.redacted(for: seat)
         default: return engine
         }
     }
@@ -108,6 +111,18 @@ struct AnyGame: Codable {
         case .pinball: engine = try c.decode(PinballGame.self, forKey: .data)
         case .breakout: engine = try c.decode(BreakoutGame.self, forKey: .data)
         case .tetris: engine = try c.decode(TetrisGame.self, forKey: .data)
+        case .capsules: engine = try c.decode(CapsulesGame.self, forKey: .data)
+        case .minesweeper: engine = try c.decode(MinesweeperGame.self, forKey: .data)
+        case .muncher: engine = try c.decode(MuncherGame.self, forKey: .data)
+        case .hopper: engine = try c.decode(HopperGame.self, forKey: .data)
+        case .centipede: engine = try c.decode(CentipedeGame.self, forKey: .data)
+        case .uno: engine = try c.decode(UnoGame.self, forKey: .data)
+        case .eights: engine = try c.decode(EightsGame.self, forKey: .data)
+        case .gofish: engine = try c.decode(GoFishGame.self, forKey: .data)
+        case .football: engine = try c.decode(FootballGame.self, forKey: .data)
+        case .baseball: engine = try c.decode(BaseballGame.self, forKey: .data)
+        case .soccer: engine = try c.decode(SoccerGame.self, forKey: .data)
+        case .hockey: engine = try c.decode(HockeyGame.self, forKey: .data)
         }
     }
 
@@ -124,6 +139,18 @@ struct AnyGame: Codable {
         case let g as PinballGame: try c.encode(g, forKey: .data)
         case let g as BreakoutGame: try c.encode(g, forKey: .data)
         case let g as TetrisGame: try c.encode(g, forKey: .data)
+        case let g as CapsulesGame: try c.encode(g, forKey: .data)
+        case let g as MinesweeperGame: try c.encode(g, forKey: .data)
+        case let g as MuncherGame: try c.encode(g, forKey: .data)
+        case let g as HopperGame: try c.encode(g, forKey: .data)
+        case let g as CentipedeGame: try c.encode(g, forKey: .data)
+        case let g as UnoGame: try c.encode(g, forKey: .data)
+        case let g as EightsGame: try c.encode(g, forKey: .data)
+        case let g as GoFishGame: try c.encode(g, forKey: .data)
+        case let g as FootballGame: try c.encode(g, forKey: .data)
+        case let g as BaseballGame: try c.encode(g, forKey: .data)
+        case let g as SoccerGame: try c.encode(g, forKey: .data)
+        case let g as HockeyGame: try c.encode(g, forKey: .data)
         case let g as MahjongGame: try c.encode(g, forKey: .data)
         case let g as ChessGame: try c.encode(g, forKey: .data)
         case let g as CheckersGame: try c.encode(g, forKey: .data)
@@ -148,6 +175,18 @@ struct AnyGame: Codable {
         case .pinball: return AnyGame(PinballGame())
         case .breakout: return AnyGame(BreakoutGame())
         case .tetris: return AnyGame(TetrisGame())
+        case .capsules: return AnyGame(CapsulesGame())
+        case .minesweeper: return AnyGame(MinesweeperGame())
+        case .muncher: return AnyGame(MuncherGame())
+        case .hopper: return AnyGame(HopperGame())
+        case .centipede: return AnyGame(CentipedeGame())
+        case .uno: return AnyGame(UnoGame())
+        case .eights: return AnyGame(EightsGame())
+        case .gofish: return AnyGame(GoFishGame())
+        case .football: return AnyGame(FootballGame())
+        case .baseball: return AnyGame(BaseballGame())
+        case .soccer: return AnyGame(SoccerGame())
+        case .hockey: return AnyGame(HockeyGame())
         }
     }
 }

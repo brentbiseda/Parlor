@@ -64,8 +64,13 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
     private var ballGlued = true
     private var level = 1
     private var built = false
+    private var powerUps: [SKShapeNode] = []
+    private var wideUntil: TimeInterval = 0
+    private var lastTime: TimeInterval = 0
+    private var sparkTexture: SKTexture?
 
     private let paddleSize = CGSize(width: 92, height: 14)
+    private var currentPaddleWidth: CGFloat { wideUntil > lastTime ? 138 : paddleSize.width }
     private var ballSpeed: CGFloat { 430 + CGFloat(level - 1) * 45 }
 
     private let rowColors: [SKColor] = [
@@ -186,6 +191,29 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
         self.ball = ball
         ballGlued = true
         positionGluedBall()
+
+        // Comet trail.
+        if sparkTexture == nil {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 6, height: 6))
+            let image = renderer.image { ctx in
+                ctx.cgContext.setFillColor(UIColor.white.cgColor)
+                ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 6, height: 6))
+            }
+            sparkTexture = SKTexture(image: image)
+        }
+        let trail = SKEmitterNode()
+        trail.particleTexture = sparkTexture
+        trail.particleBirthRate = 45
+        trail.particleLifetime = 0.28
+        trail.particleAlpha = 0.3
+        trail.particleAlphaSpeed = -1.2
+        trail.particleScale = 0.45
+        trail.particleScaleSpeed = -1.2
+        trail.particleColor = SKColor(red: 0.5, green: 0.8, blue: 1, alpha: 1)
+        trail.particleColorBlendFactor = 1
+        trail.targetNode = self
+        trail.zPosition = -0.5
+        ball.addChild(trail)
     }
 
     private func positionGluedBall() {
@@ -193,10 +221,69 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
         ball?.physicsBody?.velocity = .zero
     }
 
+    // MARK: - Power-ups
+
+    /// Some bricks drop a capsule; catching it widens the paddle for a while.
+    private func maybeDropPowerUp(at point: CGPoint) {
+        guard Double.random(in: 0..<1) < 0.16 else { return }
+        let capsule = SKShapeNode(rectOf: CGSize(width: 30, height: 13), cornerRadius: 6.5)
+        capsule.fillColor = SKColor(red: 0.3, green: 0.85, blue: 0.55, alpha: 1)
+        capsule.strokeColor = SKColor(white: 1, alpha: 0.7)
+        capsule.position = point
+        addChild(capsule)
+        let label = SKLabelNode(text: "⟷")
+        label.fontSize = 11
+        label.fontName = "AvenirNext-Bold"
+        label.verticalAlignmentMode = .center
+        capsule.addChild(label)
+        powerUps.append(capsule)
+    }
+
+    private func setPaddleWidth(_ width: CGFloat) {
+        let newSize = CGSize(width: width, height: paddleSize.height)
+        paddle.path = CGPath(roundedRect: CGRect(x: -width / 2, y: -paddleSize.height / 2,
+                                                 width: width, height: paddleSize.height),
+                             cornerWidth: 7, cornerHeight: 7, transform: nil)
+        let body = SKPhysicsBody(rectangleOf: newSize)
+        body.isDynamic = false
+        body.friction = 0
+        body.restitution = 1
+        body.categoryBitMask = Category.paddle
+        body.contactTestBitMask = Category.ball
+        paddle.physicsBody = body
+    }
+
+    private func spark(at point: CGPoint, color: SKColor) {
+        if sparkTexture == nil {
+            let renderer = UIGraphicsImageRenderer(size: CGSize(width: 6, height: 6))
+            let image = renderer.image { ctx in
+                ctx.cgContext.setFillColor(UIColor.white.cgColor)
+                ctx.cgContext.fillEllipse(in: CGRect(x: 0, y: 0, width: 6, height: 6))
+            }
+            sparkTexture = SKTexture(image: image)
+        }
+        let emitter = SKEmitterNode()
+        emitter.particleTexture = sparkTexture
+        emitter.position = point
+        emitter.numParticlesToEmit = 10
+        emitter.particleBirthRate = 280
+        emitter.particleLifetime = 0.3
+        emitter.particleSpeed = 110
+        emitter.particleSpeedRange = 60
+        emitter.emissionAngleRange = .pi * 2
+        emitter.particleAlphaSpeed = -3
+        emitter.particleScale = 0.5
+        emitter.particleScaleSpeed = -1
+        emitter.particleColor = color
+        emitter.particleColorBlendFactor = 1
+        addChild(emitter)
+        emitter.run(.sequence([.wait(forDuration: 0.5), .removeFromParent()]))
+    }
+
     // MARK: - Controls
 
     private func steer(to x: CGFloat) {
-        let clamped = min(max(x, 14 + paddleSize.width / 2), size.width - 14 - paddleSize.width / 2)
+        let clamped = min(max(x, 14 + currentPaddleWidth / 2), size.width - 14 - currentPaddleWidth / 2)
         paddle.position.x = clamped
         if ballGlued { positionGluedBall() }
     }
@@ -220,6 +307,32 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Frame loop
 
     override func update(_ currentTime: TimeInterval) {
+        lastTime = currentTime
+        // Falling power-ups: catch with the paddle.
+        if !powerUps.isEmpty {
+            var kept: [SKShapeNode] = []
+            for capsule in powerUps {
+                capsule.position.y -= 3.2
+                if abs(capsule.position.y - paddle.position.y) < 16,
+                   abs(capsule.position.x - paddle.position.x) < currentPaddleWidth / 2 + 16 {
+                    wideUntil = currentTime + 10
+                    setPaddleWidth(138)
+                    SoundFX.shared.play(.levelUp)
+                    capsule.removeFromParent()
+                } else if capsule.position.y < -20 {
+                    capsule.removeFromParent()
+                } else {
+                    kept.append(capsule)
+                }
+            }
+            powerUps = kept
+        }
+        // Expire the wide paddle.
+        if wideUntil > 0, currentTime > wideUntil, paddle.frame.width > paddleSize.width + 1 {
+            setPaddleWidth(paddleSize.width)
+            wideUntil = 0
+        }
+
         // Keep the ball at constant speed and never perfectly horizontal.
         guard let body = ball?.physicsBody, !ballGlued else { return }
         var v = body.velocity
@@ -246,8 +359,8 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
         case Category.paddle:
             // Reflect by hit offset so players can aim.
             guard let ballNode = ballBody.node else { return }
-            let offset = (ballNode.position.x - paddle.position.x) / (paddleSize.width / 2)
-            let angle = CGFloat.pi / 2 - offset * (.pi / 3)
+            let offset = (ballNode.position.x - paddle.position.x) / (currentPaddleWidth / 2)
+            let angle = CGFloat.pi / 2 - min(max(offset, -1), 1) * (.pi / 3)
             ballBody.velocity = CGVector(dx: cos(angle) * ballSpeed, dy: abs(sin(angle)) * ballSpeed)
             SoundFX.shared.play(.paddleHit)
         case Category.brick:
@@ -272,6 +385,8 @@ final class BreakoutScene: SKScene, SKPhysicsContactDelegate {
         let points = (brick.userData?["points"] as? Int) ?? 50
         onEvent?(.score(points))
         floatScore(points, at: point)
+        spark(at: point, color: brick.fillColor)
+        maybeDropPowerUp(at: brick.position)
         brick.physicsBody = nil
         brick.run(.sequence([
             .group([.fadeOut(withDuration: 0.15), .scale(to: 0.6, duration: 0.15)]),

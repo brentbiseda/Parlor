@@ -1,8 +1,16 @@
 import Foundation
 
 enum GameKind: String, Codable, CaseIterable, Identifiable {
-    case hearts, spades, euchre, bridge, solitaire, freecell, mahjong, chess, checkers, go
-    case pinball, breakout, tetris
+    // Card games
+    case hearts, spades, euchre, bridge, uno, eights, gofish
+    // Board games
+    case chess, checkers, go
+    // Solitaire & puzzles
+    case solitaire, freecell, mahjong, tetris, capsules, minesweeper
+    // Arcade
+    case pinball, breakout, muncher, hopper, centipede
+    // Sports
+    case football, baseball, soccer, hockey
 
     var id: String { rawValue }
 
@@ -12,23 +20,40 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .spades: return "Spades"
         case .euchre: return "Euchre"
         case .bridge: return "Bridge"
-        case .solitaire: return "Klondike"
-        case .freecell: return "FreeCell"
-        case .mahjong: return "Mahjongg"
+        case .uno: return "Wildcard"
+        case .eights: return "Crazy Eights"
+        case .gofish: return "Go Fish"
         case .chess: return "Chess"
         case .checkers: return "Checkers"
         case .go: return "Go"
+        case .solitaire: return "Klondike"
+        case .freecell: return "FreeCell"
+        case .mahjong: return "Mahjongg"
+        case .tetris: return "Blocks"
+        case .capsules: return "Capsules"
+        case .minesweeper: return "Minesweeper"
         case .pinball: return "Pinball"
         case .breakout: return "Breakout"
-        case .tetris: return "Blocks"
+        case .muncher: return "Muncher"
+        case .hopper: return "Hopper"
+        case .centipede: return "Centipede"
+        case .football: return "Field Goal"
+        case .baseball: return "Home Run Derby"
+        case .soccer: return "Penalty Shootout"
+        case .hockey: return "Air Hockey"
         }
     }
 
     var playerCount: Int {
         switch self {
-        case .solitaire, .freecell, .mahjong, .pinball, .breakout, .tetris: return 1
-        case .chess, .checkers, .go: return 2
-        case .hearts, .spades, .euchre, .bridge: return 4
+        case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper,
+             .pinball, .breakout, .muncher, .hopper, .centipede,
+             .football, .baseball, .soccer, .hockey:
+            return 1
+        case .chess, .checkers, .go:
+            return 2
+        case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish:
+            return 4
         }
     }
 
@@ -37,7 +62,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     /// True when players hold hidden hands, so pass-and-play shows a handoff screen.
     var hasHiddenInfo: Bool {
         switch self {
-        case .hearts, .spades, .euchre, .bridge: return true
+        case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish: return true
         default: return false
         }
     }
@@ -59,15 +84,27 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .spades: return "suit.spade.fill"
         case .euchre: return "suit.club.fill"
         case .bridge: return "suit.diamond.fill"
-        case .solitaire: return "rectangle.portrait.on.rectangle.portrait.fill"
-        case .freecell: return "rectangle.grid.2x2.fill"
-        case .mahjong: return "square.grid.3x3.fill"
+        case .uno: return "rectangle.portrait.on.rectangle.portrait.angled.fill"
+        case .eights: return "8.circle.fill"
+        case .gofish: return "fish.fill"
         case .chess: return "crown.fill"
         case .checkers: return "circle.circle.fill"
         case .go: return "circle.grid.3x3.fill"
+        case .solitaire: return "rectangle.portrait.on.rectangle.portrait.fill"
+        case .freecell: return "rectangle.grid.2x2.fill"
+        case .mahjong: return "square.grid.3x3.fill"
+        case .tetris: return "square.stack.3d.down.right.fill"
+        case .capsules: return "pills.fill"
+        case .minesweeper: return "flag.fill"
         case .pinball: return "bolt.circle.fill"
         case .breakout: return "squares.below.rectangle"
-        case .tetris: return "square.stack.3d.down.right.fill"
+        case .muncher: return "circle.lefthalf.filled"
+        case .hopper: return "tortoise.fill"
+        case .centipede: return "ant.fill"
+        case .football: return "football.fill"
+        case .baseball: return "baseball.fill"
+        case .soccer: return "soccerball"
+        case .hockey: return "hockey.puck.fill"
         }
     }
 
@@ -77,15 +114,27 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .spades: return "4 players · partnerships"
         case .euchre: return "4 players · partnerships"
         case .bridge: return "4 players · contract bridge"
-        case .solitaire: return "Solo · draw 1 or 3"
-        case .freecell: return "Solo · all cards face up"
-        case .mahjong: return "Solo · tile matching"
+        case .uno: return "4 players · shed your hand"
+        case .eights: return "4 players · eights are wild"
+        case .gofish: return "4 players · collect books"
         case .chess: return "2 players"
         case .checkers: return "2 players"
         case .go: return "2 players · 9×9 to 19×19"
+        case .solitaire: return "Solo · draw 1 or 3"
+        case .freecell: return "Solo · all cards face up"
+        case .mahjong: return "Solo · tile matching"
+        case .tetris: return "Solo · falling blocks"
+        case .capsules: return "Solo · clear the viruses"
+        case .minesweeper: return "Solo · flag the mines"
         case .pinball: return "Solo · 10 themed tables"
         case .breakout: return "Solo · brick breaker"
-        case .tetris: return "Solo · falling blocks"
+        case .muncher: return "Solo · maze chase"
+        case .hopper: return "Solo · road & river"
+        case .centipede: return "Solo · garden shooter"
+        case .football: return "Solo · 10 kicks, add wind"
+        case .baseball: return "Solo · 10 pitches"
+        case .soccer: return "Solo · shoot 5, save 5"
+        case .hockey: return "Solo · first to 7"
         }
     }
 
@@ -96,15 +145,19 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     enum Section: String, CaseIterable, Identifiable {
         case cards = "Card Games"
         case boards = "Board Games"
-        case solo = "Solo Parlor"
+        case puzzles = "Solitaire & Puzzles"
+        case arcade = "Arcade"
+        case sports = "Sports"
         var id: String { rawValue }
     }
 
     var section: Section {
         switch self {
-        case .hearts, .spades, .euchre, .bridge: return .cards
+        case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish: return .cards
         case .chess, .checkers, .go: return .boards
-        case .solitaire, .freecell, .mahjong, .pinball, .breakout, .tetris: return .solo
+        case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper: return .puzzles
+        case .pinball, .breakout, .muncher, .hopper, .centipede: return .arcade
+        case .football, .baseball, .soccer, .hockey: return .sports
         }
     }
 }

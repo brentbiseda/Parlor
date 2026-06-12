@@ -44,9 +44,10 @@ final class StatsStore: ObservableObject {
         if won { record.wins += 1 }
         if let score {
             switch kind {
-            case .pinball, .breakout, .tetris:   // higher is better
+            case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper,
+                 .centipede, .football, .baseball:   // higher is better
                 if score > (record.bestScore ?? Int.min) { record.bestScore = score }
-            case .solitaire, .freecell:           // fewer moves is better, only counts when solved
+            case .solitaire, .freecell:               // fewer moves is better, when solved
                 if won, score < (record.bestScore ?? Int.max) { record.bestScore = score }
             default:
                 break
@@ -58,7 +59,10 @@ final class StatsStore: ObservableObject {
     func bestLine(for kind: GameKind) -> String? {
         guard let best = stats(for: kind).bestScore else { return nil }
         switch kind {
-        case .pinball, .breakout, .tetris: return "Best \(best)"
+        case .pinball, .breakout, .tetris, .capsules, .muncher, .hopper,
+             .centipede, .football:
+            return "Best \(best)"
+        case .baseball: return "Best \(best) ft"
         case .solitaire, .freecell: return "Best solve \(best) moves"
         default: return nil
         }

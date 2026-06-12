@@ -66,6 +66,12 @@ struct MahjongView: View {
                 TileFaceView(face: tile.face, height: tileH)
                     .opacity(free ? 1 : 0.55)
             )
+            // A visible side gives the stacks real thickness.
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color(red: 0.6, green: 0.5, blue: 0.35))
+                    .offset(x: tileW * 0.07, y: tileH * 0.06)
+            )
             .frame(width: tileW, height: tileH)
             .shadow(color: .black.opacity(0.35), radius: 1.5, x: 2, y: 2)
             .onTapGesture { tap(tile, game: game) }

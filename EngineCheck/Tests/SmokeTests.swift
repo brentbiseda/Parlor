@@ -19,10 +19,11 @@ final class SmokeTests: XCTestCase {
             }
             moves += 1
         }
-        if kind == .solitaire || kind == .freecell || kind == .mahjong {
-            // Solo games can dead-end; surviving without errors is enough.
-            return
-        }
+        // Solo games that can dead-end (or run on random luck): surviving
+        // without errors is enough.
+        let lenient: Set<GameKind> = [.solitaire, .freecell, .mahjong, .minesweeper,
+                                      .muncher, .hopper, .capsules]
+        if lenient.contains(kind) { return }
         XCTAssertTrue(game.isOver, "\(kind) did not finish in \(maxMoves) moves", file: file, line: line)
         XCTAssertNotNil(game.resultText, "\(kind) finished without a result", file: file, line: line)
         if kind.isCompetitive {
@@ -50,6 +51,89 @@ final class SmokeTests: XCTestCase {
     func testFreeCell() { for _ in 0..<3 { playOut(.freecell, maxMoves: 500) } }
     func testMahjong() { playOut(.mahjong, maxMoves: 500) }
     func testTetris() { for _ in 0..<3 { playOut(.tetris, maxMoves: 5000) } }
+    func testCapsules() { for _ in 0..<3 { playOut(.capsules, maxMoves: 5000) } }
+    func testMinesweeperPlayout() { for _ in 0..<3 { playOut(.minesweeper, maxMoves: 200) } }
+    func testMuncher() { playOut(.muncher, maxMoves: 20000) }
+    func testHopper() { playOut(.hopper, maxMoves: 20000) }
+    func testUno() { for _ in 0..<3 { playOut(.uno) } }
+    func testEights() { for _ in 0..<3 { playOut(.eights) } }
+    func testGoFish() { for _ in 0..<3 { playOut(.gofish) } }
+    func testArcadeScorekeepers() {
+        for kind in [GameKind.centipede, .football, .baseball, .soccer, .hockey] {
+            playOut(kind, maxMoves: 100)
+        }
+    }
+
+    func testMuncherMazeIsSound() {
+        for row in MuncherGame.mazeRows {
+            XCTAssertEqual(row.count, MuncherGame.width, "bad maze row width: \(row)")
+        }
+        XCTAssertEqual(MuncherGame.mazeRows.count, MuncherGame.height)
+        let game = MuncherGame()
+        XCTAssertEqual(game.ghosts.count, 4)
+        XCTAssertFalse(game.pellets.isEmpty)
+        XCTAssertEqual(game.powerPellets.count, 4)
+        XCTAssertTrue(game.isOpen(game.pac))
+        // The box exit and every pellet must be open corridor.
+        XCTAssertTrue(game.pellets.allSatisfy { game.isOpen($0) })
+    }
+
+    func testMinesweeperFirstRevealIsSafe() {
+        for _ in 0..<10 {
+            var game = MinesweeperGame()
+            try? game.applyValidated(.minesweeper(.reveal(x: 4, y: 5)))
+            XCTAssertFalse(game.lost, "first reveal must never be a mine")
+            XCTAssertEqual(game.mines.count, MinesweeperGame.mineCount)
+        }
+    }
+
+    func testMinesweeperChording() throws {
+        var game = MinesweeperGame()
+        // Construct a known field: one mine next to a revealed "1".
+        game.minesPlaced = true
+        game.mines = [MinesweeperGame.index(0, 0)]
+        try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1)))   // shows "1"
+        XCTAssertEqual(game.adjacentMines(MinesweeperGame.index(1, 1)), 1)
+        // Unsatisfied chord (no flags) must be rejected.
+        XCTAssertThrowsError(try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1))))
+        // Flag the mine, chord again: the rest of the neighborhood opens.
+        try game.applyValidated(.minesweeper(.flag(x: 0, y: 0)))
+        try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1)))
+        XCTAssertTrue(game.revealed.contains(MinesweeperGame.index(1, 0)))
+        XCTAssertTrue(game.revealed.contains(MinesweeperGame.index(0, 1)))
+        XCTAssertFalse(game.lost)
+    }
+
+    func testUnoDealAndRanking() {
+        var game = UnoGame()
+        XCTAssertEqual(game.hands.map(\.count), [7, 7, 7, 7])
+        XCTAssertEqual(game.discard.count, 1)
+        // 108-card deck: 4×25 colored + 8 wilds.
+        let total = game.hands.flatMap { $0 }.count + game.drawPile.count + game.discard.count
+        XCTAssertEqual(total, 108)
+        // Hand the current player a winning play.
+        let top = game.topCard!
+        let winnerSeat = game.currentPlayer
+        game.hands[winnerSeat] = [UnoCard(id: 999, color: top.color ?? game.activeColor,
+                                          value: .number(7))]
+        game.activeColor = top.color ?? game.activeColor
+        try? game.applyValidated(.uno(.play(game.hands[winnerSeat][0], declared: nil)))
+        XCTAssertTrue(game.isOver)
+        XCTAssertEqual(game.ranking().first, [winnerSeat])
+    }
+
+    func testGoFishBooksAccountForWholeDeck() {
+        var game = AnyGame.make(kind: .gofish, options: GameOptions())
+        var moves = 0
+        while !game.isOver && moves < 20000 {
+            guard let move = Bot.chooseMove(for: game, difficulty: .hard) else { break }
+            try? game.applyValidated(move)
+            moves += 1
+        }
+        XCTAssertTrue(game.isOver)
+        let fish = game.engine as! GoFishGame
+        XCTAssertEqual(fish.books.reduce(0) { $0 + $1.count }, 13)
+    }
 
     func testBotDifficulties() {
         for difficulty in BotDifficulty.allCases {

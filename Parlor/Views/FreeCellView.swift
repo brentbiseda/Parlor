@@ -11,8 +11,43 @@ struct FreeCellView: View {
     }
 
     @State private var selection: Selection? = nil
+    @State private var autoFinishing = false
 
     var game: FreeCellGame? { session.game?.engine as? FreeCellGame }
+
+    /// Safe to autoplay once every cascade runs in descending rank order
+    /// (the classic FreeCell auto-complete condition).
+    var canAutoFinish: Bool {
+        guard let game, !game.isOver else { return false }
+        let ordered = game.cascades.allSatisfy { cascade in
+            zip(cascade, cascade.dropFirst()).allSatisfy { $0.rank.rawValue >= $1.rank.rawValue }
+        }
+        return ordered && nextFoundationMove(game) != nil
+    }
+
+    func nextFoundationMove(_ game: FreeCellGame) -> FreeCellMove? {
+        for (cell, card) in game.freeCells.enumerated() {
+            if let card, game.canPlaceOnFoundation(card) { return .freeToFoundation(cell: cell) }
+        }
+        for col in game.cascades.indices {
+            if let top = game.cascades[col].last, game.canPlaceOnFoundation(top) {
+                return .cascadeToFoundation(col: col)
+            }
+        }
+        return nil
+    }
+
+    private func autoFinish() {
+        autoFinishing = true
+        Task { @MainActor in
+            defer { autoFinishing = false }
+            while let game = self.game, !game.isOver,
+                  let move = nextFoundationMove(game) {
+                session.submit(.freecell(move))
+                try? await Task.sleep(nanoseconds: 90_000_000)
+            }
+        }
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -24,6 +59,19 @@ struct FreeCellView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(6)
+                .overlay(alignment: .bottom) {
+                    if canAutoFinish && !autoFinishing {
+                        Button {
+                            autoFinish()
+                        } label: {
+                            Label("Auto-finish", systemImage: "wand.and.stars")
+                                .font(.headline)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(.orange)
+                        .padding(.bottom, 24)
+                    }
+                }
             }
         }
     }
@@ -50,7 +98,7 @@ struct FreeCellView: View {
 
             Spacer(minLength: 4)
 
-            // Foundations
+            // Foundations: the matching pile glows when a pickup can land.
             ForEach(0..<4, id: \.self) { f in
                 Group {
                     if let top = game.foundations[f].last {
@@ -59,9 +107,29 @@ struct FreeCellView: View {
                         CardSlotView(width: cardWidth, label: Suit.allCases[f].symbol)
                     }
                 }
+                .overlay(
+                    RoundedRectangle(cornerRadius: cardWidth * 0.12)
+                        .strokeBorder(Color.yellow.opacity(0.85),
+                                      lineWidth: foundationHintSuit(game) == Suit.allCases[f] ? 2.5 : 0)
+                )
                 .onTapGesture { tapFoundation(f, game: game) }
             }
         }
+    }
+
+    /// Suit pile that would accept the currently selected card, if any.
+    func foundationHintSuit(_ game: FreeCellGame) -> Suit? {
+        let card: Card?
+        switch selection {
+        case .free(let cell):
+            card = game.freeCells[cell]
+        case .cascade(let col, let index):
+            card = index == game.cascades[col].count - 1 ? game.cascades[col].last : nil
+        case .none:
+            card = nil
+        }
+        guard let card, game.canPlaceOnFoundation(card) else { return nil }
+        return card.suit
     }
 
     func cascadeRow(_ game: FreeCellGame, cardWidth: CGFloat) -> some View {

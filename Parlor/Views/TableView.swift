@@ -9,11 +9,14 @@ struct TableView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                switch session.lobby.gameKind {
-                case .pinball, .breakout, .tetris:
+                switch session.lobby.gameKind.section {
+                case .arcade, .sports:
+                    ArcadeBackground()
+                case .puzzles where session.lobby.gameKind != .solitaire
+                    && session.lobby.gameKind != .freecell && session.lobby.gameKind != .mahjong:
                     ArcadeBackground()
                 default:
-                    FeltBackground()
+                    FeltBackground(inlay: session.lobby.gameKind.section == .cards)
                 }
                 if session.game == nil {
                     LobbyWaitView(session: session)
@@ -26,8 +29,10 @@ struct TableView: View {
                 }
 
                 if let result = session.game?.resultText {
-                    ConfettiView()
-                        .allowsHitTesting(false)
+                    if localOutcome != false {
+                        ConfettiView()
+                            .allowsHitTesting(false)
+                    }
                     resultBanner(result)
                 }
             }
@@ -112,8 +117,16 @@ struct TableView: View {
             FreeCellView(session: session)
         case .mahjong:
             MahjongView(session: session)
+        case .uno:
+            UnoView(session: session)
+        case .eights:
+            EightsView(session: session)
+        case .gofish:
+            GoFishView(session: session)
+        case .minesweeper:
+            MinesweeperView(session: session)
+        // Arcade & sports tables get a fresh scene per session (play again).
         case .pinball:
-            // New session (play again) gets a fresh physics table.
             PinballView(session: session)
                 .id(ObjectIdentifier(session))
         case .breakout:
@@ -121,6 +134,30 @@ struct TableView: View {
                 .id(ObjectIdentifier(session))
         case .tetris:
             TetrisView(session: session)
+                .id(ObjectIdentifier(session))
+        case .capsules:
+            CapsulesView(session: session)
+                .id(ObjectIdentifier(session))
+        case .muncher:
+            MuncherView(session: session)
+                .id(ObjectIdentifier(session))
+        case .hopper:
+            HopperView(session: session)
+                .id(ObjectIdentifier(session))
+        case .centipede:
+            CentipedeView(session: session)
+                .id(ObjectIdentifier(session))
+        case .football:
+            FootballView(session: session)
+                .id(ObjectIdentifier(session))
+        case .baseball:
+            BaseballView(session: session)
+                .id(ObjectIdentifier(session))
+        case .soccer:
+            SoccerView(session: session)
+                .id(ObjectIdentifier(session))
+        case .hockey:
+            HockeyView(session: session)
                 .id(ObjectIdentifier(session))
         }
     }
@@ -142,12 +179,39 @@ struct TableView: View {
         .background(.black.opacity(0.92))
     }
 
+    /// Whether the single local player won: true/false, or nil when there's
+    /// no meaningful verdict (draws, pass-and-play, score-attack arcade).
+    var localOutcome: Bool? {
+        guard let game = session.game, game.isOver,
+              session.localHumanSeats.count == 1,
+              let seat = session.localHumanSeats.first else { return nil }
+        if game.playerCount > 1 {
+            let ranking = game.ranking()
+            guard let top = ranking.first, ranking.count > 1 else { return nil }
+            return top.contains(seat)
+        }
+        switch game.engine {
+        case let g as CapsulesGame: return g.cleared
+        case let g as MinesweeperGame: return g.won
+        case let g as SoccerGame: return g.yourGoals == g.botGoals ? nil : g.won
+        case let g as HockeyGame: return g.won
+        case is KlondikeGame, is FreeCellGame, is MahjongGame: return true
+        default: return nil
+        }
+    }
+
     func resultBanner(_ result: String) -> some View {
         VStack(spacing: 16) {
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.yellow)
-                .shadow(color: .yellow.opacity(0.5), radius: 10)
+            if localOutcome == false {
+                Image(systemName: "arrow.counterclockwise.circle.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white.opacity(0.7))
+            } else {
+                Image(systemName: "trophy.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .yellow.opacity(0.5), radius: 10)
+            }
             Text(result)
                 .font(.title3.weight(.bold))
                 .multilineTextAlignment(.center)

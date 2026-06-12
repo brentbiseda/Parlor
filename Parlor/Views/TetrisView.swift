@@ -9,6 +9,7 @@ struct TetrisView: View {
     @State private var dragSteps: CGFloat = 0
     @State private var lastLines = 0
     @State private var lastPieces = 0
+    @State private var lineFlash = false
 
     var game: TetrisGame? { session.game?.engine as? TetrisGame }
 
@@ -58,6 +59,12 @@ struct TetrisView: View {
             SoundFX.shared.play(.lose)
         } else if after.lines > lastLines {
             SoundFX.shared.play(.lineClear)
+            // White pulse on the well; brighter pop is reserved for a tetris.
+            lineFlash = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                lineFlash = false
+            }
         } else if after.piecesPlaced > lastPieces {
             SoundFX.shared.play(.lock)
         } else if move == .rotate {
@@ -88,13 +95,26 @@ struct TetrisView: View {
                             height: cell * CGFloat(TetrisGame.height))),
                 with: .color(.black.opacity(0.45)))
 
+            // Beveled cells: light cap, dark base.
+            func drawCell(_ r: CGRect, _ color: Color) {
+                context.fill(Path(roundedRect: r, cornerRadius: 2), with: .color(color))
+                var cap = r
+                cap.size.height *= 0.42
+                context.fill(Path(roundedRect: cap, cornerRadius: 2),
+                             with: .color(.white.opacity(0.22)))
+                var base = r
+                base.origin.y += r.height * 0.66
+                base.size.height *= 0.34
+                context.fill(Path(roundedRect: base, cornerRadius: 2),
+                             with: .color(.black.opacity(0.2)))
+            }
+
             // Settled cells.
             for y in 0..<TetrisGame.height {
                 for x in 0..<TetrisGame.width {
                     let value = game.cell(x, y)
                     guard value != 0 else { continue }
-                    context.fill(Path(roundedRect: rect(x, y), cornerRadius: 2),
-                                 with: .color(pieceColors[value]))
+                    drawCell(rect(x, y), pieceColors[value])
                 }
             }
 
@@ -109,14 +129,18 @@ struct TetrisView: View {
             // Falling piece.
             if let piece = game.current {
                 for (x, y) in piece.cells() where y >= 0 {
-                    context.fill(Path(roundedRect: rect(x, y), cornerRadius: 2),
-                                 with: .color(pieceColors[piece.kind.colorIndex]))
+                    drawCell(rect(x, y), pieceColors[piece.kind.colorIndex])
                 }
             }
         }
         .aspectRatio(CGFloat(TetrisGame.width) / CGFloat(TetrisGame.height), contentMode: .fit)
         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.25), lineWidth: 1.5))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.white.opacity(lineFlash ? 0.22 : 0))
+                .animation(.easeOut(duration: 0.22), value: lineFlash)
+        )
         .gesture(boardGesture)
     }
 

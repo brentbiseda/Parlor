@@ -100,6 +100,15 @@ final class AppModel: ObservableObject {
         case let g as PinballGame: return g.ballsPlayed > 0 || g.score > 0
         case let g as BreakoutGame: return g.livesLost > 0 || g.score > 0
         case let g as TetrisGame: return g.piecesPlaced > 0
+        case let g as CapsulesGame: return g.pillsUsed > 0
+        case let g as MinesweeperGame: return g.minesPlaced
+        case let g as MuncherGame: return g.score > 0 || g.lives < 3
+        case let g as HopperGame: return g.score > 0 || g.lives < 3
+        case let g as CentipedeGame: return g.score > 0 || g.livesLost > 0
+        case let g as FootballGame: return g.kicksTaken > 0
+        case let g as BaseballGame: return g.pitchesSeen > 0
+        case let g as SoccerGame: return g.yourShots > 0
+        case let g as HockeyGame: return g.yourGoals > 0 || g.botGoals > 0
         default: return false
         }
     }
@@ -171,6 +180,15 @@ final class AppModel: ObservableObject {
             case let g as TetrisGame: won = false; score = g.score
             case let g as KlondikeGame: score = g.moveCount
             case let g as FreeCellGame: score = g.moveCount
+            case let g as CapsulesGame: won = g.cleared; score = g.score
+            case let g as MinesweeperGame: won = g.won
+            case let g as MuncherGame: won = false; score = g.score
+            case let g as HopperGame: won = false; score = g.score
+            case let g as CentipedeGame: won = false; score = g.score
+            case let g as FootballGame: won = false; score = g.score
+            case let g as BaseballGame: won = false; score = g.score
+            case let g as SoccerGame: won = g.won
+            case let g as HockeyGame: won = g.won
             default: break
             }
             stats.recordGame(kind: game.kind, won: won, score: score)
@@ -218,6 +236,24 @@ final class AppModel: ObservableObject {
             leaderboards.record(kind: .freecell, playerName: playerName, value: g.moveCount, detail: "solved")
         case let g as MahjongGame where won:
             leaderboards.record(kind: .mahjong, playerName: playerName, value: g.shufflesUsed, detail: "cleared")
+        case let g as CapsulesGame where g.score > 0:
+            leaderboards.record(kind: .capsules, playerName: playerName, value: g.score,
+                                detail: g.cleared ? "bottle cleared" : "level \(g.level)")
+        case let g as MuncherGame where g.score > 0:
+            leaderboards.record(kind: .muncher, playerName: playerName, value: g.score,
+                                detail: "level \(g.level)")
+        case let g as HopperGame where g.score > 0:
+            leaderboards.record(kind: .hopper, playerName: playerName, value: g.score,
+                                detail: "level \(g.level)")
+        case let g as CentipedeGame where g.score > 0:
+            leaderboards.record(kind: .centipede, playerName: playerName, value: g.score,
+                                detail: "wave \(g.level)")
+        case let g as FootballGame where g.score > 0:
+            leaderboards.record(kind: .football, playerName: playerName, value: g.score,
+                                detail: "\(g.made) of \(FootballGame.kicksPerGame)")
+        case let g as BaseballGame where g.score > 0:
+            leaderboards.record(kind: .baseball, playerName: playerName, value: g.score,
+                                detail: "\(g.homers) homers")
         default:
             break
         }
