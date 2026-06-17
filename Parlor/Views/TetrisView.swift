@@ -212,15 +212,19 @@ struct TetrisView: View {
                 statBlock("LINES", "\(game.lines)")
                 statBlock("LEVEL", "\(game.level)")
                 if let badge = clearBadge {
+                    let isTSpin = badge.contains("T-SPIN")
+                    let badgeColor: Color = isTSpin
+                        ? Color(red: 0.72, green: 0.38, blue: 0.92)
+                        : badge.contains("PERFECT") ? .mint : .yellow
                     Text(badge)
                         .font(.caption2.weight(.black))
-                        .foregroundStyle(.yellow)
+                        .foregroundStyle(badgeColor)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 4)
                         .frame(maxWidth: .infinity)
-                        .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
-                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.yellow.opacity(0.4), lineWidth: 1))
+                        .background(badgeColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(badgeColor.opacity(0.4), lineWidth: 1))
                         .transition(.scale(scale: 0.85).combined(with: .opacity))
                         .animation(.spring(response: 0.25), value: badge)
                 }
@@ -253,6 +257,11 @@ struct TetrisView: View {
                             Text("T×\(game.tetrisCount)")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(.yellow)
+                        }
+                        if game.tSpinCount > 0 {
+                            Text("🌀×\(game.tSpinCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(Color(red: 0.72, green: 0.38, blue: 0.92))
                         }
                     }
                 }

@@ -170,6 +170,12 @@ struct TrickTableView: View {
                             .padding(.bottom, 2)
                     }
 
+                    // Bridge: contract progress bar during playing phase.
+                    if let bridge = game.engine as? BridgeGame, bridge.phase == .playing {
+                        bridgeContractBar(bridge: bridge, perspective: perspective)
+                            .padding(.bottom, 2)
+                    }
+
                     if let summary = adapter.lastTrickSummary, adapter.trick.isEmpty {
                         HStack(spacing: 5) {
                             Image(systemName: "checkmark.circle.fill")
@@ -319,6 +325,57 @@ struct TrickTableView: View {
         }
     }
 
+    // MARK: - Bridge contract bar
+
+    /// 13-dot bar + contract label showing declarer's trick progress.
+    @ViewBuilder
+    func bridgeContractBar(bridge: BridgeGame, perspective: Int) -> some View {
+        if let contract = bridge.contract, let bidLabel = bridge.currentBidLabel {
+            let declarerSide = contract.declarer % 2
+            let perspSide = perspective % 2
+            let dTricks = bridge.declarerTricks
+            let defTricks = bridge.defenderTricks
+            let needed = contract.level + 6
+            let madeIt = dTricks >= needed
+            // From perspective: are we the declaring side?
+            let weAreDeclarer = declarerSide == perspSide
+            let ourTricks = weAreDeclarer ? dTricks : defTricks
+            let theirTricks = weAreDeclarer ? defTricks : dTricks
+
+            HStack(spacing: 3) {
+                Text(bidLabel)
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(madeIt ? .green : .white)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(madeIt ? Color.green.opacity(0.2) : .white.opacity(0.1), in: Capsule())
+
+                ForEach(0..<13, id: \.self) { i in
+                    let ours = i < ourTricks
+                    let theirs = !ours && i < ourTricks + theirTricks
+                    // Contract threshold always shown from declarer's perspective
+                    let atContract = weAreDeclarer && i == needed - 1
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(ours ? Color.blue : theirs ? Color.red : Color.white.opacity(0.12))
+                        .frame(width: 14, height: 10)
+                        .overlay(alignment: .trailing) {
+                            if atContract {
+                                Rectangle()
+                                    .fill(Color.white.opacity(0.55))
+                                    .frame(width: 1.5)
+                            }
+                        }
+                }
+                Spacer(minLength: 4)
+                Text(madeIt ? "+\(dTricks - needed)" : "\(dTricks)/\(needed)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(madeIt ? .green : .white.opacity(0.7))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 8)
+        }
+    }
+
     // MARK: - Always-visible scores
 
     /// Compact scoreboard pinned above the table, so nobody has to open the
@@ -330,13 +387,27 @@ struct TrickTableView: View {
             let us = perspective % 2
             let usBags = g.teamBags[us]
             let themBags = g.teamBags[1 - us]
+            // Projected round delta: tricks won vs contract so far
+            let ourTricks = g.tricksWon[us] + g.tricksWon[us + 2]
+            let ourContract = g.teamContract(us)
+            let projBag = g.phase == .playing && ourContract > 0 && ourTricks > ourContract
+                ? " +\(ourTricks - ourContract)🎒" : ""
+            let projNote = g.phase == .playing && ourContract > 0
+                ? (ourTricks >= ourContract ? "✓" : "\(ourTricks)/\(ourContract)") : nil
             HStack(spacing: 8) {
-                scoreChip("Us", "\(g.teamScores[us])", detail: "\(usBags) 🎒", highlight: true,
-                          bagWarning: usBags >= 7)
+                scoreChip("Us", "\(g.teamScores[us])", detail: "\(usBags)🎒\(projBag)",
+                          highlight: true, bagWarning: usBags >= 7)
                     .scaleEffect(usBags >= 7 && bagPulse ? 1.06 : 1.0)
-                Text("to 500").font(.caption2).foregroundStyle(.white.opacity(0.5))
-                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(themBags) 🎒", highlight: false,
-                          bagWarning: themBags >= 7)
+                VStack(spacing: 1) {
+                    Text("to 500").font(.caption2).foregroundStyle(.white.opacity(0.5))
+                    if let note = projNote {
+                        Text(note)
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(note == "✓" ? .green : .white.opacity(0.6))
+                    }
+                }
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(themBags)🎒",
+                          highlight: false, bagWarning: themBags >= 7)
                     .scaleEffect(themBags >= 7 && bagPulse ? 1.06 : 1.0)
             }
             .onAppear {
@@ -536,18 +607,34 @@ struct TrickTableView: View {
             EmptyView()
         case .heartsPassing(let direction):
             VStack(spacing: 6) {
-                Text("Pass 3 cards \(direction)")
-                    .font(.callout).foregroundStyle(.white)
                 HStack(spacing: 8) {
-                    ForEach(0..<3, id: \.self) { i in
-                        Circle()
-                            .frame(width: 10, height: 10)
-                            .foregroundStyle(i < passSelection.count ? Color.yellow : Color.white.opacity(0.3))
+                    // Directional arrow glyphs
+                    let arrow: String = switch direction {
+                    case "left": "← Pass left"
+                    case "right": "Pass right →"
+                    case "across": "↑ Pass across"
+                    default: "⊘ No passing"
+                    }
+                    Text(arrow)
+                        .font(.callout.weight(.semibold))
+                        .foregroundStyle(.white)
+                    HStack(spacing: 5) {
+                        ForEach(0..<3, id: \.self) { i in
+                            Circle()
+                                .frame(width: 12, height: 12)
+                                .foregroundStyle(i < passSelection.count ? Color.yellow : Color.white.opacity(0.25))
+                                .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                        }
                     }
                 }
-                Button("Pass →") {
+                Button {
                     session.submit(.passCards(Array(passSelection).displaySorted()))
                     passSelection = []
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "paperplane.fill")
+                        Text("Pass \(passSelection.count)/3")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(passSelection.count != 3)

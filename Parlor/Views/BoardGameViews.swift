@@ -56,9 +56,17 @@ struct GridBoardView: View {
                 HStack(spacing: 8) {
                     capturedRow(chess: chess, capturedColor: 1, label: "White")
                     Spacer()
-                    Text("Move \(chess.moveNumber)")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.white.opacity(0.45))
+                    VStack(spacing: 1) {
+                        Text("Move \(chess.moveNumber)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.45))
+                        let totalChecks = chess.checksDelivered[0] + chess.checksDelivered[1]
+                        if totalChecks > 0 {
+                            Text("⚡\(totalChecks) chk")
+                                .font(.system(size: 9).monospacedDigit())
+                                .foregroundStyle(.orange.opacity(0.8))
+                        }
+                    }
                     Spacer()
                     capturedRow(chess: chess, capturedColor: 0, label: "Black")
                 }
@@ -395,31 +403,73 @@ struct GoBoardView: View {
     }
 
     func captureBar(_ go: GoGame) -> some View {
-        HStack(spacing: 12) {
-            HStack(spacing: 4) {
-                Circle()
-                    .fill(RadialGradient(colors: [Color(white: 0.35), .black],
-                                         center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
-                    .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
-                    .frame(width: 14, height: 14)
-                Text("B: \(go.captures[0]) captured")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.75))
+        let (bScore, wScore) = go.areaScores()
+        let total = bScore + wScore
+        let bFrac = total > 0 ? bScore / total : 0.5
+        let margin = bScore - wScore
+        VStack(spacing: 6) {
+            HStack(spacing: 12) {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(RadialGradient(colors: [Color(white: 0.35), .black],
+                                             center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
+                        .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
+                        .frame(width: 14, height: 14)
+                    Text("B \(go.captures[0])cap")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                Spacer()
+                // Territory score
+                let leader = margin > 0.5 ? "B" : margin < -0.5 ? "W" : nil
+                if let leader {
+                    Text("\(leader) +\(String(format: "%.1f", abs(margin)))")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(margin > 0 ? Color(white: 0.9) : .white)
+                } else {
+                    Text("Even")
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.6))
+                }
+                Spacer()
+                HStack(spacing: 4) {
+                    Text("W \(go.captures[1])cap")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                    Circle()
+                        .fill(RadialGradient(colors: [.white, Color(white: 0.78)],
+                                             center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
+                        .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
+                        .frame(width: 14, height: 14)
+                }
             }
-            Spacer()
-            HStack(spacing: 4) {
-                Text("W: \(go.captures[1]) captured")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.75))
-                Circle()
-                    .fill(RadialGradient(colors: [.white, Color(white: 0.78)],
-                                         center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
-                    .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
-                    .frame(width: 14, height: 14)
+            // Split score bar: black territory | white territory (includes komi)
+            GeometryReader { barGeo in
+                HStack(spacing: 1) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(white: 0.22))
+                        .frame(width: barGeo.size.width * CGFloat(bFrac) - 0.5)
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(Color(white: 0.9))
+                        .frame(maxWidth: .infinity)
+                }
+                .animation(.easeOut(duration: 0.4), value: bFrac)
+                HStack {
+                    Text("\(Int(bScore.rounded()))pts")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.white.opacity(0.6))
+                        .offset(x: 4, y: 1)
+                    Spacer()
+                    Text("\(String(format: "%.1f", wScore))pts")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(Color.black.opacity(0.6))
+                        .offset(x: -4, y: 1)
+                }
             }
+            .frame(height: 12)
         }
         .padding(.horizontal, 6)
-        .padding(.vertical, 5)
+        .padding(.vertical, 6)
         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.1), lineWidth: 0.75))
     }
@@ -466,6 +516,19 @@ struct GoBoardView: View {
                         .fill(.black.opacity(0.75))
                         .frame(width: 5, height: 5)
                         .position(x: inset + CGFloat(p.x) * step, y: inset + CGFloat(p.y) * step)
+                }
+
+                // Ko point: red X marker on the forbidden recapture point
+                if let ko = go.koPoint {
+                    let kCenter = CGPoint(x: inset + CGFloat(ko.x) * step, y: inset + CGFloat(ko.y) * step)
+                    let kr = step * 0.3
+                    Path { path in
+                        path.move(to: CGPoint(x: kCenter.x - kr, y: kCenter.y - kr))
+                        path.addLine(to: CGPoint(x: kCenter.x + kr, y: kCenter.y + kr))
+                        path.move(to: CGPoint(x: kCenter.x + kr, y: kCenter.y - kr))
+                        path.addLine(to: CGPoint(x: kCenter.x - kr, y: kCenter.y + kr))
+                    }
+                    .stroke(Color.red.opacity(0.75), style: StrokeStyle(lineWidth: 2, lineCap: .round))
                 }
 
                 ForEach(0..<(n * n), id: \.self) { i in

@@ -14,6 +14,8 @@ struct HopperView: View {
     var body: some View {
         VStack(spacing: 8) {
             if let game {
+                statsStrip(game: game)
+                    .padding(.horizontal, 12)
                 timerBar(game: game)
                     .padding(.horizontal, 12)
             }
@@ -34,6 +36,45 @@ struct HopperView: View {
         }
         .padding(.top, 6)
         .task(id: session.sessionID) { await clock() }
+    }
+
+    func statsStrip(game: HopperGame) -> some View {
+        HStack(spacing: 10) {
+            // Lives as frog hearts
+            HStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { i in
+                    Text(i < game.lives ? "🐸" : "💀")
+                        .font(.system(size: 14))
+                        .opacity(i < game.lives ? 1.0 : 0.3)
+                }
+            }
+            Spacer()
+            // Level and crossings
+            HStack(spacing: 6) {
+                Text("Lv\(game.level)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.7))
+                if game.perfectCrossings > 0 {
+                    HStack(spacing: 2) {
+                        Image(systemName: "star.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.yellow)
+                        Text("×\(game.perfectCrossings)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.yellow)
+                    }
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.yellow.opacity(0.12), in: Capsule())
+                }
+            }
+            Spacer()
+            // Score
+            Text("\(game.score)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+        }
     }
 
     func timerBar(game: HopperGame) -> some View {

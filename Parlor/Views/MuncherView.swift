@@ -20,9 +20,14 @@ struct MuncherView: View {
 
     var body: some View {
         VStack(spacing: 6) {
-            if let game, game.frightened {
-                powerTimer(game: game)
-                    .padding(.horizontal, 12)
+            if let game {
+                if game.frightened {
+                    powerTimer(game: game)
+                        .padding(.horizontal, 12)
+                } else if game.isScatterPhase {
+                    scatterBar(game: game)
+                        .padding(.horizontal, 12)
+                }
             }
             ZStack {
                 maze
@@ -74,6 +79,32 @@ struct MuncherView: View {
         }
         .padding(.top, 6)
         .task(id: session.sessionID) { await clock() }
+    }
+
+    func scatterBar(game: MuncherGame) -> some View {
+        let cycle = MuncherGame.scatterChaseCycle
+        let total = game.scatterPhaseIndex < cycle.count ? cycle[game.scatterPhaseIndex] : 1
+        let remaining = max(0, total - game.scatterPhaseTicks)
+        let fraction = total > 0 ? Double(remaining) / Double(total) : 0
+        let warning = fraction < 0.3
+        return HStack(spacing: 6) {
+            Image(systemName: "bolt.slash.fill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(warning ? .orange : .cyan)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.12))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(warning ? Color.orange : Color.cyan)
+                        .frame(width: geo.size.width * fraction)
+                        .animation(.linear(duration: 0.12), value: fraction)
+                }
+            }
+            .frame(height: 6)
+            Text("SCATTER")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(warning ? .orange : .cyan)
+        }
     }
 
     func powerTimer(game: MuncherGame) -> some View {

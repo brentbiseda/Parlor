@@ -212,8 +212,33 @@ struct CapsulesView: View {
             }
             if let game {
                 stat("SCORE", "\(game.score)")
-                stat("VIRUSES", "\(game.virusesLeft)")
                 stat("LEVEL", "\(game.level)")
+                // Per-color virus tally
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("VIRUSES")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.6))
+                    let virusCounts = (0..<3).map { color in
+                        game.virusCount(color: color)
+                    }
+                    ForEach(0..<3, id: \.self) { color in
+                        if virusCounts[color] > 0 {
+                            HStack(spacing: 3) {
+                                Circle()
+                                    .fill(Self.cellColors[color])
+                                    .frame(width: 8, height: 8)
+                                Text("×\(virusCounts[color])")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.85))
+                            }
+                        }
+                    }
+                    if game.virusesLeft == 0 {
+                        Text("✓ Clear!")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.green)
+                    }
+                }
                 if game.maxChain > 1 {
                     stat("CHAIN", "×\(game.maxChain)")
                 }

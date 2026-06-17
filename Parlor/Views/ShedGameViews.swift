@@ -151,14 +151,19 @@ struct UnoView: View {
                                 }
                         }
 
-                        // Play direction indicator
-                        Image(systemName: game.clockwise
-                              ? "arrow.clockwise.circle.fill"
-                              : "arrow.counterclockwise.circle.fill")
-                            .font(.title2.weight(.bold))
-                            .foregroundStyle(.white.opacity(0.7))
-                            .symbolEffect(.bounce, value: game.clockwise)
-                    }
+                        VStack(spacing: 4) {
+                            // Play direction indicator
+                            Image(systemName: game.clockwise
+                                  ? "arrow.clockwise.circle.fill"
+                                  : "arrow.counterclockwise.circle.fill")
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(.white.opacity(0.7))
+                                .symbolEffect(.bounce, value: game.clockwise)
+                            // Discard pile count
+                            Text("🃏 \(game.discard.count)")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
 
                     Spacer(minLength: 0)
 

@@ -118,6 +118,10 @@ struct CapsulesGame: GameEngine {
         return board[y * Self.width + x]
     }
 
+    func virusCount(color: Int) -> Int {
+        board.compactMap { $0 }.filter { $0.isVirus && $0.color == color }.count
+    }
+
     private mutating func setCell(_ x: Int, _ y: Int, _ value: Cell?) {
         guard (0..<Self.width).contains(x), (0..<Self.height).contains(y) else { return }
         board[y * Self.width + x] = value
