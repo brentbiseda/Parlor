@@ -746,30 +746,56 @@ struct BridgeAuctionPanel: View {
     var body: some View {
         let legal = bridge?.legalCalls() ?? []
         VStack(spacing: 6) {
-            if let calls = bridge?.calls, !calls.isEmpty {
-                // Show last 4 bids as compact colored chips
-                let recentCalls = calls.suffix(4)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 4) {
-                        ForEach(Array(recentCalls.enumerated()), id: \.offset) { _, call in
-                            if case .bid(let lvl, let strain) = call {
-                                Text("\(lvl)\(strain.label)")
-                                    .font(.caption2.weight(.bold))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background(strainColor(strain), in: RoundedRectangle(cornerRadius: 5))
-                            } else {
-                                Text(call.label)
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 3)
-                                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
+            if let bridge, !bridge.calls.isEmpty {
+                // Auction grid: 4 columns (seats), rows fill from dealer onward
+                let dealer = bridge.dealer
+                let calls = bridge.calls
+                let total = dealer + calls.count
+                let rows = Int(ceil(Double(total) / 4.0))
+                VStack(spacing: 2) {
+                    // Header: seat labels
+                    HStack(spacing: 0) {
+                        ForEach(0..<4, id: \.self) { col in
+                            let seat = col
+                            Text(session.playerName(seat: seat).prefix(4))
+                                .font(.system(size: 8, weight: .bold))
+                                .foregroundStyle(seat == bridge.currentPlayer ? .yellow : .white.opacity(0.5))
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    ForEach(0..<rows, id: \.self) { row in
+                        HStack(spacing: 0) {
+                            ForEach(0..<4, id: \.self) { col in
+                                let callIndex = row * 4 + col - dealer
+                                Group {
+                                    if callIndex < 0 {
+                                        Text("—").font(.system(size: 9)).foregroundStyle(.white.opacity(0.2))
+                                    } else if callIndex < calls.count {
+                                        let call = calls[callIndex]
+                                        if case .bid(let lvl, let strain) = call {
+                                            Text("\(lvl)\(strain.label)")
+                                                .font(.system(size: 9, weight: .bold))
+                                                .foregroundStyle(.white)
+                                                .padding(.horizontal, 3)
+                                                .padding(.vertical, 1)
+                                                .background(strainColor(strain), in: RoundedRectangle(cornerRadius: 3))
+                                        } else {
+                                            Text(call.label)
+                                                .font(.system(size: 9))
+                                                .foregroundStyle(.white.opacity(0.55))
+                                        }
+                                    } else {
+                                        Text("").font(.system(size: 9))
+                                    }
+                                }
+                                .frame(maxWidth: .infinity)
                             }
                         }
                     }
                 }
+                .padding(.horizontal, 4)
+                .padding(.vertical, 4)
+                .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
             }
             HStack(spacing: 6) {
                 Picker("Level", selection: $level) {

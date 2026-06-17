@@ -23,6 +23,12 @@ struct KlondikeView: View {
     @State private var foundationPulse: CGFloat = 0
     @State private var foundationLandFlash: Int? = nil
     @State private var dealAnimated = false
+    @State private var elapsedSeconds: Int = 0
+    private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
+    private func timerString(_ seconds: Int) -> String {
+        seconds < 60 ? "\(seconds)s" : "\(seconds / 60):\(String(format: "%02d", seconds % 60))"
+    }
 
     var game: KlondikeGame? { session.game?.engine as? KlondikeGame }
 
@@ -58,6 +64,10 @@ struct KlondikeView: View {
                     }
                 }
                 .onPreferenceChange(DropFrameKey.self) { dropFrames = $0 }
+                .onReceive(ticker) { _ in
+                    if !(game.isOver) { elapsedSeconds += 1 }
+                }
+                .task(id: session.sessionID) { elapsedSeconds = 0 }
                 .overlay(alignment: .bottom) {
                     HStack(spacing: 10) {
                         if session.canUndo {
@@ -302,12 +312,12 @@ struct KlondikeView: View {
             }
             .frame(height: 5)
 
-            // Move count + efficiency
-            if game.moveCount > 0 {
-                let placed = game.foundations.map(\.count).reduce(0, +)
-                let efficiency = placed > 0 && game.moveCount > 0
-                    ? Int(Double(placed) / Double(game.moveCount) * 100) : 0
-                HStack(spacing: 3) {
+            // Move count + efficiency + elapsed timer
+            HStack(spacing: 5) {
+                if game.moveCount > 0 {
+                    let placed = game.foundations.map(\.count).reduce(0, +)
+                    let efficiency = placed > 0 && game.moveCount > 0
+                        ? Int(Double(placed) / Double(game.moveCount) * 100) : 0
                     Text("\(game.moveCount)m")
                         .font(.system(size: 9, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.5))
@@ -317,6 +327,12 @@ struct KlondikeView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(efficiency >= 75 ? Color.green : efficiency >= 50 ? Color.yellow : Color.white.opacity(0.4))
                     }
+                }
+                if elapsedSeconds > 0 {
+                    Text("⏱\(timerString(elapsedSeconds))")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.45))
+                        .monospacedDigit()
                 }
             }
         }
