@@ -51,27 +51,60 @@ struct BreakoutView: View {
     }
 
     func breakoutHeader(_ game: BreakoutGame) -> some View {
-        HStack(spacing: 12) {
-            Text("Level \(game.level)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white.opacity(0.85))
-                .padding(.horizontal, 8)
-                .padding(.vertical, 3)
-                .background(.white.opacity(0.12), in: Capsule())
-            Text("Bricks: \(game.bricksHit)")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.7))
-            if game.bestStreak > 2 {
-                Text("🔥\(game.bestStreak)")
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.orange)
+        HStack(spacing: 10) {
+            // Level chip with speed indicator
+            HStack(spacing: 3) {
+                Text("Lv\(game.level)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.85))
+                let speed = game.level >= 7 ? "⚡⚡⚡" : game.level >= 5 ? "⚡⚡" : game.level >= 3 ? "⚡" : ""
+                if !speed.isEmpty {
+                    Text(speed).font(.system(size: 9))
+                }
             }
+            .padding(.horizontal, 7)
+            .padding(.vertical, 3)
+            .background(.white.opacity(0.12), in: Capsule())
+
+            // Score
+            Text("\(game.score)")
+                .font(.caption.weight(.semibold))
+                .monospacedDigit()
+                .foregroundStyle(.white.opacity(0.85))
+
+            // Streak indicator
+            if game.currentStreak >= 3 {
+                HStack(spacing: 2) {
+                    Text("🔥")
+                        .font(.system(size: 11))
+                    Text("×\(game.currentStreak)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.orange.opacity(0.15), in: Capsule())
+            } else if game.bestStreak >= 5 {
+                Text("best 🔥\(game.bestStreak)")
+                    .font(.caption2)
+                    .foregroundStyle(.orange.opacity(0.7))
+            }
+
             Spacer()
+
+            // Perfect levels indicator
+            if game.perfectLevels > 0 {
+                Text("⭐×\(game.perfectLevels)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.yellow)
+            }
+
+            // Lives as circles
             HStack(spacing: 3) {
                 ForEach(0..<BreakoutGame.livesPerGame, id: \.self) { i in
                     Circle()
-                        .fill(i < game.livesLeft ? Color.white : Color.white.opacity(0.2))
-                        .frame(width: 7, height: 7)
+                        .fill(i < game.livesLeft ? Color(red: 0.35, green: 0.75, blue: 1.0) : Color.white.opacity(0.15))
+                        .frame(width: 8, height: 8)
                 }
             }
         }

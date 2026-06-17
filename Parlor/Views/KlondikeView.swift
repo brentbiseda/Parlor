@@ -302,12 +302,22 @@ struct KlondikeView: View {
             }
             .frame(height: 5)
 
-            // Move count
+            // Move count + efficiency
             if game.moveCount > 0 {
-                Text("\(game.moveCount)m")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
-                    .monospacedDigit()
+                let placed = game.foundations.map(\.count).reduce(0, +)
+                let efficiency = placed > 0 && game.moveCount > 0
+                    ? Int(Double(placed) / Double(game.moveCount) * 100) : 0
+                HStack(spacing: 3) {
+                    Text("\(game.moveCount)m")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.5))
+                        .monospacedDigit()
+                    if efficiency > 0 && game.moveCount > 10 {
+                        Text("\(efficiency)%")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(efficiency >= 75 ? Color.green : efficiency >= 50 ? Color.yellow : Color.white.opacity(0.4))
+                    }
+                }
             }
         }
         .padding(.horizontal, 4)

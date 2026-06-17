@@ -30,6 +30,11 @@ struct PinballView: View {
 
     var body: some View {
         VStack(spacing: 6) {
+            if let game, !game.isOver {
+                pinballHeader(game)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 2)
+            }
             SpriteView(scene: holder.scene, options: [.allowsTransparency])
                 .aspectRatio(390.0 / 700.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -89,6 +94,54 @@ struct PinballView: View {
                 }
             }
             scene.startIfNeeded()
+        }
+    }
+
+    func pinballHeader(_ game: PinballGame) -> some View {
+        HStack(spacing: 10) {
+            // Ball counter
+            HStack(spacing: 3) {
+                ForEach(0..<PinballGame.ballsPerGame, id: \.self) { i in
+                    Circle()
+                        .fill(i < game.ballsLeft
+                              ? Color(red: 0.85, green: 0.88, blue: 0.95)
+                              : Color.white.opacity(0.12))
+                        .frame(width: 9, height: 9)
+                }
+            }
+            // Total score
+            Text("\(game.score)")
+                .font(.caption.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(.white)
+            Spacer()
+            // Current ball score
+            if game.currentBallScore > 0 {
+                HStack(spacing: 3) {
+                    Text("Ball:")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.55))
+                    Text("+\(game.currentBallScore)")
+                        .font(.caption2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(game.currentBallScore >= PinballGame.jackpotThreshold ? .yellow : .white.opacity(0.85))
+                }
+            }
+            // Jackpot badge
+            if game.jackpotBalls > 0 {
+                Text("💰×\(game.jackpotBalls)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.yellow.opacity(0.15), in: Capsule())
+            }
+            // Multiplier
+            if game.highestMultiplierReached > 1 {
+                Text("×\(game.highestMultiplierReached)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.cyan)
+            }
         }
     }
 }
