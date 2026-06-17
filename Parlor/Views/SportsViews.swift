@@ -283,11 +283,60 @@ final class FieldGoalScene: SportsScene {
 
 struct BaseballView: View {
     @ObservedObject var session: GameSession
+
+    var game: BaseballGame? { session.game?.engine as? BaseballGame }
+
     var body: some View {
-        SportsSceneView(session: session,
-                        scene: DerbyScene(size: CGSize(width: 390, height: 700)),
-                        hint: "Tap to swing as the pitch crosses the plate",
-                        hintSymbol: "figure.baseball")
+        VStack(spacing: 0) {
+            if let game, !game.isOver {
+                baseballHeader(game)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 5)
+            }
+            SportsSceneView(session: session,
+                            scene: DerbyScene(size: CGSize(width: 390, height: 700)),
+                            hint: "Tap to swing as the pitch crosses the plate",
+                            hintSymbol: "figure.baseball")
+        }
+    }
+
+    func baseballHeader(_ game: BaseballGame) -> some View {
+        HStack(spacing: 10) {
+            // Pitch count dots
+            HStack(spacing: 3) {
+                ForEach(0..<BaseballGame.pitchesPerGame, id: \.self) { i in
+                    let taken = i < game.pitchesSeen
+                    let isHomer = i < game.homers
+                    Circle()
+                        .fill(taken ? (isHomer ? Color(red: 1.0, green: 0.85, blue: 0.2) : Color.white.opacity(0.25))
+                              : Color.white.opacity(0.08))
+                        .frame(width: 10, height: 10)
+                }
+            }
+            Spacer()
+            // HR / Pitches left
+            HStack(spacing: 6) {
+                Text("⚾ \(game.homers)/\(game.pitchesSeen)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.85))
+                if game.bestHomerStreak >= 2 {
+                    Text("🔥\(game.bestHomerStreak)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
+                }
+                if game.longestHomer > 0 {
+                    Text("📏\(game.longestHomer)ft")
+                        .font(.caption2)
+                        .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.2).opacity(0.9))
+                }
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 3)
+            .background(.black.opacity(0.35), in: Capsule())
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 4)
+        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -460,39 +509,66 @@ struct SoccerView: View {
 
     func penaltyTracker(_ game: SoccerGame) -> some View {
         let rounds = SoccerGame.roundsPerSide
-        return HStack(spacing: 12) {
-            // Your kicks
-            VStack(alignment: .leading, spacing: 4) {
-                Text("You")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-                HStack(spacing: 5) {
-                    ForEach(0..<rounds, id: \.self) { i in
-                        kickCircle(taken: game.yourShots > i,
-                                   scored: i < game.yourGoals,
-                                   active: game.yourShots == i && game.phase == .shooting)
+        let phaseLabel: String = switch game.phase {
+        case .shooting: "You shoot ⚽"
+        case .keeping: "You save 🧤"
+        case .done: game.yourGoals > game.botGoals ? "You win! 🎉" : game.yourGoals == game.botGoals ? "Draw!" : "Bot wins"
+        }
+        let phaseColor: Color = switch game.phase {
+        case .shooting: .yellow
+        case .keeping: .cyan
+        case .done: game.yourGoals > game.botGoals ? .green : .red
+        }
+        return VStack(spacing: 5) {
+            HStack(spacing: 12) {
+                // Your kicks
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("You")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                    HStack(spacing: 5) {
+                        ForEach(0..<rounds, id: \.self) { i in
+                            kickCircle(taken: game.yourShots > i,
+                                       scored: i < game.yourGoals,
+                                       active: game.yourShots == i && game.phase == .shooting)
+                        }
+                    }
+                }
+                Spacer()
+                VStack(spacing: 2) {
+                    Text("\(game.yourGoals) : \(game.botGoals)")
+                        .font(.title3.weight(.bold))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                    if game.saves > 0 {
+                        Text("🧤 \(game.saves) save\(game.saves == 1 ? "" : "s")")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.cyan.opacity(0.8))
+                    }
+                }
+                Spacer()
+                // Bot kicks
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("Bot")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                    HStack(spacing: 5) {
+                        ForEach(0..<rounds, id: \.self) { i in
+                            kickCircle(taken: game.botShots > i,
+                                       scored: i < game.botGoals,
+                                       active: game.botShots == i && game.phase == .keeping)
+                        }
                     }
                 }
             }
-            Spacer()
-            Text("\(game.yourGoals) : \(game.botGoals)")
-                .font(.title3.weight(.bold))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-            Spacer()
-            // Bot kicks
-            VStack(alignment: .trailing, spacing: 4) {
-                Text("Bot")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.white.opacity(0.7))
-                HStack(spacing: 5) {
-                    ForEach(0..<rounds, id: \.self) { i in
-                        kickCircle(taken: game.botShots > i,
-                                   scored: i < game.botGoals,
-                                   active: game.botShots == i && game.phase == .keeping)
-                    }
-                }
-            }
+            // Phase indicator
+            Text(phaseLabel)
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(phaseColor)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 2)
+                .background(phaseColor.opacity(0.12), in: Capsule())
+                .animation(.easeInOut(duration: 0.2), value: game.phase == .shooting)
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 6)
@@ -674,11 +750,80 @@ final class ShootoutScene: SportsScene {
 
 struct HockeyView: View {
     @ObservedObject var session: GameSession
+
+    var game: HockeyGame? { session.game?.engine as? HockeyGame }
+
     var body: some View {
-        SportsSceneView(session: session,
-                        scene: AirHockeyScene(size: CGSize(width: 390, height: 700)),
-                        hint: "Drag your striker — first to 7",
-                        hintSymbol: "hockey.puck.fill")
+        VStack(spacing: 0) {
+            if let game, !game.isOver {
+                hockeyHeader(game)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 6)
+            }
+            SportsSceneView(session: session,
+                            scene: AirHockeyScene(size: CGSize(width: 390, height: 700)),
+                            hint: "Drag your striker — first to 7",
+                            hintSymbol: "hockey.puck.fill")
+        }
+    }
+
+    func hockeyHeader(_ game: HockeyGame) -> some View {
+        let diff = game.yourGoals - game.botGoals
+        let lead = diff > 0 ? "↑\(diff)" : diff < 0 ? "↓\(abs(diff))" : "="
+        let leadColor: Color = diff > 0 ? .green : diff < 0 ? .red : .white.opacity(0.6)
+        return HStack(spacing: 10) {
+            // Your goal count
+            VStack(spacing: 1) {
+                Text("You")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.65))
+                Text("\(game.yourGoals)")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white)
+                    .monospacedDigit()
+            }
+            // Progress dots toward 7
+            VStack(spacing: 4) {
+                HStack(spacing: 4) {
+                    ForEach(0..<HockeyGame.goalsToWin, id: \.self) { i in
+                        Circle()
+                            .fill(i < game.yourGoals ? Color.blue : Color.white.opacity(0.12))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+                Text(lead)
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(leadColor)
+                HStack(spacing: 4) {
+                    ForEach(0..<HockeyGame.goalsToWin, id: \.self) { i in
+                        Circle()
+                            .fill(i < game.botGoals ? Color.red : Color.white.opacity(0.12))
+                            .frame(width: 7, height: 7)
+                    }
+                }
+            }
+            // Bot goal count
+            VStack(spacing: 1) {
+                Text("Bot")
+                    .font(.caption2).foregroundStyle(.white.opacity(0.65))
+                Text("\(game.botGoals)")
+                    .font(.title2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .monospacedDigit()
+            }
+            // Comeback indicator
+            if game.maxDeficit >= 2 {
+                Spacer()
+                Text("↩ -\(game.maxDeficit)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.orange)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.orange.opacity(0.12), in: Capsule())
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
