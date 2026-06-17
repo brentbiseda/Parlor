@@ -120,21 +120,37 @@ struct FreeCellView: View {
         let placed = game.foundations.reduce(0) { $0 + $1.count }
         let fraction = Double(placed) / 52.0
         let barColor: Color = fraction >= 0.8 ? .green : fraction >= 0.5 ? .yellow : .white.opacity(0.5)
-        return GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.08))
-                RoundedRectangle(cornerRadius: 3)
-                    .fill(barColor)
-                    .frame(width: geo.size.width * fraction)
-                    .animation(.easeInOut(duration: 0.3), value: placed)
+        // Move efficiency: placed cards per move (higher is better)
+        let efficiency = game.moveCount > 0 ? Double(placed) / Double(game.moveCount) : nil
+        let effLabel: String? = efficiency.map {
+            $0 >= 0.9 ? "⚡Efficient" : $0 >= 0.6 ? nil : nil
+        } ?? nil
+        return HStack(spacing: 6) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.08))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(barColor)
+                        .frame(width: geo.size.width * fraction)
+                        .animation(.easeInOut(duration: 0.3), value: placed)
+                }
             }
-        }
-        .frame(height: 4)
-        .overlay(alignment: .trailing) {
-            Text("\(placed)/52")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(barColor)
-                .offset(x: 28)
+            .frame(height: 4)
+            HStack(spacing: 4) {
+                Text("\(placed)/52")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(barColor)
+                if let label = effLabel {
+                    Text(label)
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.cyan)
+                } else if let eff = efficiency, game.moveCount > 5 {
+                    let pct = Int(eff * 100)
+                    Text("\(pct)%/m")
+                        .font(.system(size: 9))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+            }
         }
     }
 

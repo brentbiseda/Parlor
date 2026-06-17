@@ -224,15 +224,15 @@ struct TrickTableView: View {
     @ViewBuilder
     func euchreTricksBar(euchre: EuchreGame, makerTeam: Int, perspective: Int) -> some View {
         let perspTeam = perspective % 2
-        HStack(spacing: 5) {
+        let makerTricks = euchre.trickCounts[makerTeam] + euchre.trickCounts[makerTeam + 2]
+        let defenderTricks = euchre.trickCounts[1 - makerTeam] + euchre.trickCounts[(1 - makerTeam) + 2]
+        let totalPlayed = makerTricks + defenderTricks
+        let makerIsUs = makerTeam == perspTeam
+        return HStack(spacing: 5) {
             ForEach(0..<5, id: \.self) { i in
-                let makerTricks = euchre.trickCounts[makerTeam] + euchre.trickCounts[makerTeam + 2]
-                let defenderTricks = euchre.trickCounts[1 - makerTeam] + euchre.trickCounts[(1 - makerTeam) + 2]
-                let totalPlayed = makerTricks + defenderTricks
                 let filledByMaker = i < makerTricks
                 let filledByDefender = i < defenderTricks && !filledByMaker
                 let played = i < totalPlayed
-                let makerIsUs = makerTeam == perspTeam
                 let dotColor: Color = filledByMaker
                     ? (makerIsUs ? .blue : .red)
                     : filledByDefender
@@ -243,6 +243,20 @@ struct TrickTableView: View {
                     .overlay(Circle().strokeBorder(played ? .white.opacity(0.5) : .white.opacity(0.25), lineWidth: 1))
                     .frame(width: 10, height: 10)
             }
+            // Alone indicator
+            if euchre.aloneSeat != nil {
+                Text("⚡ALONE")
+                    .font(.system(size: 9, weight: .black))
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.yellow.opacity(0.2), in: Capsule())
+            }
+            Spacer(minLength: 4)
+            Text("\(makerIsUs ? makerTricks : defenderTricks)/3")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+                .monospacedDigit()
         }
     }
 
@@ -424,10 +438,14 @@ struct TrickTableView: View {
             }
         case let g as EuchreGame:
             let us = perspective % 2
+            let usStreak = g.teamRoundStreak[us]
+            let themStreak = g.teamRoundStreak[1 - us]
             HStack(spacing: 8) {
-                scoreChip("Us", "\(g.teamScores[us])", detail: nil, highlight: true)
+                scoreChip("Us", "\(g.teamScores[us])",
+                          detail: usStreak >= 2 ? "🔥\(usStreak)" : nil, highlight: true)
                 Text("to 10").font(.caption2).foregroundStyle(.white.opacity(0.5))
-                scoreChip("Them", "\(g.teamScores[1 - us])", detail: nil, highlight: false)
+                scoreChip("Them", "\(g.teamScores[1 - us])",
+                          detail: themStreak >= 2 ? "🔥\(themStreak)" : nil, highlight: false)
             }
         case let g as BridgeGame:
             let us = perspective % 2

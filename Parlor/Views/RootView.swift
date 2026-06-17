@@ -518,6 +518,7 @@ struct GameTile: View {
     var bestLine: String? = nil
     var winRate: Double? = nil
     @State private var newBounce = false
+    @State private var shimmerOffset: CGFloat = -1.5
 
     private var dotColor: Color? {
         guard let wr = winRate else { return nil }
@@ -638,10 +639,28 @@ struct GameTile: View {
         .shadow(color: kind.tileColor.opacity(0.65), radius: 14, y: 6)
         .shadow(color: .black.opacity(0.25), radius: 3, y: 2)
         .scaleEffect(newBounce ? 1.0 : (statsLine == nil && bestLine == nil ? 0.94 : 1.0))
+        .overlay(alignment: .topLeading) {
+            // Shimmer diagonal sweep for NEW tiles
+            if statsLine == nil && bestLine == nil {
+                LinearGradient(
+                    colors: [.clear, .white.opacity(0.18), .clear],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                .frame(width: 80)
+                .rotationEffect(.degrees(-15))
+                .offset(x: shimmerOffset * 160 - 40)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .allowsHitTesting(false)
+            }
+        }
         .onAppear {
-            guard statsLine == nil && bestLine == nil else { return }
-            withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(Double.random(in: 0...0.3))) {
-                newBounce = true
+            if statsLine == nil && bestLine == nil {
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.55).delay(Double.random(in: 0...0.3))) {
+                    newBounce = true
+                }
+                withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: false).delay(Double.random(in: 0...1.0))) {
+                    shimmerOffset = 1.5
+                }
             }
         }
     }
