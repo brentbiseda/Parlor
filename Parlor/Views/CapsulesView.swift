@@ -9,6 +9,9 @@ struct CapsulesView: View {
     @State private var lastViruses = -1
     @State private var lastPills = 0
     @State private var paused = false
+    @State private var showLevelClear = false
+    @State private var chainBadge: String? = nil
+    @State private var chainOpacity: Double = 0
 
     var game: CapsulesGame? { session.game?.engine as? CapsulesGame }
 
@@ -34,11 +37,15 @@ struct CapsulesView: View {
     }
 
     private func gravityLoop() async {
-        while !Task.isCancelled {
+        while true {
             let level = game?.level ?? 1
             let interval = max(0.16, 0.8 * pow(0.85, Double(level - 1)))
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
-            guard !paused, let game, !game.isOver else { continue }
+            do {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } catch {
+                break
+            }
+            guard !paused, let game, !game.isOver, !showLevelClear else { continue }
             submit(.tick)
         }
     }
@@ -60,6 +67,7 @@ struct CapsulesView: View {
         }
         lastViruses = after.virusesLeft
         lastPills = after.pillsUsed
+        if after.cleared { showLevelClear = true }
     }
 
     var bottle: some View {
@@ -133,6 +141,34 @@ struct CapsulesView: View {
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.white.opacity(0.25), lineWidth: 1.5))
         .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
         .overlay { PausedCurtain(paused: $paused) }
+        .overlay { levelClearOverlay }
+        .overlay {
+            if let badge = chainBadge {
+                Text(badge)
+                    .font(.system(size: 20, weight: .black, design: .rounded))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .orange, radius: 6)
+                    .opacity(chainOpacity)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 7)
+                    .background(.black.opacity(0.65), in: Capsule())
+                    .transition(.scale.combined(with: .opacity))
+            }
+        }
+        .onChange(of: game?.lastChain ?? 0) { _, newChain in
+            if newChain > 1 {
+                chainBadge = "🔗 ×\(newChain) CHAIN!"
+                withAnimation(.easeIn(duration: 0.15)) { chainOpacity = 1.0 }
+                Task {
+                    do {
+                        try await Task.sleep(nanoseconds: 1_200_000_000)
+                        withAnimation(.easeOut(duration: 0.35)) { chainOpacity = 0 }
+                        try await Task.sleep(nanoseconds: 350_000_000)
+                        chainBadge = nil
+                    } catch { return }
+                }
+            }
+        }
         .gesture(boardGesture)
     }
 
@@ -159,26 +195,64 @@ struct CapsulesView: View {
                 Text("NEXT")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white.opacity(0.6))
-                HStack(spacing: 2) {
+                HStack(spacing: 3) {
                     if let next = game?.nextColors {
                         ForEach(0..<2, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 5)
+                            RoundedRectangle(cornerRadius: 6)
                                 .fill(Self.cellColors[next[i]])
-                                .frame(width: 20, height: 20)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 6)
+                                        .strokeBorder(.white.opacity(0.45), lineWidth: 1.5)
+                                )
+                                .frame(width: 26, height: 26)
                         }
                     }
                 }
                 .padding(6)
-                .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+                .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.15), lineWidth: 1))
             }
             if let game {
                 stat("SCORE", "\(game.score)")
                 stat("VIRUSES", "\(game.virusesLeft)")
                 stat("LEVEL", "\(game.level)")
+                if game.maxChain > 1 {
+                    stat("CHAIN", "×\(game.maxChain)")
+                }
             }
             Spacer()
         }
         .frame(width: 86)
+    }
+
+    @ViewBuilder
+    var levelClearOverlay: some View {
+        if showLevelClear, let game {
+            ZStack {
+                Color.black.opacity(0.55)
+                VStack(spacing: 8) {
+                    Text("CLEAR!")
+                        .font(.system(size: 36, weight: .black, design: .rounded))
+                        .foregroundStyle(.yellow)
+                    Text("Level \(game.level)")
+                        .font(.title2.weight(.bold))
+                        .foregroundStyle(.white)
+                    Text("\(game.score) pts")
+                        .font(.headline)
+                        .foregroundStyle(.white.opacity(0.8))
+                    Button("Next Level") {
+                        showLevelClear = false
+                        session.submit(.capsules(.tick))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.yellow)
+                    .foregroundStyle(.black)
+                    .font(.headline)
+                    .padding(.top, 4)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
     }
 
     func stat(_ label: String, _ value: String) -> some View {

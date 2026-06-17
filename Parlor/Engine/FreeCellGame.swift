@@ -10,9 +10,19 @@ struct FreeCellGame: GameEngine {
 
     var cascades: [[Card]] = []
     var freeCells: [Card?] = [nil, nil, nil, nil]
-    /// Foundations indexed by Suit.allCases order.
     var foundations: [[Card]] = Array(repeating: [], count: 4)
     var moveCount = 0
+    /// Tracks whether the game has been proven unsolvable (no legal moves).
+    var deadlocked = false
+    /// Times all 4 free cells were occupied simultaneously (pressure indicator).
+    var fullFreeCellMoments = 0
+    /// Longest run of consecutive moves that sent a card to a foundation.
+    var foundationRun = 0
+    var bestFoundationRun = 0
+    /// Times the player used undo.
+    var undoCount = 0
+    /// Moves made by auto-finish assist.
+    var autoFinishMoves = 0
 
     init() {
         var deck = Card.standardDeck().shuffled()
@@ -24,7 +34,7 @@ struct FreeCellGame: GameEngine {
     }
 
     var currentPlayer: Int { 0 }
-    var isOver: Bool { foundations.allSatisfy { $0.count == 13 } }
+    var isOver: Bool { foundations.allSatisfy { $0.count == 13 } || deadlocked }
 
     func foundationIndex(for suit: Suit) -> Int {
         Suit.allCases.firstIndex(of: suit)!
@@ -41,8 +51,6 @@ struct FreeCellGame: GameEngine {
         return card.suit.isRed != top.suit.isRed && card.rank.rawValue == top.rank.rawValue - 1
     }
 
-    /// Whether the top `count` cards of a cascade form a movable run
-    /// (descending, alternating colors).
     func isRun(_ cards: ArraySlice<Card>) -> Bool {
         guard !cards.isEmpty else { return false }
         for (a, b) in zip(cards, cards.dropFirst()) {
@@ -54,10 +62,32 @@ struct FreeCellGame: GameEngine {
     var emptyCellCount: Int { freeCells.filter { $0 == nil }.count }
     var emptyCascadeCount: Int { cascades.filter(\.isEmpty).count }
 
-    /// Largest run movable to `destination` (nil = a non-empty cascade).
     func maxRunLength(toEmptyCascade: Bool) -> Int {
         let empties = emptyCascadeCount - (toEmptyCascade ? 1 : 0)
         return (1 + emptyCellCount) * (1 << max(0, empties))
+    }
+
+    /// True when every remaining card is already in order and can cascade
+    /// to foundations without needing free cells (safe auto-finish).
+    var autoFinishAvailable: Bool {
+        guard !isOver else { return false }
+        let done = foundations.map { $0.count }
+        // Each cascade must be a clean descending run and all cards above
+        // the minimum already-placed rank can be pushed straight up.
+        let minDone = done.min() ?? 0
+        for cascade in cascades {
+            for (i, card) in cascade.enumerated() {
+                if i > 0 {
+                    let below = cascade[i - 1]
+                    if !(card.suit.isRed != below.suit.isRed
+                         && card.rank.rawValue == below.rank.rawValue - 1) { return false }
+                }
+                // The card must be safely auto-playable: its rank ≤ minDone+2
+                // (standard safe-to-auto rule avoids releasing needed blockers).
+                if card.rank.rawValue > minDone + 2 { return false }
+            }
+        }
+        return freeCells.compactMap { $0 }.allSatisfy { $0.rank.rawValue <= minDone + 2 }
     }
 
     func legalMoves() -> [Move] {
@@ -75,7 +105,11 @@ struct FreeCellGame: GameEngine {
                 while count <= min(limit, ups.count) {
                     let run = ups.suffix(count)
                     if isRun(run), let head = run.first, canPlace(head, onCascade: dest) {
-                        moves.append(.freecell(.cascadeToCascade(from: col, count: count, to: dest)))
+                        // Skip moving an entire cascade to an empty column (no gain).
+                        let movesWholePile = count == ups.count && cascades[dest].isEmpty
+                        if !movesWholePile {
+                            moves.append(.freecell(.cascadeToCascade(from: col, count: count, to: dest)))
+                        }
                     }
                     if !isRun(run) { break }
                     count += 1
@@ -92,7 +126,6 @@ struct FreeCellGame: GameEngine {
         return moves
     }
 
-    /// Like Klondike, moves are validated structurally in `apply`.
     func isLegal(_ move: Move) -> Bool {
         if case .freecell = move { return true }
         return false
@@ -131,14 +164,55 @@ struct FreeCellGame: GameEngine {
             cascades[to].append(card)
         }
         moveCount += 1
+        switch m {
+        case .cascadeToFoundation, .freeToFoundation:
+            foundationRun += 1
+            bestFoundationRun = max(bestFoundationRun, foundationRun)
+        default:
+            foundationRun = 0
+        }
+        if freeCells.allSatisfy({ $0 != nil }) { fullFreeCellMoments += 1 }
+        if legalMoves().isEmpty && !isOver { deadlocked = true }
     }
 
+    var foundationCount: Int { foundations.reduce(0) { $0 + $1.count } }
+
     var statusText: String {
-        let done = foundations.reduce(0) { $0 + $1.count }
-        return "Foundations \(done)/52 · \(moveCount) moves"
+        if deadlocked { return "No moves — deal was unwinnable after \(moveCount) moves" }
+        let done = foundationCount
+        let freeFilled = freeCells.compactMap { $0 }.count
+        let pct = done * 100 / 52
+        let suitProgress = Suit.allCases.map { suit in
+            let count = foundations[foundationIndex(for: suit)].count
+            return "\(suit.symbol)\(count)"
+        }.joined(separator: " ")
+        var text = "Found. \(done)/52 (\(pct)%) [\(suitProgress)] · free \(freeFilled)/4 · \(moveCount) moves"
+        if freeFilled == 4 { text += " ⚠️ cells full" }
+        else if emptyCascadeCount > 0 { text += " · \(emptyCascadeCount) empty col\(emptyCascadeCount == 1 ? "" : "s")" }
+        if autoFinishAvailable { text += " · ✨ auto-finish ready" }
+        return text
     }
 
     var resultText: String? {
-        isOver ? "Solved in \(moveCount) moves!" : nil
+        if deadlocked { return "Stuck — no legal moves after \(moveCount) moves" }
+        guard isOver else { return nil }
+        var text = "Solved in \(moveCount) moves!"
+        // Lower bound: every card needs at least one move onto a foundation.
+        let estimate = 52
+        if moveCount > estimate {
+            let eff = Int(Double(estimate) / Double(moveCount) * 100)
+            text += " · \(eff)% efficient (\(moveCount)/\(estimate) min)"
+        } else {
+            text += " · 💯 perfect efficiency!"
+        }
+        if fullFreeCellMoments == 0 { text += " · 🆓 Cells never full!" }
+        else if fullFreeCellMoments <= 2 { text += " · \(fullFreeCellMoments)× all cells used" }
+        if moveCount <= 60 { text += " · 🏅 Speedrun!" }
+        else if moveCount <= 90 { text += " · efficient solve" }
+        if bestFoundationRun >= 5 { text += " · 🔥 \(bestFoundationRun)-card run" }
+        if undoCount == 0 { text += " · 🏆 no undos!" }
+        else { text += " · used \(undoCount) undo\(undoCount == 1 ? "" : "s")" }
+        if autoFinishMoves > 0 { text += " · ✨ auto-finished \(autoFinishMoves) moves" }
+        return text
     }
 }

@@ -37,6 +37,37 @@ struct PinballView: View {
                 .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.15), lineWidth: 1))
                 .padding(.horizontal, 10)
 
+            // Jackpot progress bar.
+            if let game {
+                let rawProgress = Double(max(0, game.currentBallScore)) / Double(PinballGame.jackpotThreshold)
+                let progress = min(rawProgress, 1.0)
+                if progress > 0 {
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack {
+                            Text("Jackpot \(Int(progress * 100))%")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(progress >= 1 ? Color(red: 1.0, green: 0.82, blue: 0.1) : .white.opacity(0.75))
+                            Spacer()
+                        }
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(Color.white.opacity(0.1)).frame(height: 5)
+                                Capsule()
+                                    .fill(LinearGradient(
+                                        colors: progress >= 1
+                                            ? [Color(red: 1.0, green: 0.82, blue: 0.1), Color(red: 1.0, green: 0.55, blue: 0.0)]
+                                            : [Color(red: 0.3, green: 0.85, blue: 0.45), Color(red: 0.9, green: 0.75, blue: 0.2)],
+                                        startPoint: .leading, endPoint: .trailing))
+                                    .frame(width: geo.size.width * progress, height: 5)
+                                    .animation(.easeOut(duration: 0.3), value: progress)
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                    .padding(.horizontal, 22)
+                }
+            }
+
             HStack {
                 Label(holder.scene.theme.name, systemImage: "sparkles")
                 Spacer()

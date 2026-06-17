@@ -4,19 +4,49 @@ import Foundation
 /// suit or rank, eights are wild and nominate a suit, draw one when stuck
 /// (play it or keep it), pass when the stock is gone. First out wins; the
 /// rest rank by points left in hand (8 = 50, faces = 10, ace = 1).
+///
+/// Power cards:
+///   2 — "draw two": next player must draw 2 (or stack another 2 to pass
+///       the debt forward). Stacking resolves when a player can't or won't
+///       stack — they draw the accumulated total.
+///   Q — "skip": next player loses their turn.
+///   8 — wild: nominate any suit.
 struct EightsGame: GameEngine {
     static let kind = GameKind.eights
 
     var hands: [[Card]] = Array(repeating: [], count: 4)
     var stock: [Card] = []
     var discard: [Card] = []
-    /// Suit in force (overridden by an eight's nomination).
     var activeSuit: Suit = .clubs
     var currentPlayer = 0
     var drewThisTurn = false
     var winner: Int? = nil
     var consecutivePasses = 0
     var endedByBlock = false
+    /// Accumulated draw-two debt: the next player must draw this many or stack.
+    var pendingDraw = 0
+    /// True when the current player was skipped by a Queen.
+    var wasSkipped = false
+    /// Times an 8 was played and actually changed the active suit (shown in resultText).
+    var suitChanges = 0
+    /// Times the discard pile was recycled back into the stock when it ran dry.
+    var stockReshuffles = 0
+    /// Consecutive eights played in a row by any player.
+    var currentEightStreak = 0
+    var bestEightStreak = 0
+    /// Total cards opponents were forced to draw via stacked 2s.
+    var cardsForced = 0
+    /// Largest single draw-two debt that ever resolved.
+    var biggestDrawHit = 0
+    /// Distinct suits that have been the active suit at any point (rainbow game = all 4).
+    var suitsSeen: Set<Suit> = []
+    /// Queens played (skips dealt out).
+    var queensPlayed = 0
+    /// Times an 8 was played (wild suit change).
+    var eightPlays = 0
+    /// Consecutive 8s played in a row (suit changes run).
+    var currentSuitChangeRun: Int = 0
+    var bestSuitChangeRun: Int = 0
 
     init() {
         var deck = Card.standardDeck().shuffled()
@@ -24,11 +54,11 @@ struct EightsGame: GameEngine {
             hands[seat] = Array(deck.prefix(5)).displaySorted()
             deck.removeFirst(5)
         }
-        // Start on a non-eight so the opener isn't a wild.
         while deck.first?.rank == .eight { deck.append(deck.removeFirst()) }
         let start = deck.removeFirst()
         discard = [start]
         activeSuit = start.suit
+        suitsSeen = [start.suit]
         stock = deck
     }
 
@@ -36,6 +66,8 @@ struct EightsGame: GameEngine {
     var topCard: Card? { discard.last }
 
     func canPlay(_ card: Card) -> Bool {
+        // During a pending draw, only a 2 can be stacked.
+        if pendingDraw > 0 { return card.rank == .two }
         if card.rank == .eight { return true }
         return card.suit == activeSuit || card.rank == topCard?.rank
     }
@@ -56,7 +88,12 @@ struct EightsGame: GameEngine {
                 moves.append(.eights(.play(card, nominated: nil)))
             }
         }
-        if drewThisTurn || stock.isEmpty {
+        // If there's a pending draw and no 2 to stack, or stock gone, draw/pass.
+        if pendingDraw > 0 {
+            if legalCards(for: currentPlayer).isEmpty {
+                moves.append(.eights(.draw))
+            }
+        } else if drewThisTurn || stock.isEmpty {
             moves.append(.eights(.pass))
         } else {
             moves.append(.eights(.draw))
@@ -73,23 +110,68 @@ struct EightsGame: GameEngine {
             if card.rank == .eight && nominated == nil { throw GameError.illegalMove }
             hands[currentPlayer].remove(at: index)
             discard.append(card)
-            activeSuit = card.rank == .eight ? (nominated ?? card.suit) : card.suit
+            let newSuit = card.rank == .eight ? (nominated ?? card.suit) : card.suit
+            if card.rank == .eight && newSuit != activeSuit { suitChanges += 1 }
+            if card.rank == .eight {
+                eightPlays += 1
+                currentEightStreak += 1
+                if currentEightStreak > bestEightStreak { bestEightStreak = currentEightStreak }
+                currentSuitChangeRun += 1
+                if currentSuitChangeRun > bestSuitChangeRun { bestSuitChangeRun = currentSuitChangeRun }
+            } else {
+                currentEightStreak = 0
+                currentSuitChangeRun = 0
+            }
+            activeSuit = newSuit
+            suitsSeen.insert(newSuit)
             consecutivePasses = 0
             drewThisTurn = false
+
+            // Power card effects.
+            let isTwo = card.rank == .two
+            let isQueen = card.rank == .queen
+            if isQueen { queensPlayed += 1 }
+            if isTwo { pendingDraw += 2 }
+            else { pendingDraw = 0 }     // resolved by a non-2 play
+
             if hands[currentPlayer].isEmpty {
                 winner = currentPlayer
                 return
             }
             currentPlayer = (currentPlayer + 1) % 4
+            // Skip: queen skips the next player.
+            if isQueen {
+                wasSkipped = true
+                currentPlayer = (currentPlayer + 1) % 4
+            } else {
+                wasSkipped = false
+            }
         case .draw:
-            guard !drewThisTurn, !stock.isEmpty else { throw GameError.illegalMove }
-            let card = stock.removeLast()
-            hands[currentPlayer].append(card)
+            // Forced draw from pending debt, or voluntary single draw.
+            let drawCount = pendingDraw > 0 ? pendingDraw : 1
+            if pendingDraw > 0 {
+                cardsForced += pendingDraw
+                biggestDrawHit = max(biggestDrawHit, pendingDraw)
+            }
+            pendingDraw = 0
+            for _ in 0..<drawCount {
+                if stock.isEmpty, discard.count > 1 {
+                    // Reshuffle all but the top discard card back into stock.
+                    let top = discard.removeLast()
+                    stock = discard.shuffled()
+                    discard = [top]
+                    stockReshuffles += 1
+                }
+                guard !stock.isEmpty else { break }
+                let card = stock.removeLast()
+                hands[currentPlayer].append(card)
+            }
             hands[currentPlayer] = hands[currentPlayer].displaySorted()
             consecutivePasses = 0
-            if canPlay(card) {
-                drewThisTurn = true   // may play or keep it
+            if drawCount == 1, let last = hands[currentPlayer].last, canPlay(last) {
+                drewThisTurn = true
             } else {
+                drewThisTurn = false
                 currentPlayer = (currentPlayer + 1) % 4
             }
         case .pass:
@@ -97,7 +179,7 @@ struct EightsGame: GameEngine {
             drewThisTurn = false
             consecutivePasses += 1
             if consecutivePasses >= 4 {
-                endedByBlock = true   // nobody can move — lightest hand wins
+                endedByBlock = true
                 return
             }
             currentPlayer = (currentPlayer + 1) % 4
@@ -123,7 +205,6 @@ struct EightsGame: GameEngine {
             let grouped = Dictionary(grouping: losers, by: handPoints)
             return [[winner]] + grouped.keys.sorted().map { grouped[$0]!.sorted() }
         }
-        // Blocked: everyone ranks by hand points.
         let grouped = Dictionary(grouping: 0..<4, by: handPoints)
         return grouped.keys.sorted().map { grouped[$0]!.sorted() }
     }
@@ -140,16 +221,31 @@ struct EightsGame: GameEngine {
 
     var statusText: String {
         if isOver { return resultText ?? "Game over" }
-        var text = "\(activeSuit.symbol) in play · stock \(stock.count)"
-        if let smallest = hands.map(\.count).min(), smallest == 1 { text += " · last card!" }
+        var text = "\(activeSuit.symbol) · stock \(stock.count)"
+        if pendingDraw > 0 { text += " · DRAW \(pendingDraw)!" }
+        if wasSkipped { text += " · SKIP" }
+        let counts = (0..<4).map { "\(hands[$0].count)" }.joined(separator: "/")
+        text += " · hands \(counts)"
+        if let threat = (0..<4).min(by: { hands[$0].count < hands[$1].count }), hands[threat].count == 1 {
+            text += " · 🚨 Seat \(threat + 1) on last card!"
+        }
         return text
     }
 
     var resultText: String? {
-        if let winner { return "Seat \(winner + 1) goes out" }
+        var extras = suitChanges > 0 ? " · 🃏 \(suitChanges) suit change\(suitChanges == 1 ? "" : "s")" : ""
+        if eightPlays > 0 { extras += " · 8️⃣ \(eightPlays) eight\(eightPlays == 1 ? "" : "s") played" }
+        if stockReshuffles > 0 { extras += " · \(stockReshuffles) reshuffle\(stockReshuffles == 1 ? "" : "s")" }
+        if bestEightStreak >= 3 { extras += " · ×\(bestEightStreak) eights streak!" }
+        if cardsForced > 0 { extras += " · ➕ \(cardsForced) cards forced" }
+        if biggestDrawHit >= 4 { extras += " · 💥 \(biggestDrawHit)-card stack hit" }
+        if suitsSeen.count == 4 { extras += " · 🌈 Rainbow game!" }
+        if queensPlayed > 0 { extras += " · 👸 \(queensPlayed) skip\(queensPlayed == 1 ? "" : "s")" }
+        if bestSuitChangeRun >= 3 { extras += " · 🔄 best \(bestSuitChangeRun)-change run" }
+        if let winner { return "Seat \(winner + 1) goes out first!\(extras)" }
         if endedByBlock {
             let best = (0..<4).min { handPoints($0) < handPoints($1) } ?? 0
-            return "Blocked — Seat \(best + 1) wins with the lightest hand"
+            return "Blocked — Seat \(best + 1) wins with fewest points\(extras)"
         }
         return nil
     }

@@ -39,15 +39,18 @@ enum Bot {
             return .euchreCall(euchreBotCall(game: g))
         case let g as GoGame:
             return goBotMove(game: g, difficulty: .normal)
-        case is UnoGame, is EightsGame:
-            // Casual but not silly: play a random card when one is playable
-            // rather than drawing for no reason.
-            let moves = game.legalMoves()
-            let plays = moves.filter {
-                if case .uno(.play) = $0 { return true }
-                if case .eights(.play) = $0 { return true }
-                return false
+        case let g as UnoGame:
+            // Call UNO the moment we sit on a single card (avoids the penalty).
+            let seat = g.currentPlayer
+            if g.hands[seat].count == 1, !g.calledUno.contains(seat) {
+                return .uno(.callUno)
             }
+            let moves = game.legalMoves()
+            let plays = moves.filter { if case .uno(.play) = $0 { return true }; return false }
+            return plays.randomElement() ?? moves.randomElement()
+        case is EightsGame:
+            let moves = game.legalMoves()
+            let plays = moves.filter { if case .eights(.play) = $0 { return true }; return false }
             return plays.randomElement() ?? moves.randomElement()
         default:
             let moves = game.legalMoves().filter { $0 != .resign }
@@ -64,16 +67,20 @@ enum Bot {
         case let g as HeartsGame where g.phase == .playing:
             return hardHeartsPlay(g).map { .playCard($0) }
         case let g as SpadesGame where g.phase == .playing:
-            let seat = g.currentPlayer
-            let card = hardTrickPlay(legal: g.legalCards(), trick: g.trick,
-                                     partner: (seat + 2) % 4,
-                                     suitOf: { $0.suit },
-                                     value: { TrickTaking.trumpValue($0, trump: .spades) })
-            return card.map { .playCard($0) }
+            return hardSpadesPlay(g).map { .playCard($0) }
         case let g as EuchreGame where g.phase == .playing:
             let seat = g.currentPlayer
             let partner = (seat + 2) % 4
-            let card = hardTrickPlay(legal: g.legalCards(), trick: g.trick,
+            let legal = g.legalCards()
+            // Maker leading the first trick with a strong trump holding: lead a
+            // high trump (bower) to draw out opponents' trump.
+            if g.trick.isEmpty, g.makerTeam == g.team(of: seat) {
+                let trumpCards = legal.filter { g.effectiveSuit($0) == g.trump }
+                if trumpCards.count >= 3, let topTrump = trumpCards.max(by: { g.cardValue($0) < g.cardValue($1) }) {
+                    return .playCard(topTrump)
+                }
+            }
+            let card = hardTrickPlay(legal: legal, trick: g.trick,
                                      partner: partner == g.sittingOut ? nil : partner,
                                      suitOf: g.effectiveSuit,
                                      value: g.cardValue)
@@ -117,12 +124,54 @@ enum Bot {
             g.hands[seat].filter { $0.color == color }.count
         }
         let bestColor = UnoColor.allCases.max { colorCount($0) < colorCount($1) } ?? .red
-        // Prefer colored cards (saving wilds), action cards before numbers.
+        let opponentsEarly = (0..<4).filter { $0 != seat }
+        let nearWin = opponentsEarly.map { g.hands[$0].count }.min() ?? 10 <= 2
         let colored = legal.filter { $0.color != nil }
+        func isAction(_ c: UnoCard) -> Bool {
+            switch c.value { case .skip, .reverse, .drawTwo: return true; default: return false }
+        }
+        func isDrawTwo(_ c: UnoCard) -> Bool { if case .drawTwo = c.value { return true }; return false }
+        let wild = legal.first { $0.color == nil }
+        let wildDrawFour = legal.first { if case .wildDrawFour = $0.value { return true }; return false }
+        let opponents = (0..<4).filter { $0 != seat }
+        let opponentMinHand = opponents.map { g.hands[$0].count }.min() ?? 10
+        // With a large hand (5+ cards), prefer punishing draw cards early.
+        if g.hands[seat].count >= 5 {
+            if let drawTwo = colored.first(where: isDrawTwo) {
+                return .uno(.play(drawTwo, declared: nil))
+            }
+            if let w4 = wildDrawFour {
+                return .uno(.play(w4, declared: bestColor))
+            }
+        }
+        // If an opponent is about to go out, hit them with a disruptive action card or WD4.
+        if nearWin {
+            if let w4 = wildDrawFour { return .uno(.play(w4, declared: bestColor)) }
+            if let disrupt = colored.filter(isAction).max(by: { $0.points < $1.points }) {
+                return .uno(.play(disrupt, declared: nil))
+            }
+        }
+        // When we have ≤ 2 cards, prefer WD4 to stop opponents from winning.
+        if opponentMinHand <= 2, let w4 = wildDrawFour {
+            return .uno(.play(w4, declared: bestColor))
+        }
+        // Prefer matching current color first, then by rank, then shed numbers.
+        let matchColor = colored.filter { $0.color == bestColor }
+        if let pick = matchColor.max(by: { $0.points < $1.points }) {
+            return .uno(.play(pick, declared: nil))
+        }
+        // Otherwise shed number cards first (preserve action cards), favoring
+        // cards outside our dominant color to consolidate the hand.
+        let numbers = colored.filter { !isAction($0) }
+        if let pick = numbers.min(by: {
+            (($0.color == bestColor ? 1 : 0), -$0.points) < (($1.color == bestColor ? 1 : 0), -$1.points)
+        }) {
+            return .uno(.play(pick, declared: nil))
+        }
         if let pick = colored.max(by: { $0.points < $1.points }) {
             return .uno(.play(pick, declared: nil))
         }
-        let wild = legal.first { $0.color == nil }
+        // Fall through to wilds.
         return wild.map { .uno(.play($0, declared: bestColor)) }
     }
 
@@ -130,6 +179,20 @@ enum Bot {
     static func hardEightsMove(_ g: EightsGame) -> Move? {
         let seat = g.currentPlayer
         let legal = g.legalCards(for: seat)
+        // Under a draw-two attack, stack a 2 if we can to pass the debt on.
+        if g.pendingDraw > 0 {
+            if let two = legal.first(where: { $0.rank == .two }) {
+                return .eights(.play(two, nominated: nil))
+            }
+            return .eights(.draw)
+        }
+        let opponents = (0..<4).filter { $0 != seat }
+        let opponentMinHand = opponents.map { g.hands[$0].count }.min() ?? 10
+        // Disrupt a near-out opponent with a 2 (draw debt) or Queen (skip).
+        if opponentMinHand <= 2 {
+            if let two = legal.first(where: { $0.rank == .two }) { return .eights(.play(two, nominated: nil)) }
+            if let queen = legal.first(where: { $0.rank == .queen }) { return .eights(.play(queen, nominated: nil)) }
+        }
         let nonEights = legal.filter { $0.rank != .eight }
         if let pick = nonEights.max(by: { $0.rank.rawValue < $1.rank.rawValue }) {
             return .eights(.play(pick, nominated: nil))
@@ -168,31 +231,92 @@ enum Bot {
         return card.suit == .hearts ? 1 : 0
     }
 
-    /// Pass the dangerous cards: Q♠ first, then big spades, then high hearts,
-    /// then the highest of everything else.
+    /// Pass 3 cards with direction awareness:
+    ///   Left  — unload high-rank non-hearts to set up short suits (opponent gets them).
+    ///   Right — unload high hearts aggressively (receiving player is downstream of us).
+    ///   Across — dump highest overall point cards symmetrically.
+    ///   Hold  — no pass; keep the dangerous cards but don't self-inflict.
     static func hardHeartsPass(_ g: HeartsGame) -> [Card] {
         let hand = g.hands[g.currentPlayer]
-        let ranked = hand.sorted { a, b in
-            func danger(_ c: Card) -> Int {
+
+        func danger(_ c: Card, direction: HeartsGame.PassDirection) -> Int {
+            switch direction {
+            case .left:
+                // Sending left: try to create a void in a side suit; dump A/K/Q of clubs or diamonds.
+                if c == queenOfSpades { return 1000 }
+                if c.suit == .spades && c.rank >= .king { return 900 + c.rank.rawValue }
+                if c.suit == .clubs || c.suit == .diamonds { return 400 + c.rank.rawValue }
+                if c.suit == .hearts { return 300 + c.rank.rawValue }
+                return c.rank.rawValue
+            case .right:
+                // Sending right: the recipient is our downstream opponent — burden them with hearts.
+                if c == queenOfSpades { return 1000 }
+                if c.suit == .hearts { return 800 + c.rank.rawValue }
+                if c.suit == .spades && c.rank >= .king { return 600 + c.rank.rawValue }
+                return c.rank.rawValue
+            case .across:
+                // Sending across (partner direction in trick games, but opponent in Hearts):
+                // pure point-danger ranking.
                 if c == queenOfSpades { return 1000 }
                 if c.suit == .spades && c.rank >= .king { return 900 + c.rank.rawValue }
                 if c.suit == .hearts { return 500 + c.rank.rawValue }
                 return c.rank.rawValue
+            case .hold:
+                return 0   // no pass; this branch is unreachable but satisfies exhaustiveness
             }
-            return danger(a) > danger(b)
         }
+
+        let dir = g.passDirection
+        // Void-creation bonus: cards in a short (2-card) side suit are worth
+        // shedding to set up future discards of hearts/Q♠.
+        let bySuit = Dictionary(grouping: hand, by: \.suit)
+        func adjusted(_ c: Card) -> Int {
+            var score = danger(c, direction: dir)
+            let suitLen = bySuit[c.suit]?.count ?? 0
+            if c.suit != .hearts && c != queenOfSpades && (suitLen == 2 || suitLen == 1) {
+                score += 250   // encourage voiding short suits (but below Q♠/high-spade danger)
+            }
+            return score
+        }
+        let ranked = hand.sorted { adjusted($0) > adjusted($1) }
         return Array(ranked.prefix(3)).displaySorted()
     }
 
     static func hardHeartsPlay(_ g: HeartsGame) -> Card? {
         let legal = g.legalCards()
         guard !legal.isEmpty else { return nil }
+        let seat = g.currentPlayer
 
         if g.trick.isEmpty {
-            // Lead low, preferring non-hearts.
-            return legal.min {
-                ($0.suit == .hearts ? 1 : 0, $0.rank.rawValue) < ($1.suit == .hearts ? 1 : 0, $1.rank.rawValue)
+            // If losing (highest score among players with scores > 0), dump Q♠ ASAP on lead.
+            let myScore = g.scores[seat]
+            let maxScore = g.scores.max() ?? 0
+            let holdingQueen = legal.contains(queenOfSpades)
+            if holdingQueen && myScore == maxScore && myScore > 0 {
+                // Only lead queen if spades are broken or we have only spades — otherwise
+                // wait to discard it; leading it hands 13 pts to whoever wins.
+                let nonQueenSpades = legal.filter { $0.suit == .spades && $0 != queenOfSpades }
+                if nonQueenSpades.isEmpty && g.heartsBroken {
+                    // Can't avoid leading it — opponent likely wins it anyway.
+                    return queenOfSpades
+                }
             }
+            // If winning (lowest score), bleed hearts when safe: lead lowest heart
+            // after hearts are broken to drain opponents' holdings.
+            let minScore = g.scores.min() ?? 0
+            if myScore == minScore && g.heartsBroken && g.tricksPlayed >= 4 {
+                let hearts = legal.filter { $0.suit == .hearts }
+                if hearts.count >= 2, let lowest = hearts.min(by: { $0.rank.rawValue < $1.rank.rawValue }) {
+                    // Only bleed if we hold many hearts (controlling, not at risk).
+                    return lowest
+                }
+            }
+            // Don't lead hearts until broken; if forced (only hearts), lead lowest.
+            let nonHearts = legal.filter { $0.suit != .hearts }
+            let pool = (!g.heartsBroken && !nonHearts.isEmpty) ? nonHearts : legal
+            // Lead from longest non-heart suit to create voids quickly.
+            if let safeLead = TrickTaking.safeLead(from: pool, trump: nil) { return safeLead }
+            return pool.min { $0.rank.rawValue < $1.rank.rawValue }
         }
 
         let led = g.trick[0].card.suit
@@ -200,6 +324,12 @@ enum Bot {
         let winningRank = g.trick.filter { $0.card.suit == led }.map(\.card.rank.rawValue).max() ?? 0
 
         if !following.isEmpty {
+            // If we're last to play and the trick has no points, safely take it
+            // with our highest card of the led suit to dump a high card cheaply.
+            let trickPoints = g.trick.reduce(0) { $0 + g.points(for: $1.card) }
+            if g.trick.count == 3 && trickPoints == 0 {
+                return following.max { $0.rank.rawValue < $1.rank.rawValue }
+            }
             let ducks = following.filter { $0.rank.rawValue < winningRank }
             if !ducks.isEmpty {
                 // Slip the Q♠ under a higher spade when we safely can.
@@ -234,9 +364,12 @@ enum Bot {
         guard !legal.isEmpty else { return nil }
 
         if trick.isEmpty {
-            // Lead the lowest side-suit card; lead low trump only when forced.
+            // Lead a side-suit ace (a near-certain winner) when we hold one;
+            // otherwise lead the lowest side-suit card and keep trump back.
             let side = legal.filter { value($0) < 1000 }
-            return (side.isEmpty ? legal : side).min { value($0) < value($1) }
+            let pool = side.isEmpty ? legal : side
+            if let ace = pool.first(where: { $0.rank == .ace }) { return ace }
+            return pool.min { value($0) < value($1) }
         }
 
         let led = suitOf(trick[0].card)
@@ -246,8 +379,13 @@ enum Bot {
             .map { value($0.card) }
             .max() ?? 0
 
-        if let partner, winnerSoFar == partner, trick.count >= 2 {
-            return legal.min { value($0) < value($1) }
+        // Duck when partner is winning: always if they're last unbeaten, or when
+        // partner is winning with a commanding high card (likely to hold up).
+        if let partner, winnerSoFar == partner {
+            let partnerCommands = winningValue >= value(Card(suit: led, rank: .king))
+            if trick.count >= 2 || partnerCommands {
+                return legal.min { value($0) < value($1) }
+            }
         }
         let winners = legal.filter { card in
             (suitOf(card) == led || value(card) >= 1000) && value(card) > winningValue
@@ -256,6 +394,64 @@ enum Bot {
             return cheapest
         }
         return legal.min { value($0) < value($1) }
+    }
+
+    /// Spades play with nil awareness: a nil bidder ducks every trick, and a
+    /// nil bidder's partner tries to win tricks to cover them.
+    static func hardSpadesPlay(_ g: SpadesGame) -> Card? {
+        let seat = g.currentPlayer
+        let legal = g.legalCards()
+        guard !legal.isEmpty else { return nil }
+        let value: (Card) -> Int = { TrickTaking.trumpValue($0, trump: .spades) }
+        let iAmNil = g.bids[seat] == 0
+        let partner = (seat + 2) % 4
+        let partnerNil = g.bids[partner] == 0
+
+        // I bid nil: play as low as possible without winning.
+        if iAmNil {
+            if g.trick.isEmpty { return legal.min { value($0) < value($1) } }
+            let led = g.trick[0].card.suit
+            let winningValue = g.trick.filter { $0.card.suit == led || value($0.card) >= 1000 }.map { value($0.card) }.max() ?? 0
+            let following = legal.filter { $0.suit == led }
+            if !following.isEmpty {
+                let safe = following.filter { value($0) < winningValue }
+                return (safe.isEmpty ? following : safe).min { value($0) < value($1) }
+            }
+            // Void: discard the highest non-spade to shed danger, else lowest spade.
+            let nonSpades = legal.filter { $0.suit != .spades }
+            if let dump = nonSpades.max(by: { $0.rank.rawValue < $1.rank.rawValue }) { return dump }
+            return legal.min { value($0) < value($1) }
+        }
+
+        // Partner bid nil and hasn't been covered yet: try to win to protect them.
+        if partnerNil, !g.trick.isEmpty {
+            let led = g.trick[0].card.suit
+            let partnerInTrick = g.trick.first { $0.seat == partner }
+            let winnerSoFar = TrickTaking.winner(plays: g.trick, ledSuit: led, suitOf: { $0.suit }, value: value)
+            // If partner is currently winning (danger!), overtake them cheaply.
+            if winnerSoFar == partner || partnerInTrick != nil {
+                let winningValue = g.trick.filter { $0.card.suit == led || value($0.card) >= 1000 }.map { value($0.card) }.max() ?? 0
+                let overtakers = legal.filter { ($0.suit == led || value($0) >= 1000) && value($0) > winningValue }
+                if let cheap = overtakers.min(by: { value($0) < value($1) }) { return cheap }
+            }
+        }
+
+        // Bag avoidance: if our team has already made its bid and is one bag
+        // away from the −100 overflow penalty, duck this trick to stay clean.
+        let team = seat % 2
+        let teamTricks = g.tricksWon[team] + g.tricksWon[team + 2]
+        let contract = g.teamContract(team)
+        if contract > 0, teamTricks >= contract, g.teamBags[team] % 10 >= 9, !g.trick.isEmpty {
+            let led = g.trick[0].card.suit
+            let winningValue = g.trick.filter { $0.card.suit == led || value($0.card) >= 1000 }.map { value($0.card) }.max() ?? 0
+            let following = legal.filter { $0.suit == led }
+            let pool = following.isEmpty ? legal.filter { $0.suit != .spades } : following
+            let ducks = pool.filter { value($0) < winningValue }
+            if let duck = ducks.max(by: { value($0) < value($1) }) { return duck }
+        }
+
+        return hardTrickPlay(legal: legal, trick: g.trick, partner: partner,
+                             suitOf: { $0.suit }, value: value)
     }
 
     // MARK: - Bidding heuristics (all difficulties above easy)
@@ -271,7 +467,38 @@ enum Bot {
             default: break
             }
         }
-        return max(1, min(7, Int(tricks.rounded())))
+        let bySuit = Dictionary(grouping: hand, by: \.suit)
+        let spadeCount = bySuit[.spades]?.count ?? 0
+        // Long-suit tricks: cards beyond the 4th in a side suit tend to run.
+        for suit in Suit.allCases where suit != .spades {
+            let len = bySuit[suit]?.count ?? 0
+            if len >= 5 { tricks += Double(len - 4) * 0.5 }
+        }
+        // Ruffing tricks: short side suits become trumps when we hold spares.
+        if spadeCount >= 3 {
+            for suit in Suit.allCases where suit != .spades {
+                let len = bySuit[suit]?.count ?? 0
+                if len == 0 { tricks += 1.0 }        // void
+                else if len == 1 { tricks += 0.5 }   // singleton
+            }
+        }
+        // Nil bid when hand has no high cards and only low spades. Require a
+        // cushion of low cards (≤9) so the hand can duck under everything, and
+        // avoid nil with a long spade suit (hard to dodge the lead).
+        let hasHighCard = hand.contains { $0.rank >= .queen }
+        let highSpades = hand.filter { $0.suit == .spades && $0.rank >= .ten }
+        let lowCards = hand.filter { $0.rank <= .nine }.count
+        // Danger singletons: A or K in a suit where we have ≤ 1 card is risky for nil
+        // (opponent leads that suit, we're forced to play our high card).
+        let hasDangerSingleton: Bool = {
+            for suit in Suit.allCases where suit != .spades {
+                let suitCards = bySuit[suit] ?? []
+                if suitCards.count <= 1 && suitCards.contains(where: { $0.rank >= .king }) { return true }
+            }
+            return false
+        }()
+        if !hasHighCard && highSpades.isEmpty && spadeCount <= 1 && lowCards >= 9 && !hasDangerSingleton { return 0 }
+        return max(1, min(8, Int(tricks.rounded())))
     }
 
     static func highCardPoints(_ hand: [Card]) -> Int {
@@ -281,12 +508,32 @@ enum Bot {
     }
 
     static func bridgeBotCall(game: BridgeGame) -> BridgeCall {
-        // Open 1 of the longest suit with 13+ HCP if nobody has bid; otherwise pass.
+        // Only open; pass when someone has already bid (simple bot keeps auction clean).
         guard game.lastBid == nil else { return .pass }
         let hand = game.hands[game.currentPlayer]
-        guard highCardPoints(hand) >= 13 else { return .pass }
+        let hcp = highCardPoints(hand)
+        guard hcp >= 13 else { return .pass }
         let bySuit = Dictionary(grouping: hand, by: \.suit)
-        let longest = bySuit.max { $0.value.count < $1.value.count }?.key ?? .clubs
+        // Balanced hand (no void, no singleton).
+        let suitCounts = Suit.allCases.map { bySuit[$0]?.count ?? 0 }
+        let isBalanced = suitCounts.min()! >= 2 && suitCounts.max()! <= 5
+        // Strong balanced openings: 2NT (20-21), then 1NT (15-17).
+        if isBalanced && (20...21).contains(hcp) { return .bid(level: 2, strain: .notrump) }
+        if isBalanced && (15...17).contains(hcp) { return .bid(level: 1, strain: .notrump) }
+        // Choose the longest suit; break ties by preferring majors, then quality.
+        func suitQuality(_ s: Suit) -> Int {
+            (bySuit[s] ?? []).reduce(0) { $0 + max(0, $1.rank.rawValue - 10) }
+        }
+        func suitRank(_ s: Suit) -> Int { [Suit.clubs, .diamonds, .hearts, .spades].firstIndex(of: s)! }
+        let longest = Suit.allCases.max { a, b in
+            let la = bySuit[a]?.count ?? 0, lb = bySuit[b]?.count ?? 0
+            if la != lb { return la < lb }
+            let majorA = a == .hearts || a == .spades
+            let majorB = b == .hearts || b == .spades
+            if majorA != majorB { return !majorA && majorB }
+            if suitQuality(a) != suitQuality(b) { return suitQuality(a) < suitQuality(b) }
+            return suitRank(a) < suitRank(b)
+        } ?? .clubs
         let strain: BridgeStrain
         switch longest {
         case .clubs: strain = .clubs
@@ -296,6 +543,10 @@ enum Bot {
         }
         return .bid(level: 1, strain: strain)
     }
+
+    /// Minimum trump-strength score to order up or call trump.
+    /// Each bower = 3, each trump card = rank−8 (9=1, T=2, J/Q/K=3, A=5).
+    static let euchreTrumpThreshold = 8
 
     static func euchreBotCall(game: EuchreGame) -> EuchreCall {
         let hand = game.hands[game.currentPlayer]
@@ -307,13 +558,43 @@ enum Bot {
                 return total + (card.suit == suit ? card.rank.rawValue - 8 : 0)
             }
         }
+        func hasBothBowers(_ suit: Suit) -> Bool {
+            hand.contains { $0.rank == .jack && $0.suit == suit } &&
+            hand.contains { $0.rank == .jack && $0.suit == suit.sameColorPartner }
+        }
+        func trumpCount(_ suit: Suit) -> Int {
+            hand.filter { $0.suit == suit || ($0.rank == .jack && $0.suit == suit.sameColorPartner) }.count
+        }
+        func hasRightBower(_ suit: Suit) -> Bool {
+            hand.contains { $0.rank == .jack && $0.suit == suit }
+        }
+        // A near-lock loner: right bower + trump ace + 3+ trump total,
+        // OR right bower + 3 more trump even without left bower (strong suit control).
+        func strongLoner(_ suit: Suit) -> Bool {
+            let hasTrumpAce = hand.contains { $0.suit == suit && $0.rank == .ace }
+            return hasBothBowers(suit) && trumpCount(suit) >= 4
+                || (hasRightBower(suit) && hasTrumpAce && trumpCount(suit) >= 4)
+                || (hasRightBower(suit) && trumpCount(suit) >= 4 && !hasBothBowers(suit))
+        }
+        // Off-suit aces are likely winners; add a point each toward the call.
+        func sideAceBonus(_ suit: Suit) -> Int {
+            hand.filter { $0.suit != suit && $0.suit != suit.sameColorPartner && $0.rank == .ace }.count
+        }
+        // Go alone when holding both bowers + 2 or more additional trump (very strong hand).
         if game.phase == .orderingUp, let upcard = game.upcard {
-            return trumpStrength(upcard.suit) >= 8 ? .orderUp(alone: false) : .pass
+            let suit = upcard.suit
+            // Don't gift a strong upcard to an opponent dealer with a weak hand.
+            let dealerIsOpponent = game.team(of: game.dealer) != game.team(of: game.currentPlayer)
+            let strength = trumpStrength(suit) + sideAceBonus(suit)
+            let goAlone = strongLoner(suit)
+            if dealerIsOpponent && upcard.rank == .jack && strength < euchreTrumpThreshold + 1 { return .pass }
+            return strength >= euchreTrumpThreshold ? .orderUp(alone: goAlone) : .pass
         }
         let candidates = Suit.allCases.filter { $0 != game.upcard?.suit }
-        let best = candidates.max { trumpStrength($0) < trumpStrength($1) } ?? .clubs
-        if trumpStrength(best) >= 8 || game.currentPlayer == game.dealer {
-            return .callTrump(best, alone: false)
+        let best = candidates.max { (trumpStrength($0) + sideAceBonus($0)) < (trumpStrength($1) + sideAceBonus($1)) } ?? .clubs
+        if (trumpStrength(best) + sideAceBonus(best)) >= euchreTrumpThreshold || game.currentPlayer == game.dealer {
+            let goAlone = strongLoner(best)
+            return .callTrump(best, alone: goAlone)
         }
         return .pass
     }
@@ -350,7 +631,24 @@ enum Bot {
             let hanging = replies.map { copy[$0.to].map { chessValue($0.kind) } ?? 0 }.max() ?? 0
             let promotion = move.promotion != nil ? 8.0 : 0.0
             let check = copy.inCheck(1 - me) ? 0.3 : 0.0
-            let score = Double(captured) + promotion + check
+            // Centrality bonus: reward moves toward the centre squares (c3–f6).
+            let cx = Double(move.to.x)
+            let cy = Double(move.to.y)
+            let centrality = (3.5 - abs(cx - 3.5)) * (3.5 - abs(cy - 3.5)) * 0.02
+            // Avoid moving queen very early (first 4 moves per side).
+            let earlyQueenPenalty: Double
+            if g[move.from]?.kind == .queen && g.moveNumber < 8 { earlyQueenPenalty = -0.4 } else { earlyQueenPenalty = 0 }
+            let movedKind = g[move.from]?.kind
+            // Castling (king moves two files) is a strong development/safety move.
+            let castleBonus = (movedKind == .king && abs(move.to.x - move.from.x) == 2) ? 0.5 : 0.0
+            // Discourage moving the king sideways early (loses castling rights).
+            let kingWanderPenalty = (movedKind == .king && abs(move.to.x - move.from.x) != 2 && g.moveNumber < 16) ? -0.25 : 0.0
+            // Reward developing minor pieces off the back rank in the opening.
+            let backRank = me == 0 ? 7 : 0
+            let developBonus = ((movedKind == .knight || movedKind == .bishop)
+                                && move.from.y == backRank && g.moveNumber < 16) ? 0.2 : 0.0
+            let score = Double(captured) + promotion + check + centrality + earlyQueenPenalty
+                + castleBonus + kingWanderPenalty + developBonus
                 - Double(hanging) * 0.9
                 + Double.random(in: 0..<0.2)
             if best == nil || score > best!.score { best = (score, move) }
@@ -368,11 +666,12 @@ enum Bot {
         return total
     }
 
-    /// Material-greedy with a one-move lookahead for return jumps.
+    /// Material-greedy with a one-move lookahead for return jumps and king-crowning preference.
     static func hardCheckersMove(_ g: CheckersGame) -> Move? {
         let me = g.currentPlayer
         let moves = g.legalBoardMoves(for: me)
         guard !moves.isEmpty else { return nil }
+        let crowningRank = me == 0 ? 7 : 0
         var best: (score: Double, move: BoardMove)? = nil
         for move in moves {
             var copy = g
@@ -380,11 +679,34 @@ enum Bot {
             var score = checkersMaterial(copy, color: me) - checkersMaterial(copy, color: 1 - me)
             if copy.currentPlayer == me {
                 score += 0.8   // multi-jump continues
+                // Extra bonus for each additional piece captured beyond the first.
+                let capturedSoFar = checkersMaterial(g, color: 1 - me) - checkersMaterial(copy, color: 1 - me)
+                if capturedSoFar > 1 { score += (capturedSoFar - 1) * 0.5 }
             } else {
-                let returnJumps = copy.legalBoardMoves(for: 1 - me)
-                    .contains { abs($0.to.x - $0.from.x) == 2 }
-                if returnJumps { score -= 0.9 }
+                // Bonus for deep capture chains (3+ jumps).
+                let capturedCount = checkersMaterial(g, color: 1 - me) - checkersMaterial(copy, color: 1 - me)
+                if capturedCount >= 3 { score += 1.5 }
+                else if capturedCount >= 2 { score += 0.5 }
+                // Weigh the worst return jump by the value of what we'd lose.
+                let returnJumps = copy.legalBoardMoves(for: 1 - me).filter { abs($0.to.x - $0.from.x) == 2 }
+                let worstLoss = returnJumps.compactMap { rj -> Double? in
+                    let midX = (rj.from.x + rj.to.x) / 2
+                    let midY = (rj.from.y + rj.to.y) / 2
+                    guard let victim = copy[Point(x: midX, y: midY)] else { return nil }
+                    return victim.king ? 1.6 : 1.0
+                }.max() ?? 0
+                score -= worstLoss * 0.9
             }
+            // Bonus for crowning a piece.
+            if move.to.y == crowningRank, let piece = g[move.from], !piece.king { score += 0.6 }
+            // Advancement: push men toward the crowning row.
+            if let piece = g[move.from], !piece.king {
+                let progress = me == 0 ? Double(move.to.y) : Double(7 - move.to.y)
+                score += progress * 0.03
+            }
+            // Prefer safer back-rank positions.
+            let homeRank = me == 0 ? 0 : 7
+            if move.from.y == homeRank { score += 0.1 }
             score += Double.random(in: 0..<0.1)
             if best == nil || score > best!.score { best = (score, move) }
         }
@@ -395,8 +717,7 @@ enum Bot {
 
     static func goBotMove(game: GoGame, difficulty: BotDifficulty) -> Move {
         // Random legal point, but don't fill our own single-point eyes,
-        // and pass once the board gets crowded or the game has dragged on
-        // (the move-count cap stops endless random capture cycles).
+        // and pass once the board gets crowded or the game has dragged on.
         let stoneValue = game.currentPlayer + 1
         let candidates = game.legalPoints().filter { p in
             !game.neighbors(p).allSatisfy { game.stone(at: $0) == stoneValue }
@@ -406,15 +727,109 @@ enum Bot {
             return .pass
         }
         if difficulty == .hard {
-            // Take the biggest capture on the board when one exists.
+            // 1. Take the biggest capture.
             let captures = candidates.compactMap { point -> (Point, Int)? in
                 guard let result = game.tryPlace(point, color: game.currentPlayer),
                       result.captured > 0 else { return nil }
                 return (point, result.captured)
             }
-            if let best = captures.max(by: { $0.1 < $1.1 }) {
-                return .place(best.0)
+            if let best = captures.max(by: { $0.1 < $1.1 }) { return .place(best.0) }
+
+            // 2. Put opponent groups in atari (reduce to 1 liberty).
+            let oppColor = game.currentPlayer == 0 ? 2 : 1
+            var visitedGroups = Set<Int>()
+            var atariMoves: [Point] = []
+            for i in game.board.indices where game.board[i] == oppColor {
+                guard !visitedGroups.contains(i) else { continue }
+                let p = Point(x: i % game.size, y: i / game.size)
+                let grp = game.group(at: p, in: game.board)
+                visitedGroups.formUnion(grp.points)
+                var libs = Set<Int>()
+                for idx in grp.points {
+                    let gp = Point(x: idx % game.size, y: idx / game.size)
+                    for n in game.neighbors(gp) where game.board[game.index(n)] == 0 {
+                        libs.insert(game.index(n))
+                    }
+                }
+                if libs.count == 2 {
+                    for libIdx in libs {
+                        let lp = Point(x: libIdx % game.size, y: libIdx / game.size)
+                        if candidates.contains(lp) { atariMoves.append(lp) }
+                    }
+                }
             }
+            if let atari = atariMoves.randomElement() { return .place(atari) }
+
+            // 2.5. Rescue our own groups in atari by extending to gain liberties.
+            let myColorEarly = game.currentPlayer + 1
+            var visitedMine = Set<Int>()
+            var rescueMoves: [Point] = []
+            for i in game.board.indices where game.board[i] == myColorEarly {
+                guard !visitedMine.contains(i) else { continue }
+                let p = Point(x: i % game.size, y: i / game.size)
+                let grp = game.group(at: p, in: game.board)
+                visitedMine.formUnion(grp.points)
+                var libs = Set<Int>()
+                for idx in grp.points {
+                    let gp = Point(x: idx % game.size, y: idx / game.size)
+                    for n in game.neighbors(gp) where game.board[game.index(n)] == 0 {
+                        libs.insert(game.index(n))
+                    }
+                }
+                guard libs.count == 1, let libIdx = libs.first else { continue }
+                let lp = Point(x: libIdx % game.size, y: libIdx / game.size)
+                // Only rescue if extending actually increases liberties.
+                if candidates.contains(lp), let result = game.tryPlace(lp, color: game.currentPlayer) {
+                    let newGrp = game.group(at: lp, in: result.board)
+                    var newLibs = Set<Int>()
+                    for idx in newGrp.points {
+                        let gp = Point(x: idx % game.size, y: idx / game.size)
+                        for n in game.neighbors(gp) where result.board[game.index(n)] == 0 { newLibs.insert(game.index(n)) }
+                    }
+                    if newLibs.count >= 2 { rescueMoves.append(lp) }
+                }
+            }
+            if let rescue = rescueMoves.randomElement() { return .place(rescue) }
+
+            // 3. Avoid self-atari: skip moves that would leave our new group with 1 liberty.
+            let myColor = game.currentPlayer + 1
+            let nonSelfAtari = candidates.filter { p in
+                guard let result = game.tryPlace(p, color: game.currentPlayer) else { return false }
+                let grp = game.group(at: p, in: result.board)
+                var libs = Set<Int>()
+                for idx in grp.points {
+                    let gp = Point(x: idx % game.size, y: idx / game.size)
+                    for n in game.neighbors(gp) where result.board[game.index(n)] == 0 {
+                        libs.insert(game.index(n))
+                    }
+                }
+                return libs.count > 1
+            }
+
+            // 4. Prefer moves that form eyes: an empty cell fully surrounded by our stones.
+            // Playing adjacent to an eye-point reinforces group stability.
+            let safePool = nonSelfAtari.isEmpty ? candidates : nonSelfAtari
+            let eyeMoves = safePool.filter { p in
+                // Check if placing here would create an adjacent empty cell surrounded by our color.
+                guard let result = game.tryPlace(p, color: game.currentPlayer) else { return false }
+                for n in game.neighbors(p) {
+                    if result.board[game.index(n)] == 0 {
+                        let allOurs = game.neighbors(n).allSatisfy { nb in
+                            result.board[game.index(nb)] == myColor
+                        }
+                        if allOurs { return true }
+                    }
+                }
+                return false
+            }
+            if let pick = eyeMoves.randomElement() { return .place(pick) }
+
+            // 5. Play near existing stones (cohesive formation).
+            let adjacent = safePool.filter { p in
+                game.neighbors(p).contains { game.stone(at: $0) == myColor }
+            }
+            if let pick = adjacent.randomElement() { return .place(pick) }
+            if let pick = nonSelfAtari.randomElement() { return .place(pick) }
         }
         return .place(candidates.randomElement()!)
     }

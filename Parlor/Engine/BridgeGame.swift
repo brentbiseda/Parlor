@@ -44,6 +44,19 @@ struct BridgeGame: GameEngine {
     var teamScores = [0, 0]
     var history: [DealRecord] = []
     var lastTrickSummary: String? = nil
+    /// Small/grand slams bitten off this match, per side — shown in the final result.
+    var teamSlams = [0, 0]
+    /// Cumulative overtricks earned by each declaring side across all deals.
+    var teamGrandSlams = [0, 0]
+    var teamOvertricks = [0, 0]
+    /// Cumulative undertricks against each team.
+    var teamUndertricks = [0, 0]
+    /// Contracts made / set across the match (for the final summary).
+    var contractsMade = 0
+    var contractsSet = 0
+    /// Contracts that were doubled or redoubled.
+    var doubledContracts: Int = 0
+    var redoubledContracts: Int = 0
 
     init() {
         deal()
@@ -146,9 +159,23 @@ struct BridgeGame: GameEngine {
         return result
     }
 
-    /// Doubling/redoubling is legal only over the live call sequence; this
-    /// simplified check is sufficient because intervening bids reset state.
-    private func passedSinceLastNonPass(byOwnSide: Bool) -> Bool { false }
+    /// Returns true if any call after the last non-pass was a pass from the
+    /// specified side grouping. Used to gate double legality correctly.
+    private func passedSinceLastNonPass(byOwnSide: Bool) -> Bool {
+        let seat = currentPlayer
+        var foundNonPass = false
+        for (i, call) in calls.enumerated().reversed() {
+            let callSeat = (dealer + i) % 4
+            if case .pass = call {
+                if foundNonPass && (side(of: callSeat) == side(of: seat)) == byOwnSide {
+                    return true
+                }
+            } else {
+                foundNonPass = true
+            }
+        }
+        return false
+    }
 
     func legalMoves() -> [Move] {
         switch phase {
@@ -222,7 +249,9 @@ struct BridgeGame: GameEngine {
         } else {
             defenderTricks += 1
         }
-        lastTrickSummary = "Trick to seat \(winner + 1)"
+        let winCard = trick.first { $0.seat == winner }?.card
+        let cardLabel = winCard.map { " — \($0.rank.label)\($0.suit.symbol)" } ?? ""
+        lastTrickSummary = "Trick to seat \(winner + 1)\(cardLabel)"
         trick = []
         trickLeader = winner
         tricksPlayed += 1
@@ -237,12 +266,28 @@ struct BridgeGame: GameEngine {
         let made = declarerTricks >= needed
         var points = 0
 
+        if contract.doubling == 2 { doubledContracts += 1 }
+        else if contract.doubling == 4 { redoubledContracts += 1 }
         if made {
+            contractsMade += 1
             points = makingScore(contract: contract, tricks: declarerTricks, vulnerable: vul)
             teamScores[declaringSide] += points
-            history.append(DealRecord(summary: "Deal \(dealNumber): \(contract.label) made \(declarerTricks - 6) (+\(points))"))
+            let overtricks = declarerTricks - needed
+            if overtricks > 0 { teamOvertricks[declaringSide] += overtricks }
+            var slamNote = ""
+            if contract.level == 7 {
+                teamSlams[declaringSide] += 1
+                teamGrandSlams[declaringSide] += 1
+                slamNote = " · 🎰 Grand slam!"
+            } else if contract.level == 6 {
+                teamSlams[declaringSide] += 1
+                slamNote = " · 🎰 Small slam!"
+            }
+            history.append(DealRecord(summary: "Deal \(dealNumber): \(contract.label) made \(declarerTricks - 6) (+\(points))\(slamNote)"))
         } else {
+            contractsSet += 1
             let down = needed - declarerTricks
+            teamUndertricks[declaringSide] += down
             points = undertrickPenalty(down: down, doubling: contract.doubling, vulnerable: vul)
             teamScores[1 - declaringSide] += points
             history.append(DealRecord(summary: "Deal \(dealNumber): \(contract.label) down \(down) (\(points) to defenders)"))
@@ -313,6 +358,13 @@ struct BridgeGame: GameEngine {
 
     func sideLabel(_ side: Int) -> String { side == 0 ? "Seats 1 & 3" : "Seats 2 & 4" }
 
+    /// Summary of the most recent bid for display during auction.
+    var currentBidLabel: String? {
+        guard let (call, _) = lastBid, case .bid(let level, let strain) = call else { return nil }
+        let x = currentDoubling == 2 ? "X" : currentDoubling == 4 ? "XX" : ""
+        return "\(level)\(strain.label)\(x)"
+    }
+
     var statusText: String {
         switch phase {
         case .auction:
@@ -322,10 +374,28 @@ struct BridgeGame: GameEngine {
             case 2, 3: vul = "\(sideLabel(side(of: dealer))) vul"
             default: vul = "both vul"
             }
-            return "Deal \(dealNumber) of 4 (\(vul)) · auction"
+            let bidInfo = currentBidLabel.map { " · bid: \($0)" } ?? " · no bid yet"
+            let scoreInfo = " · \(sideLabel(0)) \(teamScores[0]) – \(sideLabel(1)) \(teamScores[1])"
+            let hcp = TrickTaking.highCardPoints(hand: hands[0])
+            let hcpInfo = hands[0].isEmpty ? "" : " · your HCP \(hcp)"
+            return "Deal \(dealNumber)/4 (\(vul))\(scoreInfo)\(bidInfo)\(hcpInfo)"
         case .playing:
             let c = contract?.label ?? ""
-            return "\(c) · tricks \(declarerTricks)–\(defenderTricks)"
+            let need = (contract?.level ?? 0) + 6
+            let doubleTag = currentDoubling == 2 ? " Dbl" : currentDoubling == 4 ? " Rdbl" : ""
+            let trickGap = need - declarerTricks
+            let progress = trickGap > 0 ? "need \(trickGap) more" : "making+\(declarerTricks - need)"
+            let vulTag = isVulnerable(side: side(of: contract?.declarer ?? 0)) ? " 🔴vul" : ""
+            let remaining = 13 - tricksPlayed
+            var lock = ""
+            if let contract {
+                let declaringSide = side(of: contract.declarer)
+                if declarerTricks >= need { lock = " · ✅ contract secured" }
+                else if defenderTricks > 13 - need { lock = " · 💥 set! +\(defenderTricks - (13 - need)) down" }
+                else if trickGap > remaining { lock = " · 💥 going down" }
+                _ = declaringSide
+            }
+            return "\(c)\(doubleTag)\(vulTag) · \(declarerTricks)–\(defenderTricks) · \(progress)\(lock)"
         case .gameOver:
             return resultText ?? "Game over"
         }
@@ -333,9 +403,21 @@ struct BridgeGame: GameEngine {
 
     var resultText: String? {
         guard isOver else { return nil }
-        if teamScores[0] == teamScores[1] { return "Tied at \(teamScores[0])" }
+        let totalSlams = teamSlams[0] + teamSlams[1]
+        let totalGrands = teamGrandSlams[0] + teamGrandSlams[1]
+        var slamNote = totalSlams > 0 ? " · \(totalSlams) slam\(totalSlams == 1 ? "" : "s") bid & made 🎰" : ""
+        if totalGrands > 0 { slamNote += " (\(totalGrands) grand)" }
+        var extras = slamNote
+        let totalOver = teamOvertricks[0] + teamOvertricks[1]
+        let totalUnder = teamUndertricks[0] + teamUndertricks[1]
+        if totalOver > 0 { extras += " · \(totalOver) overtrick\(totalOver == 1 ? "" : "s")" }
+        if totalUnder > 0 { extras += " · \(totalUnder) down" }
+        if contractsMade + contractsSet > 0 { extras += " · \(contractsMade) made / \(contractsSet) set" }
+        if doubledContracts > 0 { extras += " · X2 doubled \(doubledContracts)×" }
+        if redoubledContracts > 0 { extras += " · XX redoubled \(redoubledContracts)×" }
+        if teamScores[0] == teamScores[1] { return "Tied at \(teamScores[0])\(extras)" }
         let winner = teamScores[0] > teamScores[1] ? 0 : 1
-        return "\(sideLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
+        return "\(sideLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])\(extras)"
     }
 
     func ranking() -> [[Int]] {

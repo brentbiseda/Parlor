@@ -3,6 +3,10 @@ import SwiftUI
 /// Falling blocks: rendered with Canvas, gravity driven by a task whose
 /// tick interval shrinks as the level climbs. Swipe sideways to move, tap
 /// to rotate, swipe down to hard-drop — or use the buttons.
+///
+/// Color palette is designed for deuteranopia/protanopia (red-green) accessibility:
+/// S and Z use visually distinct hues (bright lime vs magenta) rather than the
+/// traditional green/red pair that many players cannot distinguish.
 struct TetrisView: View {
     @ObservedObject var session: GameSession
 
@@ -11,18 +15,19 @@ struct TetrisView: View {
     @State private var lastPieces = 0
     @State private var lineFlash = false
     @State private var paused = false
+    @State private var clearBadge: String? = nil
 
     var game: TetrisGame? { session.game?.engine as? TetrisGame }
 
     private let pieceColors: [Color] = [
-        .clear,                                   // 0 = empty
-        Color(red: 0.25, green: 0.85, blue: 0.9), // I
-        Color(red: 0.95, green: 0.85, blue: 0.3), // O
-        Color(red: 0.7, green: 0.4, blue: 0.9),   // T
-        Color(red: 0.35, green: 0.85, blue: 0.4), // S
-        Color(red: 0.92, green: 0.3, blue: 0.3),  // Z
-        Color(red: 0.3, green: 0.5, blue: 0.95),  // J
-        Color(red: 0.95, green: 0.6, blue: 0.2),  // L
+        .clear,                                    // 0 = empty
+        Color(red: 0.22, green: 0.88, blue: 0.95), // I — cyan
+        Color(red: 0.98, green: 0.88, blue: 0.22), // O — yellow
+        Color(red: 0.72, green: 0.38, blue: 0.92), // T — purple
+        Color(red: 0.55, green: 0.95, blue: 0.22), // S — lime  (colorblind-safe vs Z)
+        Color(red: 0.95, green: 0.25, blue: 0.65), // Z — magenta (colorblind-safe vs S)
+        Color(red: 0.28, green: 0.50, blue: 0.98), // J — blue
+        Color(red: 0.98, green: 0.60, blue: 0.18), // L — orange
     ]
 
     var body: some View {
@@ -46,7 +51,11 @@ struct TetrisView: View {
         while !Task.isCancelled {
             let level = game?.level ?? 1
             let interval = max(0.12, 0.85 * pow(0.82, Double(level - 1)))
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            do {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } catch {
+                break   // cancelled — exit cleanly
+            }
             guard !paused, let game, !game.isOver else { continue }
             submit(.tick)
         }
@@ -59,15 +68,25 @@ struct TetrisView: View {
         if after.isOver {
             SoundFX.shared.play(.lose)
         } else if after.lines > lastLines {
-            SoundFX.shared.play(.lineClear)
-            // White pulse on the well; brighter pop is reserved for a tetris.
+            let cleared = after.lines - lastLines
+            SoundFX.shared.play(cleared >= 4 ? .jackpot : .lineClear)
             lineFlash = true
+            // Show clear label and combo in the sidebar badge.
+            var badge = after.lastClearLabel ?? ""
+            if after.combo > 1 { badge += " ×\(after.combo)" }
+            if after.backToBack && cleared == 4 { badge = "B2B TETRIS!" }
+            clearBadge = badge.isEmpty ? nil : badge
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 220_000_000)
                 lineFlash = false
             }
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                clearBadge = nil
+            }
         } else if after.piecesPlaced > lastPieces {
             SoundFX.shared.play(.lock)
+            if after.lines == lastLines { clearBadge = nil }
         } else if move == .rotate {
             SoundFX.shared.play(.rotate)
         }
@@ -142,6 +161,11 @@ struct TetrisView: View {
                 .fill(.white.opacity(lineFlash ? 0.22 : 0))
                 .animation(.easeOut(duration: 0.22), value: lineFlash)
         )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Color.red.opacity((game?.stackHeight ?? 0) >= 16 ? 0.85 : 0), lineWidth: 3)
+                .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: (game?.stackHeight ?? 0) >= 16)
+        )
         .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
         .overlay { PausedCurtain(paused: $paused) }
         .gesture(boardGesture)
@@ -181,6 +205,51 @@ struct TetrisView: View {
                 statBlock("SCORE", "\(game.score)")
                 statBlock("LINES", "\(game.lines)")
                 statBlock("LEVEL", "\(game.level)")
+                if let badge = clearBadge {
+                    Text(badge)
+                        .font(.caption2.weight(.black))
+                        .foregroundStyle(.yellow)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity)
+                        .background(Color.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
+                        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.yellow.opacity(0.4), lineWidth: 1))
+                        .transition(.scale(scale: 0.85).combined(with: .opacity))
+                        .animation(.spring(response: 0.25), value: badge)
+                }
+                if game.combo > 1 {
+                    statBlock("COMBO", "×\(game.combo)")
+                }
+                // Line-type breakdown
+                let totalClears = game.singleCount + game.doubleCount + game.tripleCount + game.tetrisCount
+                if totalClears > 0 {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("CLEARS")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.6))
+                        if game.singleCount > 0 {
+                            Text("1L×\(game.singleCount)")
+                                .font(.caption2)
+                                .foregroundStyle(.white.opacity(0.85))
+                        }
+                        if game.doubleCount > 0 {
+                            Text("2L×\(game.doubleCount)")
+                                .font(.caption2)
+                                .foregroundStyle(.cyan.opacity(0.9))
+                        }
+                        if game.tripleCount > 0 {
+                            Text("3L×\(game.tripleCount)")
+                                .font(.caption2)
+                                .foregroundStyle(.mint.opacity(0.9))
+                        }
+                        if game.tetrisCount > 0 {
+                            Text("T×\(game.tetrisCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.yellow)
+                        }
+                    }
+                }
             }
             Spacer()
         }
@@ -205,6 +274,7 @@ struct TetrisView: View {
         }
         .frame(width: 86, height: 48)
         .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
+        .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.2), lineWidth: 1))
     }
 
     func statBlock(_ label: String, _ value: String) -> some View {

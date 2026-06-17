@@ -13,6 +13,13 @@ struct GoGame: GameEngine {
     var currentPlayer = 0
     var consecutivePasses = 0
     var captures = [0, 0]            // stones captured BY black, white
+    var biggestCapture = 0           // most stones taken in a single move
+    var longestCaptureRun = 0        // consecutive turns with a capture
+    private var currentCaptureRun = 0
+    /// Total passes per player this game.
+    var passCount: [Int] = [0, 0]
+    /// Largest connected group of stones placed by either player.
+    var largestGroup: Int = 0
     var koPoint: Point? = nil
     var resigned: Int? = nil
     var lastPlaced: Point? = nil
@@ -108,12 +115,24 @@ struct GoGame: GameEngine {
                 }
             }
             captures[currentPlayer] += result.captured
+            if result.captured > biggestCapture { biggestCapture = result.captured }
+            if result.captured > 0 {
+                currentCaptureRun += 1
+                if currentCaptureRun > longestCaptureRun { longestCaptureRun = currentCaptureRun }
+            } else {
+                currentCaptureRun = 0
+            }
             board = result.board
             lastPlaced = p
             consecutivePasses = 0
             moveCount += 1
+            // Track largest group
+            let grp = group(at: p, in: board)
+            if grp.points.count > largestGroup { largestGroup = grp.points.count }
             currentPlayer = 1 - currentPlayer
         case .pass:
+            passCount[currentPlayer] += 1
+            currentCaptureRun = 0
             consecutivePasses += 1
             koPoint = nil
             lastPlaced = nil
@@ -164,17 +183,36 @@ struct GoGame: GameEngine {
         if let text = resultText { return text }
         var text = "\(colorName(currentPlayer)) to play"
         if consecutivePasses == 1 { text += " · opponent passed" }
-        if captures[0] + captures[1] > 0 { text += " · captures \(captures[0])–\(captures[1])" }
+        let blackStones = board.filter { $0 == 1 }.count
+        let whiteStones = board.filter { $0 == 2 }.count
+        if blackStones + whiteStones > 0 { text += " · B\(blackStones) W\(whiteStones)" }
+        if captures[0] + captures[1] > 0 { text += " · cap B\(captures[0])–W\(captures[1])" }
+        let (b, w) = areaScores()
+        text += " · est. B\(Int(b.rounded()))–W\(String(format: "%.1f", w))"
+        let margin = b - w
+        if abs(margin) >= 0.5 {
+            let leader = margin > 0 ? "B" : "W"
+            text += " (\(leader) +\(String(format: "%.1f", abs(margin))))"
+        } else {
+            text += " (even)"
+        }
         return text
     }
 
     var resultText: String? {
-        if let resigned { return "\(colorName(resigned)) resigned — \(colorName(1 - resigned)) wins" }
+        var captureNote = captures[0] + captures[1] > 0 ? " · B cap \(captures[0]) W cap \(captures[1])" : ""
+        if biggestCapture >= 3 { captureNote += " · 💥 \(biggestCapture)-stone capture" }
+        if longestCaptureRun >= 3 { captureNote += " · 🔗 \(longestCaptureRun)-turn capture run" }
+        let moveNote = " · \(moveCount) moves"
+        let totalPasses = passCount[0] + passCount[1]
+        let passNote = totalPasses > 0 ? " · \(totalPasses) passes" : ""
+        let groupNote = largestGroup >= 5 ? " · Largest group: \(largestGroup) stones" : ""
+        if let resigned { return "\(colorName(resigned)) resigned — \(colorName(1 - resigned)) wins\(moveNote)\(captureNote)\(passNote)\(groupNote)" }
         guard consecutivePasses >= 2 else { return nil }
         let (black, white) = areaScores()
-        if black == white { return "Draw at \(black)" }
+        if black == white { return "Draw at \(black)\(moveNote)\(captureNote)\(passNote)\(groupNote)" }
         let winner = black > white ? "Black" : "White"
-        return String(format: "%@ wins %.1f – %.1f (komi %.1f)", winner, max(black, white), min(black, white), komi)
+        return String(format: "%@ wins %.1f – %.1f (komi %.1f)%@%@%@%@", winner, max(black, white), min(black, white), komi, moveNote, captureNote, passNote, groupNote)
     }
 
     func ranking() -> [[Int]] {

@@ -31,6 +31,7 @@ struct ProfilesView: View {
     @State private var editing: PlayerProfile? = nil
     @AppStorage(FeltTheme.storageKey) private var feltRaw = FeltTheme.classic.rawValue
     @AppStorage(CardBack.storageKey) private var cardBack = CardBack.classic.rawValue
+    @State private var selectedCategory: String = "All"
 
     var body: some View {
         NavigationStack {
@@ -86,6 +87,108 @@ struct ProfilesView: View {
                     editing = fresh
                 } label: {
                     Label("New profile", systemImage: "person.badge.plus")
+                }
+
+                if let active = profiles.humanProfiles.first(where: { $0.id == profiles.activeProfileID }),
+                   !active.ratings.isEmpty {
+                    Section("Your stats") {
+                        // Category filter chips
+                        let categories = ["All", "Cards", "Board", "Puzzle", "Arcade", "Sports"]
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 8) {
+                                ForEach(categories, id: \.self) { cat in
+                                    Button {
+                                        selectedCategory = cat
+                                    } label: {
+                                        Text(cat)
+                                            .font(.caption.weight(.semibold))
+                                            .foregroundStyle(selectedCategory == cat ? .black : .primary)
+                                            .padding(.horizontal, 12)
+                                            .padding(.vertical, 5)
+                                            .background(selectedCategory == cat ? Color.accentColor : Color.secondary.opacity(0.15),
+                                                        in: Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            .padding(.vertical, 4)
+                        }
+                        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+
+                        let sorted = active.ratings.sorted { a, b in
+                            if a.value.played != b.value.played { return a.value.played > b.value.played }
+                            return a.key < b.key
+                        }
+                        let filtered = sorted.filter { pair in
+                            guard selectedCategory != "All" else { return true }
+                            guard let kind = GameKind(rawValue: pair.key) else { return false }
+                            switch selectedCategory {
+                            case "Cards": return kind.section == .cards
+                            case "Board": return kind.section == .boards
+                            case "Puzzle": return kind.section == .puzzles
+                            case "Arcade": return kind.section == .arcade
+                            case "Sports": return kind.section == .sports
+                            default: return true
+                            }
+                        }
+                        ForEach(filtered, id: \.key) { key, rating in
+                            let kind = GameKind(rawValue: key)
+                            let total = rating.wins + rating.losses + rating.draws
+                            let winRate = total > 0 ? Double(rating.wins) / Double(total) : 0
+                            VStack(alignment: .leading, spacing: 5) {
+                                HStack(spacing: 10) {
+                                    Image(systemName: kind?.symbolName ?? "questionmark")
+                                        .font(.subheadline)
+                                        .foregroundStyle(.secondary)
+                                        .frame(width: 22)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(kind?.title ?? key)
+                                            .font(.subheadline)
+                                        Text("\(rating.wins)W · \(rating.losses)L" + (rating.draws > 0 ? " · \(rating.draws)D" : ""))
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    Spacer()
+                                    VStack(alignment: .trailing, spacing: 1) {
+                                        HStack(spacing: 3) {
+                                            Text("\(Int(rating.elo))")
+                                                .font(.subheadline.weight(.bold))
+                                                .monospacedDigit()
+                                                .foregroundStyle(eloColor(rating.elo))
+                                            // Trend indicator vs starting ELO of 1000
+                                            if rating.elo > 1001 {
+                                                Text("▲")
+                                                    .font(.caption2.weight(.bold))
+                                                    .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
+                                            } else if rating.elo < 999 {
+                                                Text("▼")
+                                                    .font(.caption2.weight(.bold))
+                                                    .foregroundStyle(Color(red: 0.9, green: 0.4, blue: 0.35))
+                                            } else {
+                                                Text("—")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.gray)
+                                            }
+                                        }
+                                        Text("ELO")
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                // Win-rate bar.
+                                GeometryReader { geo in
+                                    ZStack(alignment: .leading) {
+                                        Capsule().fill(Color.secondary.opacity(0.18))
+                                        Capsule().fill(eloColor(rating.elo).opacity(0.75))
+                                            .frame(width: geo.size.width * winRate)
+                                    }
+                                }
+                                .frame(height: 4)
+                                .padding(.leading, 32)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
                 }
 
                 Section("Table felt") {
@@ -152,6 +255,15 @@ struct ProfilesView: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// Tiers the ELO badge color: green for strong, yellow mid, red below starting rating.
+    private func eloColor(_ elo: Double) -> Color {
+        switch elo {
+        case 1200...: return Color(red: 0.3, green: 0.85, blue: 0.45)
+        case 1000..<1200: return Color(red: 0.95, green: 0.78, blue: 0.2)
+        default: return Color(red: 0.9, green: 0.4, blue: 0.35)
+        }
     }
 }
 

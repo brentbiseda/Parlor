@@ -386,11 +386,79 @@ final class DerbyScene: SportsScene {
 
 struct SoccerView: View {
     @ObservedObject var session: GameSession
+
+    var game: SoccerGame? { session.game?.engine as? SoccerGame }
+
     var body: some View {
-        SportsSceneView(session: session,
-                        scene: ShootoutScene(size: CGSize(width: 390, height: 700)),
-                        hint: "Shoot: swipe at the goal · Save: tap where to dive",
-                        hintSymbol: "figure.indoor.soccer")
+        VStack(spacing: 0) {
+            if let game {
+                penaltyTracker(game)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
+                    .padding(.bottom, 2)
+            }
+            SportsSceneView(session: session,
+                            scene: ShootoutScene(size: CGSize(width: 390, height: 700)),
+                            hint: "Shoot: swipe at the goal · Save: tap where to dive",
+                            hintSymbol: "figure.indoor.soccer")
+        }
+    }
+
+    func penaltyTracker(_ game: SoccerGame) -> some View {
+        let rounds = SoccerGame.roundsPerSide
+        return HStack(spacing: 12) {
+            // Your kicks
+            VStack(alignment: .leading, spacing: 4) {
+                Text("You")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                HStack(spacing: 5) {
+                    ForEach(0..<rounds, id: \.self) { i in
+                        kickCircle(taken: game.yourShots > i,
+                                   scored: i < game.yourGoals,
+                                   active: game.yourShots == i && game.phase == .shooting)
+                    }
+                }
+            }
+            Spacer()
+            Text("\(game.yourGoals) : \(game.botGoals)")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+            Spacer()
+            // Bot kicks
+            VStack(alignment: .trailing, spacing: 4) {
+                Text("Bot")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                HStack(spacing: 5) {
+                    ForEach(0..<rounds, id: \.self) { i in
+                        kickCircle(taken: game.botShots > i,
+                                   scored: i < game.botGoals,
+                                   active: game.botShots == i && game.phase == .keeping)
+                    }
+                }
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
+    }
+
+    func kickCircle(taken: Bool, scored: Bool, active: Bool) -> some View {
+        ZStack {
+            Circle()
+                .strokeBorder(active ? Color.yellow : Color.white.opacity(0.3), lineWidth: active ? 2 : 1)
+                .frame(width: 22, height: 22)
+            if taken {
+                Circle()
+                    .fill(scored ? Color.green : Color.red.opacity(0.8))
+                    .frame(width: 14, height: 14)
+                Text(scored ? "✓" : "✗")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+        }
     }
 }
 

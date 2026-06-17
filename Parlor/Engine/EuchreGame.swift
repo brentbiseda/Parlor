@@ -30,6 +30,18 @@ struct EuchreGame: GameEngine {
     var teamScores = [0, 0]
     var roundNumber = 0
     var lastTrickSummary: String? = nil
+    var lastRoundResult: String? = nil
+    /// Lifetime-in-game achievement counts, shown in the final result.
+    var teamMarches = [0, 0]
+    var teamLoneMarches = [0, 0]
+    var teamEuchres = [0, 0]
+    /// Current consecutive rounds won per team (resets when the other team scores).
+    var teamRoundStreak = [0, 0]
+    var teamBestStreak = [0, 0]
+    /// Loner hands attempted vs. successfully marched, per team.
+    var lonersAttempted = [0, 0]
+    /// "Perfect defense" — euchred an opponent who went alone, per team.
+    var perfectDefenses = [0, 0]
 
     init() {
         startRound()
@@ -48,6 +60,7 @@ struct EuchreGame: GameEngine {
         tricksPlayed = 0
         trickCounts = [0, 0, 0, 0]
         roundNumber += 1
+        lastTrickSummary = nil
         bidTurn = (dealer + 1) % 4
         phase = .orderingUp
     }
@@ -192,7 +205,9 @@ struct EuchreGame: GameEngine {
             let led = effectiveSuit(trick[0].card)
             let winner = TrickTaking.winner(plays: trick, ledSuit: led, suitOf: effectiveSuit, value: cardValue)
             trickCounts[winner] += 1
-            lastTrickSummary = "Trick to seat \(winner + 1)"
+            let winCard = trick.first { $0.seat == winner }?.card
+            let cardLabel = winCard.map { " — \($0.rank.label)\($0.suit.symbol)" } ?? ""
+            lastTrickSummary = "Trick to seat \(winner + 1)\(cardLabel)"
             trick = []
             trickLeader = winner
             tricksPlayed += 1
@@ -202,15 +217,34 @@ struct EuchreGame: GameEngine {
 
     mutating func finishRound() {
         guard let makerTeam else { return }
+        if aloneSeat != nil { lonersAttempted[makerTeam] += 1 }
         let makerTricks = trickCounts[makerTeam] + trickCounts[makerTeam + 2]
+        let pts: Int
+        let result: String
         if makerTricks >= 3 {
             if makerTricks == 5 {
-                teamScores[makerTeam] += aloneSeat != nil ? 4 : 2
+                pts = aloneSeat != nil ? 4 : 2
+                result = aloneSeat != nil ? "March alone! +\(pts)" : "March! +\(pts)"
+                teamMarches[makerTeam] += 1
+                if aloneSeat != nil { teamLoneMarches[makerTeam] += 1 }
             } else {
-                teamScores[makerTeam] += 1
+                pts = 1
+                result = "Made it (+1)"
             }
+            teamScores[makerTeam] += pts
+            teamRoundStreak[makerTeam] += 1
+            teamRoundStreak[1 - makerTeam] = 0
+            if teamRoundStreak[makerTeam] > teamBestStreak[makerTeam] { teamBestStreak[makerTeam] = teamRoundStreak[makerTeam] }
+            lastRoundResult = "\(teamLabel(makerTeam)) — \(result)"
         } else {
-            teamScores[1 - makerTeam] += 2  // euchred
+            pts = 2
+            teamScores[1 - makerTeam] += pts
+            teamEuchres[1 - makerTeam] += 1
+            if aloneSeat != nil { perfectDefenses[1 - makerTeam] += 1 }
+            teamRoundStreak[1 - makerTeam] += 1
+            teamRoundStreak[makerTeam] = 0
+            if teamRoundStreak[1 - makerTeam] > teamBestStreak[1 - makerTeam] { teamBestStreak[1 - makerTeam] = teamRoundStreak[1 - makerTeam] }
+            lastRoundResult = "\(teamLabel(makerTeam)) euchred! +2 to defenders"
         }
 
         if teamScores.contains(where: { $0 >= 10 }) {
@@ -226,14 +260,33 @@ struct EuchreGame: GameEngine {
     var statusText: String {
         switch phase {
         case .orderingUp:
-            return "Round \(roundNumber): order up the \(upcard?.label ?? "")?"
+            let scores = "\(teamScores[0])–\(teamScores[1])"
+            let suitSymbol = upcard?.suit.symbol ?? ""
+            let cardLabel = upcard.map { "\($0.rank.label)\($0.suit.symbol)" } ?? ""
+            let turnLabel = " · S\(bidTurn + 1)'s turn"
+            return "Round \(roundNumber) (\(scores)): order up \(cardLabel) \(suitSymbol)?\(turnLabel)"
         case .callingTrump:
-            return "Round \(roundNumber): name trump (upcard \(upcard?.label ?? "") turned down)"
+            let scores = "\(teamScores[0])–\(teamScores[1])"
+            let turnedDown = upcard?.suit.symbol ?? ""
+            let bannedNote = " (not \(turnedDown))"
+            let turnLabel = " · S\(bidTurn + 1)'s turn"
+            return "Round \(roundNumber) (\(scores)): name trump\(bannedNote)\(turnLabel)"
         case .dealerDiscard:
             return "Dealer discards one card"
         case .playing:
-            var text = "Trump \(trump?.symbol ?? "") · trick \(tricksPlayed + 1) of 5"
-            if let aloneSeat { text += " · seat \(aloneSeat + 1) alone" }
+            let scores = "\(teamScores[0])–\(teamScores[1])"
+            let trickBar = (0..<4).map { "\($0 + 1):\(trickCounts[$0])" }.joined(separator: " ")
+            var text = "Trump \(trump?.symbol ?? "") · T\(tricksPlayed + 1) · \(trickBar) · (\(scores))"
+            if let aloneSeat { text += " · S\(aloneSeat + 1) alone" }
+            if let mk = makerTeam {
+                let makerTricks = trickCounts[mk] + trickCounts[mk + 2]
+                let defTricks = tricksPlayed - makerTricks
+                if makerTricks >= 3 { text += " · ✅ makers in" }
+                else if defTricks >= 3 { text += " · 💀 euchre!" }
+                else if tricksPlayed >= 2 { text += " · makers \(makerTricks), need \(3 - makerTricks)" }
+            }
+            if teamScores.max()! >= 8 { text += " · 🏁 match point" }
+            if let last = lastRoundResult { text += " · \(last)" }
             return text
         case .gameOver:
             return resultText ?? "Game over"
@@ -243,7 +296,23 @@ struct EuchreGame: GameEngine {
     var resultText: String? {
         guard isOver else { return nil }
         let winner = teamScores[0] >= 10 ? 0 : 1
-        return "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
+        var text = "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
+        let totalMarches = teamMarches[0] + teamMarches[1]
+        let totalLoneMarches = teamLoneMarches[0] + teamLoneMarches[1]
+        let totalEuchres = teamEuchres[0] + teamEuchres[1]
+        var stats: [String] = []
+        if totalLoneMarches > 0 { stats.append("\(totalLoneMarches) lone march\(totalLoneMarches == 1 ? "" : "es") 🚀") }
+        if totalMarches - totalLoneMarches > 0 { stats.append("\(totalMarches - totalLoneMarches) march\(totalMarches - totalLoneMarches == 1 ? "" : "es")") }
+        if totalEuchres > 0 { stats.append("\(totalEuchres) euchre\(totalEuchres == 1 ? "" : "s")") }
+        let bestStreak = max(teamBestStreak[0], teamBestStreak[1])
+        if bestStreak >= 3 { stats.append("🔥 \(bestStreak)-round streak") }
+        let totalLoners = lonersAttempted[0] + lonersAttempted[1]
+        if totalLoners > 0 { stats.append("\(totalLoneMarches)/\(totalLoners) loners made") }
+        let totalDefenses = perfectDefenses[0] + perfectDefenses[1]
+        if totalDefenses > 0 { stats.append("🛡️ \(totalDefenses) perfect defense") }
+        if teamScores[1 - winner] == 0 { stats.append("🥋 skunk — \(teamScores[winner])–0!") }
+        if !stats.isEmpty { text += " · " + stats.joined(separator: " · ") }
+        return text
     }
 
     func ranking() -> [[Int]] {

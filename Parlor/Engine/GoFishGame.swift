@@ -12,6 +12,18 @@ struct GoFishGame: GameEngine {
     var books: [[Rank]] = Array(repeating: [], count: 4)
     var currentPlayer = 0
     var lastEvent: String? = nil
+    /// Most recently completed book ("Seat 2 booked Ks!"), cleared on next ask.
+    var lastBookEvent: String? = nil
+    /// Books completed by a lucky pond draw (the 4th card came straight off the stock).
+    var luckyPondBooks = 0
+    /// Current human-player consecutive successful asks (resets on "Go fish!").
+    var askStreak = 0
+    var bestAskStreak = 0
+    /// Table-wide ask tally: total asks and ones that landed a match.
+    var totalAsks = 0
+    var successfulAsks = 0
+    /// Largest single haul (cards received from one ask).
+    var biggestHaul = 0
 
     init() {
         var deck = Card.standardDeck().shuffled()
@@ -26,7 +38,6 @@ struct GoFishGame: GameEngine {
     var totalBooks: Int { books.reduce(0) { $0 + $1.count } }
     var isOver: Bool { totalBooks == 13 }
 
-    /// Ranks the seat may ask for (must hold at least one).
     func askableRanks(for seat: Int) -> [Rank] {
         Array(Set(hands[seat].map(\.rank))).sorted()
     }
@@ -39,10 +50,12 @@ struct GoFishGame: GameEngine {
                 moves.append(.fish(.ask(seat: target, rank: rank)))
             }
         }
-        // Empty hand or no valid target: draw (modeled as asking nobody is
-        // not allowed, so refill instead).
         if moves.isEmpty {
-            moves.append(.fish(.ask(seat: (currentPlayer + 1) % 4, rank: .ace)))
+            let fallbackTarget = (1..<4)
+                .map { (currentPlayer + $0) % 4 }
+                .first { !hands[$0].isEmpty } ?? (currentPlayer + 1) % 4
+            let fallbackRank = askableRanks(for: currentPlayer).first ?? .ace
+            moves.append(.fish(.ask(seat: fallbackTarget, rank: fallbackRank)))
         }
         return moves
     }
@@ -50,55 +63,68 @@ struct GoFishGame: GameEngine {
     func isLegal(_ move: Move) -> Bool {
         guard case .fish(.ask(let target, let rank)) = move, !isOver,
               target != currentPlayer, (0..<4).contains(target) else { return false }
-        // A player with no askable rank gets a free pass-style ask.
         if askableRanks(for: currentPlayer).isEmpty { return true }
         return hands[currentPlayer].contains { $0.rank == rank } && !hands[target].isEmpty
     }
 
     mutating func apply(_ move: Move) throws {
         guard case .fish(.ask(let target, let rank)) = move else { throw GameError.illegalMove }
+        lastBookEvent = nil
 
-        // Out of cards: draw up to 5 to get back in the game, then the turn passes.
         if hands[currentPlayer].isEmpty {
             refill(currentPlayer)
             advanceIfStuck()
             return
         }
 
+        totalAsks += 1
         let matches = hands[target].filter { $0.rank == rank }
         if !matches.isEmpty {
+            successfulAsks += 1
+            if matches.count > biggestHaul { biggestHaul = matches.count }
             hands[target].removeAll { $0.rank == rank }
             hands[currentPlayer].append(contentsOf: matches)
             hands[currentPlayer] = hands[currentPlayer].displaySorted()
-            lastEvent = "took \(matches.count) \(rank.label)\(matches.count == 1 ? "" : "s")"
+            let plural = matches.count == 1 ? "" : "s"
+            lastEvent = "S\(currentPlayer + 1) asked S\(target + 1) for \(rank.label)s — got \(matches.count) card\(plural)"
+            let booksBefore = books[currentPlayer].count
             layDownBooks(currentPlayer)
+            if books[currentPlayer].count > booksBefore {
+                lastBookEvent = "S\(currentPlayer + 1) books \(rank.label)s! (\(books[currentPlayer].count) books)"
+            }
+            currentPondDrySpell = 0
+            if currentPlayer == 0 { askStreak += 1; if askStreak > bestAskStreak { bestAskStreak = askStreak } }
             advanceIfStuck(keepTurn: true)
         } else {
-            // Go fish.
+            if currentPlayer == 0 { askStreak = 0 }
             if let drawn = stock.popLast() {
                 hands[currentPlayer].append(drawn)
                 hands[currentPlayer] = hands[currentPlayer].displaySorted()
+                let booksBefore = books[currentPlayer].count
                 layDownBooks(currentPlayer)
+                if books[currentPlayer].count > booksBefore {
+                    luckyPondBooks += 1
+                    lastBookEvent = "🍀 S\(currentPlayer + 1) books \(drawn.rank.label)s from the pond!"
+                }
                 if drawn.rank == rank {
-                    lastEvent = "fished up the \(rank.label)!"
+                    lastEvent = "S\(currentPlayer + 1) asked S\(target + 1) for \(rank.label)s — fished one up!"
+                    if currentPlayer == 0 { askStreak += 1; if askStreak > bestAskStreak { bestAskStreak = askStreak } }
                     advanceIfStuck(keepTurn: true)
                     return
                 }
             }
-            lastEvent = "go fish"
+            lastEvent = "S\(currentPlayer + 1) asked S\(target + 1) for \(rank.label)s — go fish"
+            currentPondDrySpell += 1
+            if currentPondDrySpell > pondDrySpells { pondDrySpells = currentPondDrySpell }
             advanceIfStuck()
         }
     }
 
-    /// Move the turn (or keep it), skipping players who are stuck with no
-    /// cards once the stock is empty.
     private mutating func advanceIfStuck(keepTurn: Bool = false) {
         if !keepTurn { currentPlayer = (currentPlayer + 1) % 4 }
         var hops = 0
         while !isOver && hops < 4 {
-            if hands[currentPlayer].isEmpty {
-                refill(currentPlayer)
-            }
+            if hands[currentPlayer].isEmpty { refill(currentPlayer) }
             if !hands[currentPlayer].isEmpty { return }
             currentPlayer = (currentPlayer + 1) % 4
             hops += 1
@@ -138,15 +164,37 @@ struct GoFishGame: GameEngine {
 
     var statusText: String {
         if isOver { return resultText ?? "Game over" }
-        var text = "Books \(totalBooks)/13 · stock \(stock.count)"
-        if let lastEvent { text += " · \(lastEvent)" }
+        let bookStr = books.enumerated().map { "S\($0 + 1):\($1.count)" }.joined(separator: " ")
+        let pondStr = stock.isEmpty ? "pond empty" : "pond \(stock.count)"
+        var text = "Books \(totalBooks)/13 · \(pondStr) · \(bookStr)"
+        let topBooks = books.map(\.count).max() ?? 0
+        if topBooks > 0 {
+            let leaders = (0..<4).filter { books[$0].count == topBooks }
+            if leaders.count == 1 { text += " · 👑 S\(leaders[0] + 1) leads" }
+        }
+        if let ev = lastBookEvent { text += " · \(ev)" }
+        else if let ev = lastEvent { text += " · \(ev)" }
         return text
     }
+
+    /// Count of consecutive "Go fish!" responses (pond dry spells)
+    var pondDrySpells = 0
+    private var currentPondDrySpell = 0
 
     var resultText: String? {
         guard isOver else { return nil }
         let best = books.map(\.count).max() ?? 0
+        let bookStr = books.enumerated().map { "S\($0 + 1):\($1.count)" }.joined(separator: " ")
         let winners = (0..<4).filter { books[$0].count == best }.map { "Seat \($0 + 1)" }
-        return "\(winners.joined(separator: " & ")) win\(winners.count == 1 ? "s" : "") with \(best) books"
+        var text = "\(winners.joined(separator: " & ")) win with \(best) books [\(bookStr)]"
+        if luckyPondBooks > 0 { text += " · 🍀 \(luckyPondBooks) lucky pond book\(luckyPondBooks == 1 ? "" : "s")" }
+        if bestAskStreak >= 3 { text += " · 🔥 \(bestAskStreak)-ask streak" }
+        if biggestHaul >= 3 { text += " · 🎣 \(biggestHaul)-card haul" }
+        if totalAsks > 0 {
+            let pct = Int((Double(successfulAsks) / Double(totalAsks)) * 100)
+            text += " · asked \(totalAsks)× (\(pct)% success)"
+        }
+        if pondDrySpells >= 3 { text += " · 🌵 \(pondDrySpells) go-fish in a row" }
+        return text
     }
 }

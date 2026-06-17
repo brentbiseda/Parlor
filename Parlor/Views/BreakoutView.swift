@@ -17,8 +17,13 @@ struct BreakoutView: View {
 
     @StateObject private var holder = SceneHolder()
 
+    var game: BreakoutGame? { session.game?.engine as? BreakoutGame }
+
     var body: some View {
         VStack(spacing: 6) {
+            if let game, !game.isOver {
+                breakoutHeader(game)
+            }
             SpriteView(scene: holder.scene, options: [.allowsTransparency])
                 .aspectRatio(390.0 / 700.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -43,6 +48,35 @@ struct BreakoutView: View {
             }
             scene.startIfNeeded()
         }
+    }
+
+    func breakoutHeader(_ game: BreakoutGame) -> some View {
+        HStack(spacing: 12) {
+            Text("Level \(game.level)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white.opacity(0.85))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.white.opacity(0.12), in: Capsule())
+            Text("Bricks: \(game.bricksHit)")
+                .font(.caption)
+                .foregroundStyle(.white.opacity(0.7))
+            if game.bestStreak > 2 {
+                Text("🔥\(game.bestStreak)")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.orange)
+            }
+            Spacer()
+            HStack(spacing: 3) {
+                ForEach(0..<BreakoutGame.livesPerGame, id: \.self) { i in
+                    Circle()
+                        .fill(i < game.livesLeft ? Color.white : Color.white.opacity(0.2))
+                        .frame(width: 7, height: 7)
+                }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.top, 2)
     }
 }
 

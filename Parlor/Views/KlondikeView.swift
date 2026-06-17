@@ -19,6 +19,10 @@ struct KlondikeView: View {
     @State private var dragLocation: CGPoint = .zero
     @State private var dropFrames: [String: CGRect] = [:]
     @State private var autoFinishing = false
+    @State private var hintSelection: Selection? = nil
+    @State private var foundationPulse: CGFloat = 0
+    @State private var foundationLandFlash: Int? = nil
+    @State private var dealAnimated = false
 
     var game: KlondikeGame? { session.game?.engine as? KlondikeGame }
 
@@ -36,6 +40,7 @@ struct KlondikeView: View {
                 ZStack(alignment: .topLeading) {
                     VStack(spacing: 10) {
                         topRow(game, cardWidth: cardWidth)
+                        foundationProgressBar(game)
                         tableauRow(game, cardWidth: cardWidth)
                         Spacer(minLength: 0)
                     }
@@ -44,19 +49,48 @@ struct KlondikeView: View {
                     dragOverlay(game, cardWidth: cardWidth)
                 }
                 .coordinateSpace(name: "klondike")
+                .onAppear {
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 200_000_000)
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.75)) {
+                            dealAnimated = true
+                        }
+                    }
+                }
                 .onPreferenceChange(DropFrameKey.self) { dropFrames = $0 }
                 .overlay(alignment: .bottom) {
-                    if canAutoFinish && !autoFinishing {
+                    HStack(spacing: 10) {
+                        if session.canUndo {
+                            Button {
+                                session.undo()
+                                hintSelection = nil
+                            } label: {
+                                Label("Undo", systemImage: "arrow.uturn.backward")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.secondary)
+                        }
                         Button {
-                            autoFinish()
+                            showHint(game)
                         } label: {
-                            Label("Auto-finish", systemImage: "wand.and.stars")
-                                .font(.headline)
+                            Label("Hint", systemImage: "lightbulb.fill")
+                                .font(.subheadline.weight(.semibold))
                         }
                         .buttonStyle(.borderedProminent)
-                        .tint(.orange)
-                        .padding(.bottom, 24)
+                        .tint(.indigo)
+                        if canAutoFinish && !autoFinishing {
+                            Button {
+                                autoFinish()
+                            } label: {
+                                Label("Auto", systemImage: "wand.and.stars")
+                                    .font(.subheadline.weight(.semibold))
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                        }
                     }
+                    .padding(.bottom, 24)
                 }
             }
         }
@@ -80,6 +114,60 @@ struct KlondikeView: View {
     func submit(_ move: KlondikeMove) {
         session.submit(.klondike(move))
         selection = nil
+        hintSelection = nil
+    }
+
+    func flashFoundation(suit: Suit) {
+        guard let f = Suit.allCases.firstIndex(of: suit) else { return }
+        SoundFX.shared.play(.target)
+        foundationLandFlash = f
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            foundationLandFlash = nil
+        }
+    }
+
+    /// Highlight the best move: prefer tableau→foundation, then waste→foundation,
+    /// then waste→tableau (for revealing stock), then tableau-to-tableau flips.
+    func showHint(_ game: KlondikeGame?) {
+        guard let game else { return }
+        hintSelection = nil
+        // 1. Tableau top card → foundation.
+        for col in 0..<7 {
+            if let top = game.tableau[col].faceUp.last, game.canPlaceOnFoundation(top) {
+                hintSelection = .tableau(col: col, index: game.tableau[col].faceUp.count - 1)
+                return
+            }
+        }
+        // 2. Waste → foundation.
+        if let top = game.waste.last, game.canPlaceOnFoundation(top) {
+            hintSelection = .waste
+            return
+        }
+        // 3. Waste → tableau.
+        for col in 0..<7 {
+            if let top = game.waste.last, game.canPlaceOnTableau(top, column: col) {
+                hintSelection = .waste
+                return
+            }
+        }
+        // 4. Tableau run → tableau (reveals a face-down card).
+        for from in 0..<7 {
+            let faceUp = game.tableau[from].faceUp
+            guard !faceUp.isEmpty else { continue }
+            for idx in 0..<faceUp.count {
+                for to in 0..<7 where to != from {
+                    if game.canPlaceOnTableau(faceUp[idx], column: to) {
+                        if idx == 0 && !game.tableau[from].faceDown.isEmpty {
+                            hintSelection = .tableau(col: from, index: 0)
+                            return
+                        }
+                    }
+                }
+            }
+        }
+        // 5. Just highlight the stock.
+        hintSelection = nil
     }
 
     // MARK: - Drag & drop
@@ -138,11 +226,13 @@ struct KlondikeView: View {
         case .waste:
             if let top = game.waste.last, game.canPlaceOnFoundation(top) {
                 submit(.wasteToFoundation)
+                flashFoundation(suit: top.suit)
             }
         case .tableau(let col, let index):
             let ups = game.tableau[col].faceUp
             if index == ups.count - 1, let top = ups.last, game.canPlaceOnFoundation(top) {
                 submit(.tableauToFoundation(col))
+                flashFoundation(suit: top.suit)
             }
         case .foundation:
             break
@@ -185,6 +275,26 @@ struct KlondikeView: View {
         }
     }
 
+    // MARK: - Foundation progress bar
+
+    func foundationProgressBar(_ game: KlondikeGame) -> some View {
+        let placed = game.foundations.map(\.count).reduce(0, +)
+        let progress = Double(placed) / 52.0
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.white.opacity(0.12))
+                    .frame(height: 5)
+                Capsule()
+                    .fill(progress >= 1 ? Color.green : Color(hue: 0.33 - progress * 0.1, saturation: 0.8, brightness: 0.85))
+                    .frame(width: geo.size.width * progress, height: 5)
+                    .animation(.easeOut(duration: 0.3), value: placed)
+            }
+        }
+        .frame(height: 5)
+        .padding(.horizontal, 4)
+    }
+
     // MARK: - Top row (stock, waste, foundations)
 
     func topRow(_ game: KlondikeGame, cardWidth: CGFloat) -> some View {
@@ -195,6 +305,15 @@ struct KlondikeView: View {
                     CardSlotView(width: cardWidth, label: game.canResetStock ? "↻" : "✕")
                 } else {
                     FaceDownCardView(width: cardWidth)
+                        .overlay(alignment: .bottomTrailing) {
+                            Text("\(game.stock.count)")
+                                .font(.system(size: cardWidth * 0.26, weight: .bold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .padding(.horizontal, cardWidth * 0.14)
+                                .padding(.vertical, cardWidth * 0.04)
+                                .background(.black.opacity(0.55), in: Capsule())
+                                .offset(x: -cardWidth * 0.08, y: -cardWidth * 0.08)
+                        }
                 }
             }
             .onTapGesture {
@@ -202,6 +321,21 @@ struct KlondikeView: View {
                     if game.canResetStock { submit(.resetStock) } else { SoundFX.shared.play(.error) }
                 } else {
                     submit(.draw)
+                }
+            }
+            .overlay(alignment: .top) {
+                // Show pass number when stock has been reset at least once
+                if game.stockResets > 0 {
+                    let isLimited = game.maxPasses > 0
+                    let passesLeft = isLimited ? game.maxPasses - game.passesUsed : -1
+                    let isLastPass = isLimited && passesLeft <= 0
+                    Text("Pass \(game.passesUsed)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(isLastPass ? .red : .orange)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 2)
+                        .background((isLastPass ? Color.red : Color.orange).opacity(0.2), in: Capsule())
+                        .offset(y: -14)
                 }
             }
 
@@ -219,6 +353,11 @@ struct KlondikeView: View {
                                 .opacity(isTop && dragSource == .waste ? 0.35 : 1)
                                 .overlay(
                                     selectionHighlight(isTop && selection == .waste, width: cardWidth)
+                                        .offset(x: CGFloat(i) * cardWidth * 0.3)
+                                )
+                                .overlay(
+                                    hintHighlight(.waste, width: cardWidth)
+                                        .opacity(isTop ? 1 : 0)
                                         .offset(x: CGFloat(i) * cardWidth * 0.3)
                                 )
                         }
@@ -239,27 +378,56 @@ struct KlondikeView: View {
 
             Spacer()
 
-            // Foundations: the matching pile glows when a pickup can land.
+            // Foundations: glow when a card can land; pulse green for auto-hints.
             ForEach(0..<4, id: \.self) { f in
+                let suit = Suit.allCases[f]
+                let isDragTarget = foundationHintSuit(game) == suit
+                let isAutoHint = !isDragTarget && dragSource == nil && selection == nil
+                    && autoFoundationSuits(game).contains(suit)
+                let isLandFlash = foundationLandFlash == f
                 Group {
                     if let top = game.foundations[f].last {
                         CardView(card: top, width: cardWidth)
                             .opacity(dragSource == .foundation(f) ? 0.35 : 1)
                             .gesture(dragGesture(source: .foundation(f), game: game))
                     } else {
-                        CardSlotView(width: cardWidth, label: Suit.allCases[f].symbol)
+                        CardSlotView(width: cardWidth, label: suit.symbol)
                     }
                 }
                 .overlay(selectionHighlight(selection == .foundation(f), width: cardWidth))
                 .overlay(
                     RoundedRectangle(cornerRadius: cardWidth * 0.12)
-                        .strokeBorder(Color.yellow.opacity(0.85),
-                                      lineWidth: foundationHintSuit(game) == Suit.allCases[f] ? 2.5 : 0)
+                        .strokeBorder(isDragTarget
+                                      ? Color.yellow.opacity(0.85)
+                                      : isLandFlash
+                                        ? Color.green.opacity(0.95)
+                                        : isAutoHint
+                                          ? Color.green.opacity(0.55 + 0.35 * foundationPulse)
+                                          : .clear,
+                                      lineWidth: isDragTarget || isLandFlash ? 2.5
+                                                 : isAutoHint ? 2.0 : 0)
                 )
                 .recordDropFrame("f\(f)")
                 .onTapGesture { tapFoundation(f, game: game) }
+                .onAppear {
+                    withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
+                        foundationPulse = 1.0
+                    }
+                }
             }
         }
+    }
+
+    /// Suits whose auto-play candidate exists (waste or tableau top → foundation).
+    func autoFoundationSuits(_ game: KlondikeGame) -> Set<Suit> {
+        var suits = Set<Suit>()
+        if let top = game.waste.last, game.canPlaceOnFoundation(top) { suits.insert(top.suit) }
+        for col in 0..<7 {
+            if let top = game.tableau[col].faceUp.last, game.canPlaceOnFoundation(top) {
+                suits.insert(top.suit)
+            }
+        }
+        return suits
     }
 
     /// Suit pile that would accept the currently picked-up card, if any.
@@ -319,6 +487,7 @@ struct KlondikeView: View {
                         CardView(card: card, width: cardWidth)
                             .opacity(isBeingDragged(col: col, index: index) ? 0.35 : 1)
                             .overlay(selectionHighlight(isSelected(col: col, index: index), width: cardWidth))
+                            .overlay(hintHighlight(.tableau(col: col, index: index), width: cardWidth))
                             .offset(y: CGFloat(pile.faceDown.count) * overlap * 0.5 + CGFloat(index) * overlap)
                             .gesture(dragGesture(source: .tableau(col: col, index: index), game: game))
                             .onTapGesture { tapCard(col: col, index: index, game: game) }
@@ -326,6 +495,13 @@ struct KlondikeView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
                 .recordDropFrame("col\(col)")
+                .offset(y: dealAnimated ? 0 : 80)
+                .opacity(dealAnimated ? 1 : 0)
+                .animation(
+                    .spring(response: 0.45, dampingFraction: 0.75)
+                        .delay(Double(col) * 0.07),
+                    value: dealAnimated
+                )
             }
         }
     }
@@ -338,6 +514,13 @@ struct KlondikeView: View {
     func selectionHighlight(_ on: Bool, width: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: width * 0.12)
             .strokeBorder(Color.yellow, lineWidth: on ? 2.5 : 0)
+    }
+
+    func hintHighlight(_ sel: Selection, width: CGFloat) -> some View {
+        let on = hintSelection == sel
+        return RoundedRectangle(cornerRadius: width * 0.12)
+            .strokeBorder(Color.mint.opacity(0.9), lineWidth: on ? 3 : 0)
+            .shadow(color: .mint.opacity(on ? 0.6 : 0), radius: 6)
     }
 
     func tapCard(col: Int, index: Int, game: KlondikeGame) {

@@ -9,31 +9,83 @@ struct MuncherView: View {
 
     var game: MuncherGame? { session.game?.engine as? MuncherGame }
 
+    /// Ghost colors keyed by GhostType raw value: Blinky/red, Pinky/pink, Inky/cyan, Clyde/orange.
     private let ghostColors: [Color] = [
-        Color(red: 0.95, green: 0.25, blue: 0.25),
-        Color(red: 0.95, green: 0.55, blue: 0.8),
-        Color(red: 0.3, green: 0.85, blue: 0.9),
-        Color(red: 0.95, green: 0.65, blue: 0.2),
+        Color(red: 0.95, green: 0.2,  blue: 0.2),   // Blinky
+        Color(red: 0.98, green: 0.55, blue: 0.82),   // Pinky
+        Color(red: 0.25, green: 0.82, blue: 0.92),   // Inky
+        Color(red: 0.95, green: 0.62, blue: 0.18),   // Clyde
     ]
 
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 6) {
+            if let game, game.frightened {
+                powerTimer(game: game)
+                    .padding(.horizontal, 12)
+            }
             maze
                 .padding(.horizontal, 8)
-            Label("Swipe to steer", systemImage: "hand.draw.fill")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.6))
-                .padding(.bottom, 4)
+            HStack(spacing: 8) {
+                Label("Swipe to steer", systemImage: "hand.draw.fill")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.6))
+                if let game, game.isScatterPhase {
+                    Text("SCATTER")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.cyan)
+                }
+                Spacer(minLength: 0)
+                // Ghost count indicator
+                if let game {
+                    let activeGhosts = game.ghosts.filter { !$0.inBox }.count
+                    if activeGhosts > 0 {
+                        Text("\(activeGhosts)👻")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(activeGhosts == 4 ? Color(red: 1.0, green: 0.65, blue: 0.0) : .white.opacity(0.75))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.black.opacity(0.4), in: Capsule())
+                    }
+                }
+            }
+            .padding(.bottom, 4)
         }
         .padding(.top, 6)
         .task(id: session.sessionID) { await clock() }
     }
 
+    func powerTimer(game: MuncherGame) -> some View {
+        let maxTicks = max(60 - game.level * 6, 24)
+        let fraction = Double(game.frightenedTicks) / Double(maxTicks)
+        let warning = fraction < 0.35
+        return HStack(spacing: 6) {
+            Image(systemName: "bolt.fill")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(warning ? .red : .yellow)
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(warning ? Color.red : Color.yellow)
+                        .frame(width: geo.size.width * fraction)
+                }
+            }
+            .frame(height: 6)
+            Text("POWER")
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(0.7))
+        }
+    }
+
     private func clock() async {
-        while !Task.isCancelled {
+        while true {
             let level = game?.level ?? 1
             let interval = max(0.11, 0.2 * pow(0.93, Double(level - 1)))
-            try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            do {
+                try await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            } catch {
+                break
+            }
             guard !paused, let before = game, !before.isOver else { continue }
             session.submit(.maze(.tick))
             guard let after = game else { continue }
@@ -111,15 +163,16 @@ struct MuncherView: View {
             mouth.closeSubpath()
             context.fill(mouth, with: .color(Color(red: 1.0, green: 0.85, blue: 0.2)))
 
-            // Ghosts (frightened ghosts flash white as the power runs out).
-            for (i, ghost) in game.ghosts.enumerated() {
+            // Ghosts: personality-colored normally, blue/flashing when frightened.
+            for ghost in game.ghosts {
                 let gc = center(ghost.pos)
-                let frightenedColor = game.frightenedTicks <= 10 && game.frightenedTicks % 2 == 0
-                    ? Color(white: 0.92)
-                    : Color(red: 0.25, green: 0.3, blue: 0.9)
+                let isWarning = game.frightenedTicks <= 20 && game.frightenedTicks % 4 < 2
+                let frightenedColor: Color = isWarning
+                    ? Color(white: 0.95)
+                    : Color(red: 0.25, green: 0.3, blue: 0.92)
                 let color = game.frightened && !ghost.inBox
                     ? frightenedColor
-                    : ghostColors[i % ghostColors.count]
+                    : ghostColors[ghost.type.rawValue % ghostColors.count]
                 let r = min(cw, ch) * 0.44
                 var body = Path()
                 body.addArc(center: CGPoint(x: gc.x, y: gc.y - r * 0.1), radius: r,

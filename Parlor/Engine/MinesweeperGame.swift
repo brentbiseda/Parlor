@@ -1,54 +1,116 @@
 import Foundation
 
-/// Classic minesweeper on a 9×11 board with 14 mines. The first reveal is
-/// always safe (mines are placed after it), zero cells flood-fill open, and
+/// Classic Minesweeper with three difficulty presets. The first reveal is
+/// always safe (mines are placed after it), zero-cells flood-fill open, and
 /// the game is won when every safe cell is revealed.
+///
+/// Difficulties:
+///   Easy   9×11  14 mines   (~14 %)
+///   Medium 12×16 40 mines   (~21 %)
+///   Hard   16×22 99 mines   (~28 %)
+///
+/// Chording: tap a satisfied number (flagged neighbors == count) to pop all
+/// unflagged neighbors at once. A wrong flag still triggers a loss.
 struct MinesweeperGame: GameEngine {
     static let kind = GameKind.minesweeper
-    static let width = 9
-    static let height = 11
-    static let mineCount = 14
 
+    // MARK: - Difficulty
+
+    enum Difficulty: Int, Codable, CaseIterable, Hashable {
+        case easy, medium, hard
+
+        var label: String { ["Easy", "Medium", "Hard"][rawValue] }
+        var width: Int  { [9,  12, 16][rawValue] }
+        var height: Int { [11, 16, 22][rawValue] }
+        var mines: Int  { [14, 40, 99][rawValue] }
+        var safeCells: Int { width * height - mines }
+    }
+
+    // MARK: - State
+
+    var difficulty: Difficulty = .easy
     var mines: Set<Int> = []
     var revealed: Set<Int> = []
     var flagged: Set<Int> = []
     var minesPlaced = false
     var lost = false
     var moveCount = 0
+    var startTime: Date? = nil
+    var endTime: Date? = nil
+    /// True if the player placed at least one flag during this game.
+    var usedFlags = false
+    /// Consecutive successful chord expansions (no wrong flag triggered).
+    var chordStreak = 0
+    var bestChordStreak = 0
+    /// Largest number of cells opened by a single reveal/flood (skill flair).
+    var biggestCascade = 0
+    /// Whether the first click was safe (always true in normal play — ensures stat accuracy).
+    var safeFirstClick = true
+    /// Flags placed adjacent to other flags (pattern recognition indicator).
+    var patternFlags = 0
+    /// Number of cells opened on the very first click cascade.
+    var firstClearCascade: Int = 0
+    /// Whether we've recorded the first cascade yet.
+    private var firstClickDone: Bool = false
 
     var currentPlayer: Int { 0 }
     var won: Bool {
-        minesPlaced && !lost && revealed.count == Self.width * Self.height - Self.mineCount
+        minesPlaced && !lost && revealed.count == difficulty.safeCells
     }
     var isOver: Bool { lost || won }
 
-    static func index(_ x: Int, _ y: Int) -> Int { y * width + x }
+    var elapsedSeconds: Int {
+        guard let start = startTime else { return 0 }
+        return Int((endTime ?? Date()).timeIntervalSince(start))
+    }
 
-    static func neighbors(_ index: Int) -> [Int] {
-        let (x, y) = (index % width, index / width)
+    init(difficulty: Difficulty = .easy) {
+        self.difficulty = difficulty
+    }
+
+    // MARK: - Grid helpers
+
+    func index(_ x: Int, _ y: Int) -> Int { y * difficulty.width + x }
+
+    func neighbors(_ idx: Int) -> [Int] {
+        let (x, y) = (idx % difficulty.width, idx / difficulty.width)
         var result: [Int] = []
         for dy in -1...1 {
             for dx in -1...1 where dx != 0 || dy != 0 {
                 let (nx, ny) = (x + dx, y + dy)
-                if (0..<width).contains(nx), (0..<height).contains(ny) {
-                    result.append(Self.index(nx, ny))
+                if (0..<difficulty.width).contains(nx), (0..<difficulty.height).contains(ny) {
+                    result.append(index(nx, ny))
                 }
             }
         }
         return result
     }
 
-    func adjacentMines(_ index: Int) -> Int {
-        Self.neighbors(index).filter { mines.contains($0) }.count
+    func adjacentMines(_ idx: Int) -> Int {
+        neighbors(idx).filter { mines.contains($0) }.count
     }
 
-    var flagsLeft: Int { Self.mineCount - flagged.count }
+    var flagsLeft: Int { difficulty.mines - flagged.count }
+    var flagCount: Int { flagged.count }
+    var totalCells: Int { difficulty.width * difficulty.height }
+    var efficiency: Int {
+        guard won, difficulty.safeCells > 0 else { return 0 }
+        return min(100, revealed.count * 100 / difficulty.safeCells)
+    }
+
+    /// mm:ss formatted elapsed time.
+    var timerString: String {
+        let s = elapsedSeconds
+        return s >= 60 ? "\(s / 60):\(String(format: "%02d", s % 60))" : "\(s)s"
+    }
+
+    // MARK: - Moves
 
     func legalMoves() -> [Move] {
         guard !isOver else { return [] }
-        return (0..<(Self.width * Self.height))
+        return (0..<(difficulty.width * difficulty.height))
             .filter { !revealed.contains($0) && !flagged.contains($0) }
-            .map { .minesweeper(.reveal(x: $0 % Self.width, y: $0 / Self.width)) }
+            .map { .minesweeper(.reveal(x: $0 % difficulty.width, y: $0 / difficulty.width)) }
     }
 
     func isLegal(_ move: Move) -> Bool {
@@ -60,44 +122,56 @@ struct MinesweeperGame: GameEngine {
         guard case .minesweeper(let m) = move else { throw GameError.illegalMove }
         switch m {
         case .reveal(let x, let y):
-            guard (0..<Self.width).contains(x), (0..<Self.height).contains(y) else {
-                throw GameError.illegalMove
-            }
-            let index = Self.index(x, y)
-            guard !flagged.contains(index) else { throw GameError.illegalMove }
-            if revealed.contains(index) {
-                try chord(at: index)
+            guard (0..<difficulty.width).contains(x),
+                  (0..<difficulty.height).contains(y) else { throw GameError.illegalMove }
+            let idx = index(x, y)
+            guard !flagged.contains(idx) else { throw GameError.illegalMove }
+            if revealed.contains(idx) {
+                try chord(at: idx)
                 return
             }
-            if !minesPlaced { placeMines(avoiding: index) }
+            if !minesPlaced {
+                placeMines(avoiding: idx)
+                startTime = Date()
+            }
             moveCount += 1
-            if mines.contains(index) {
+            if mines.contains(idx) {
                 lost = true
-                revealed.insert(index)
+                revealed.insert(idx)
+                endTime = Date()
                 return
             }
-            floodReveal(from: index)
-        case .flag(let x, let y):
-            guard (0..<Self.width).contains(x), (0..<Self.height).contains(y) else {
-                throw GameError.illegalMove
+            let before = revealed.count
+            floodReveal(from: idx)
+            let cascadeSize = revealed.count - before
+            biggestCascade = max(biggestCascade, cascadeSize)
+            if !firstClickDone {
+                firstClearCascade = cascadeSize
+                firstClickDone = true
             }
-            let index = Self.index(x, y)
-            guard !revealed.contains(index) else { throw GameError.illegalMove }
-            if flagged.contains(index) {
-                flagged.remove(index)
+            if won { endTime = Date() }
+        case .flag(let x, let y):
+            guard (0..<difficulty.width).contains(x),
+                  (0..<difficulty.height).contains(y) else { throw GameError.illegalMove }
+            let idx = index(x, y)
+            guard !revealed.contains(idx) else { throw GameError.illegalMove }
+            if flagged.contains(idx) {
+                flagged.remove(idx)
             } else {
-                flagged.insert(index)
+                // Check if adjacent to an existing flag (pattern recognition indicator)
+                let adjacentToFlag = neighbors(idx).contains { flagged.contains($0) }
+                if adjacentToFlag { patternFlags += 1 }
+                flagged.insert(idx)
+                usedFlags = true
             }
         }
     }
 
-    /// Chording: re-tap a satisfied number (flags == its count) to pop all
-    /// of its unflagged neighbors at once. Wrong flags still lose the game.
-    private mutating func chord(at index: Int) throws {
-        let count = adjacentMines(index)
-        let neighbors = Self.neighbors(index)
-        let flaggedCount = neighbors.filter { flagged.contains($0) }.count
-        let hidden = neighbors.filter { !flagged.contains($0) && !revealed.contains($0) }
+    private mutating func chord(at idx: Int) throws {
+        let count = adjacentMines(idx)
+        let nbrs = neighbors(idx)
+        let flaggedCount = nbrs.filter { flagged.contains($0) }.count
+        let hidden = nbrs.filter { !flagged.contains($0) && !revealed.contains($0) }
         guard count > 0, flaggedCount == count, !hidden.isEmpty else {
             throw GameError.illegalMove
         }
@@ -105,41 +179,81 @@ struct MinesweeperGame: GameEngine {
         for n in hidden {
             if mines.contains(n) {
                 lost = true
+                chordStreak = 0
                 revealed.insert(n)
+                endTime = Date()
                 return
             }
             floodReveal(from: n)
         }
+        chordStreak += 1
+        if chordStreak > bestChordStreak { bestChordStreak = chordStreak }
+        if won { endTime = Date() }
     }
 
-    /// First click and its whole neighborhood stay clear so games open up.
-    private mutating func placeMines(avoiding index: Int) {
+    private mutating func placeMines(avoiding idx: Int) {
         minesPlaced = true
-        let forbidden = Set([index] + Self.neighbors(index))
-        let candidates = (0..<(Self.width * Self.height)).filter { !forbidden.contains($0) }
-        mines = Set(candidates.shuffled().prefix(Self.mineCount))
+        let forbidden = Set([idx] + neighbors(idx))
+        let total = difficulty.width * difficulty.height
+        let candidates = (0..<total).filter { !forbidden.contains($0) }
+        mines = Set(candidates.shuffled().prefix(difficulty.mines))
     }
 
     private mutating func floodReveal(from start: Int) {
         var frontier = [start]
-        while let index = frontier.popLast() {
-            guard !revealed.contains(index), !mines.contains(index) else { continue }
-            revealed.insert(index)
-            flagged.remove(index)
-            if adjacentMines(index) == 0 {
-                frontier.append(contentsOf: Self.neighbors(index).filter { !revealed.contains($0) })
+        while let idx = frontier.popLast() {
+            guard !revealed.contains(idx), !mines.contains(idx) else { continue }
+            revealed.insert(idx)
+            flagged.remove(idx)
+            if adjacentMines(idx) == 0 {
+                frontier.append(contentsOf: neighbors(idx).filter { !revealed.contains($0) })
             }
         }
     }
 
+    // MARK: - Status
+
     var statusText: String {
         if isOver { return resultText ?? "" }
-        return "\(flagsLeft) mines unflagged · \(revealed.count)/\(Self.width * Self.height - Self.mineCount) clear"
+        guard minesPlaced else {
+            return "\(difficulty.label) · \(difficulty.mines) 💣 · tap to start"
+        }
+        let pct = Int(Double(revealed.count) / Double(difficulty.safeCells) * 100)
+        let reveals = revealed.count
+        let efficiency = moveCount > 0 ? " · \(String(format: "%.1f", Double(reveals) / Double(moveCount)))/click" : ""
+        let remaining = difficulty.safeCells - revealed.count
+        var tail = ""
+        if remaining <= 10 && remaining > 0 { tail = " · 🏁 \(remaining) cell\(remaining == 1 ? "" : "s") to go!" }
+        else if chordStreak >= 2 { tail = " · ⚡ chord ×\(chordStreak)" }
+        return "\(flagsLeft)/\(difficulty.mines) 💣 · \(pct)% clear\(efficiency) · \(timerString)\(tail)"
     }
 
     var resultText: String? {
-        if won { return "Field cleared in \(moveCount) reveals!" }
-        if lost { return "Boom — that was a mine" }
+        if won {
+            var text = "✓ \(difficulty.label) cleared in \(timerString) · \(moveCount) moves"
+            if moveCount > 0 {
+                let ratio = Double(difficulty.safeCells) / Double(moveCount)
+                if ratio >= 3.0 {
+                    let ratioStr = String(format: "%.1f", ratio)
+                    text += " · ⚡ \(ratioStr) cells/click"
+                }
+            }
+            if !usedFlags { text += " · 🎯 No flags!" }
+            else if flagged.allSatisfy({ mines.contains($0) }) && !flagged.isEmpty {
+                text += " · 🎯 Perfect flagging!"
+            }
+            if bestChordStreak >= 3 { text += " · ⚡ \(bestChordStreak)× chord" }
+            if biggestCascade >= 20 { text += " · 💥 \(biggestCascade)-cell open" }
+            if firstClearCascade > 3 { text += " · 🎲 first click opened \(firstClearCascade) cells" }
+            text += " · Efficiency: \(efficiency)%"
+            return text
+        }
+        if lost {
+            let pct = Int(Double(revealed.count - 1) / Double(difficulty.safeCells) * 100)
+            var text = "💥 \(difficulty.label) · survived \(elapsedSeconds)s · \(revealed.count - 1) safe (\(pct)%)"
+            if pct >= 90 { text += " · 😫 so close!" }
+            return text
+        }
         return nil
     }
 }

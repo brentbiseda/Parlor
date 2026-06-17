@@ -10,6 +10,17 @@ struct PinballGame: GameEngine {
 
     var score = 0
     var ballsPlayed = 0
+    var bestBallScore = 0
+    var ballStartScore = 0
+    /// Whether any single ball broke the 100k jackpot threshold.
+    var jackpotBalls = 0
+    static let jackpotThreshold = 100_000
+    /// Largest single scoring event (a big bonus/combo hit).
+    var biggestHit = 0
+    /// Lowest single-ball score (for consistency check).
+    var worstBallScore = Int.max
+    /// Highest score multiplier reached during this game.
+    var highestMultiplierReached = 1
 
     var currentPlayer: Int { 0 }
     var isOver: Bool { ballsPlayed >= Self.ballsPerGame }
@@ -31,16 +42,42 @@ struct PinballGame: GameEngine {
         case .score(let points):
             guard points > 0 else { throw GameError.illegalMove }
             score += points
+            if points > biggestHit { biggestHit = points }
         case .ballDrained:
+            let ballScore = score - ballStartScore
+            if ballScore > bestBallScore { bestBallScore = ballScore }
+            if ballScore < worstBallScore { worstBallScore = ballScore }
+            if ballScore >= Self.jackpotThreshold { jackpotBalls += 1 }
+            ballStartScore = score
             ballsPlayed += 1
+        case .multiplier(let m):
+            if m > highestMultiplierReached { highestMultiplierReached = m }
         }
     }
 
+    var currentBallScore: Int { score - ballStartScore }
+
     var statusText: String {
-        "Score \(score) · Ball \(min(ballsPlayed + 1, Self.ballsPerGame)) of \(Self.ballsPerGame)"
+        let ball = min(ballsPlayed + 1, Self.ballsPerGame)
+        var text = "Score \(score) · Ball \(ball) of \(Self.ballsPerGame)"
+        if currentBallScore > 0 { text += " · this ball \(currentBallScore)" }
+        if currentBallScore >= Self.jackpotThreshold { text += " 💰 JACKPOT!" }
+        return text
     }
 
     var resultText: String? {
-        isOver ? "Game over — \(score) points" : nil
+        guard isOver else { return nil }
+        var text = "Game over — \(score) points"
+        if bestBallScore > 0 { text += " · best ball: \(bestBallScore)" }
+        let avgBall = score / max(Self.ballsPerGame, 1)
+        text += " · avg \(avgBall)/ball"
+        if jackpotBalls == Self.ballsPerGame { text += " · 👑 ALL jackpot balls!" }
+        else if jackpotBalls > 0 { text += " · 💰 \(jackpotBalls) jackpot ball\(jackpotBalls == 1 ? "" : "s")" }
+        if biggestHit >= 5000 { text += " · 🎯 big hit \(biggestHit)" }
+        if highestMultiplierReached > 1 { text += " · peak ×\(highestMultiplierReached) multiplier" }
+        if bestBallScore > 0 && worstBallScore != Int.max && worstBallScore >= bestBallScore * 2 / 3 {
+            text += " · 📊 consistent"
+        }
+        return text
     }
 }

@@ -83,6 +83,7 @@ enum FreeCellMove: Codable, Hashable {
 enum PinballEvent: Codable, Hashable {
     case score(Int)
     case ballDrained
+    case multiplier(Int)   // reports current multiplier level reached
 }
 
 /// Breakout works like pinball: physics in the scene, score in the engine.
@@ -90,6 +91,7 @@ enum BreakoutEvent: Codable, Hashable {
     case score(Int)
     case ballLost
     case levelCleared
+    case wallBounce
 }
 
 /// Shared by Blocks (tetrominoes) and Capsules (pill-dropping) — same controls.
@@ -168,6 +170,7 @@ enum UnoMove: Codable, Hashable {
     case play(UnoCard, declared: UnoColor?)
     case draw
     case pass                // keep a drawn-but-unwanted card
+    case callUno             // announce UNO (sets calledUno flag for seats with 1 card)
 }
 
 enum EightsMove: Codable, Hashable {

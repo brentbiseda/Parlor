@@ -6,13 +6,29 @@ struct HopperView: View {
     @State private var lastLives = 3
     @State private var lastPads = 0
     @State private var paused = false
+    @State private var scorePopup: String? = nil
+    @State private var timerBarPulse = false
 
     var game: HopperGame? { session.game?.engine as? HopperGame }
 
     var body: some View {
         VStack(spacing: 8) {
-            board
-                .padding(.horizontal, 8)
+            if let game {
+                timerBar(game: game)
+                    .padding(.horizontal, 12)
+            }
+            ZStack {
+                board
+                    .padding(.horizontal, 8)
+                if let popup = scorePopup {
+                    Text(popup)
+                        .font(.title.weight(.black))
+                        .foregroundStyle(.yellow)
+                        .shadow(color: .black, radius: 3)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .animation(.easeOut(duration: 0.4), value: scorePopup)
             controls
                 .padding(.bottom, 6)
         }
@@ -20,9 +36,46 @@ struct HopperView: View {
         .task(id: session.sessionID) { await clock() }
     }
 
+    func timerBar(game: HopperGame) -> some View {
+        let budget = HopperGame.timeBonusBudget
+        let remaining = max(0, budget - game.crossingTicks)
+        let fraction = Double(remaining) / Double(budget)
+        let barColor: Color = fraction > 0.5 ? .green : fraction > 0.25 ? .yellow : .red
+        return VStack(alignment: .leading, spacing: 2) {
+            HStack {
+                Text("TIME BONUS")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                Spacer()
+                Text("+\(max(0, remaining * 50 / budget))")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(barColor)
+            }
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(.white.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(barColor)
+                        .frame(width: geo.size.width * fraction)
+                        .scaleEffect(x: 1, y: fraction < 0.2 && timerBarPulse ? 1.5 : 1.0, anchor: .center)
+                        .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: timerBarPulse)
+                }
+            }
+            .frame(height: 6)
+            .onChange(of: fraction < 0.2) { _, isUrgent in
+                timerBarPulse = isUrgent
+            }
+        }
+    }
+
     private func clock() async {
-        while !Task.isCancelled {
-            try? await Task.sleep(nanoseconds: 240_000_000)
+        while true {
+            do {
+                try await Task.sleep(nanoseconds: 240_000_000)
+            } catch {
+                break
+            }
             guard !paused, let before = game, !before.isOver else { continue }
             session.submit(.hopper(.tick))
             guard let after = game else { continue }
@@ -38,12 +91,21 @@ struct HopperView: View {
 
     private func hop(_ direction: GridDirection) {
         guard !paused, let before = game, !before.isOver else { return }
+        let prevScore = before.score
         session.submit(.hopper(.hop(direction)))
         guard let after = game else { return }
         if after.lives < lastLives {
             SoundFX.shared.play(after.isOver ? .lose : .lifeLost)
         } else if after.homePads.count > lastPads {
             SoundFX.shared.play(.target)
+            let gained = after.score - prevScore
+            if gained > 50 {
+                scorePopup = "+\(gained)"
+                Task {
+                    try? await Task.sleep(nanoseconds: 1_200_000_000)
+                    scorePopup = nil
+                }
+            }
         } else {
             SoundFX.shared.play(.click)
         }

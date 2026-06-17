@@ -21,6 +21,28 @@ struct UnoGame: GameEngine {
     var lastAction: String? = nil
     /// Consecutive turns with no card played or drawn (deck fully stuck).
     var stalledTurns = 0
+    /// Seats that have announced "UNO!" (have exactly 1 card and called it).
+    var calledUno: Set<Int> = []
+    /// Lifetime action-card tallies for the deal, shown in resultText.
+    var wildsPlayed = 0
+    var reversesPlayed = 0
+    var skipsPlayed = 0
+    var forcedDrawCards = 0
+    /// Largest hand size any seat has held this deal (a "stuck the longest" stat).
+    var maxHandSize = [0, 0, 0, 0]
+    /// Times each color was declared via a wild play.
+    var wildColorCalls = [UnoColor: Int]()
+    /// Consecutive turns seat 0 was forced to draw (without playing a card).
+    var currentDrawStreak = 0
+    var bestDrawStreak = 0
+    /// Longest run of consecutive plays (any seat) with no draw in between.
+    var currentPlayChain = 0
+    var longestPlayChain = 0
+    /// Times the draw pile was exhausted and reshuffled from the discard.
+    var deckReshuffles = 0
+    /// Consecutive wildDrawFour plays (streak tracker).
+    var drawFourStreak: Int = 0
+    var bestDrawFourStreak: Int = 0
 
     init() {
         var id = 0
@@ -88,6 +110,7 @@ struct UnoGame: GameEngine {
         } else {
             moves.append(.uno(.draw))
         }
+        moves.append(.uno(.callUno))
         return moves
     }
 
@@ -101,8 +124,31 @@ struct UnoGame: GameEngine {
             hands[currentPlayer].remove(at: index)
             discard.append(card)
             activeColor = card.color ?? declared ?? .red
+            switch card.value {
+            case .wild, .wildDrawFour:
+                wildsPlayed += 1
+                if let color = declared { wildColorCalls[color, default: 0] += 1 }
+                if case .wildDrawFour = card.value {
+                    drawFourStreak += 1
+                    if drawFourStreak > bestDrawFourStreak { bestDrawFourStreak = drawFourStreak }
+                } else {
+                    drawFourStreak = 0
+                }
+            case .reverse:
+                reversesPlayed += 1
+                drawFourStreak = 0
+            case .skip:
+                skipsPlayed += 1
+                drawFourStreak = 0
+            case .number, .drawTwo:
+                drawFourStreak = 0
+            }
+            if currentPlayer == 0 { currentDrawStreak = 0 }
+            currentPlayChain += 1
+            if currentPlayChain > longestPlayChain { longestPlayChain = currentPlayChain }
             lastAction = nil
             stalledTurns = 0
+            calledUno.remove(currentPlayer)
             if hands[currentPlayer].isEmpty {
                 winner = currentPlayer
                 return
@@ -116,26 +162,38 @@ struct UnoGame: GameEngine {
                 // stuck, end the deal in favor of the lightest hand.
                 stalledTurns += 1
                 if stalledTurns >= 8 {
-                    winner = (0..<4).min {
-                        hands[$0].reduce(0) { $0 + $1.points } < hands[$1].reduce(0) { $0 + $1.points }
-                    }
+                    // Tiebreak by hand points; sort seats for determinism.
+                    let pts = (0..<4).sorted { hands[$0].reduce(0) { $0 + $1.points } < hands[$1].reduce(0) { $0 + $1.points } }
+                    winner = pts.first
                     return
                 }
                 advance()
                 return
             }
             stalledTurns = 0
+            currentPlayChain = 0
+            calledUno.remove(currentPlayer)
             hands[currentPlayer].append(card)
             hands[currentPlayer].sort { $0.sortKey < $1.sortKey }
+            maxHandSize[currentPlayer] = max(maxHandSize[currentPlayer], hands[currentPlayer].count)
             if canPlay(card) {
                 drewThisTurn = true      // may play any legal card or pass
             } else {
+                if currentPlayer == 0 {
+                    currentDrawStreak += 1
+                    if currentDrawStreak > bestDrawStreak { bestDrawStreak = currentDrawStreak }
+                }
                 advance()
             }
         case .pass:
             guard drewThisTurn else { throw GameError.illegalMove }
             drewThisTurn = false
             advance()
+        case .callUno:
+            // Mark UNO for seats with exactly 1 card (including current player pre-play).
+            for seat in 0..<4 where hands[seat].count == 1 {
+                calledUno.insert(seat)
+            }
         }
     }
 
@@ -164,11 +222,13 @@ struct UnoGame: GameEngine {
     }
 
     private mutating func forceDraw(_ count: Int) {
+        forcedDrawCards += count
         for _ in 0..<count {
             guard let card = drawCard() else { return }
             hands[currentPlayer].append(card)
         }
         hands[currentPlayer].sort { $0.sortKey < $1.sortKey }
+        maxHandSize[currentPlayer] = max(maxHandSize[currentPlayer], hands[currentPlayer].count)
     }
 
     private mutating func drawCard() -> UnoCard? {
@@ -177,6 +237,7 @@ struct UnoGame: GameEngine {
             let top = discard.removeLast()
             drawPile = discard.shuffled()
             discard = [top]
+            deckReshuffles += 1
         }
         return drawPile.popLast()
     }
@@ -207,13 +268,64 @@ struct UnoGame: GameEngine {
         if let winner { return "Seat \(winner + 1) goes out!" }
         var text = "\(activeColor.rawValue.capitalized) in play"
         if let lastAction { text += " · \(lastAction)" }
-        if let smallest = hands.map(\.count).min(), smallest == 1 { text += " · someone's on their last card!" }
+        let counts = hands.enumerated().map { "\($0.element.count)" }.joined(separator: "/")
+        text += " · hands: \(counts)"
+        let unoCalls = calledUno.sorted().map { "Seat \($0 + 1)" }
+        if !unoCalls.isEmpty { text += " · UNO: \(unoCalls.joined(separator: ", "))" }
+        // Flag any seat at exactly 1 card that has NOT called UNO (catchable).
+        let exposed = (0..<4).filter { hands[$0].count == 1 && !calledUno.contains($0) }
+        if !exposed.isEmpty {
+            text += " · 🚨 " + exposed.map { "Seat \($0 + 1) didn't call!" }.joined(separator: ", ")
+        }
+        // Highlight the closest threat to going out.
+        if let threat = (0..<4).min(by: { hands[$0].count < hands[$1].count }),
+           hands[threat].count <= 2, threat != currentPlayer {
+            text += " · ⚠️ Seat \(threat + 1) close (\(hands[threat].count))"
+        }
         return text
+    }
+
+    /// Traditional Uno scoring: the winner collects the points left in every
+    /// other player's hand.
+    var winnerScore: Int {
+        guard let winner else { return 0 }
+        return (0..<4).filter { $0 != winner }
+            .reduce(0) { $0 + hands[$1].reduce(0) { $0 + $1.points } }
     }
 
     var resultText: String? {
         guard let winner else { return nil }
-        return "Seat \(winner + 1) wins the deal"
+        var text = "Seat \(winner + 1) wins the deal"
+        if winnerScore > 0 { text += " (+\(winnerScore) pts)" }
+        var stats: [String] = []
+        if wildsPlayed > 0 { stats.append("\(wildsPlayed) wild\(wildsPlayed == 1 ? "" : "s")") }
+        if skipsPlayed > 0 { stats.append("\(skipsPlayed) skip\(skipsPlayed == 1 ? "" : "s")") }
+        if reversesPlayed > 0 { stats.append("\(reversesPlayed) reverse\(reversesPlayed == 1 ? "" : "s")") }
+        if forcedDrawCards > 0 { stats.append("\(forcedDrawCards) forced draws") }
+        if !stats.isEmpty { text += " · " + stats.joined(separator: " · ") }
+        if let biggest = maxHandSize.indices.max(by: { maxHandSize[$0] < maxHandSize[$1] }), maxHandSize[biggest] > 7 {
+            text += " · Seat \(biggest + 1) held \(maxHandSize[biggest]) at peak 😬"
+        }
+        // Wild color preference distribution
+        if wildsPlayed >= 3, !wildColorCalls.isEmpty {
+            if let favColor = wildColorCalls.max(by: { $0.value < $1.value }) {
+                text += " · 🎨 favored \(favColor.key.rawValue.capitalized) \(favColor.value)×"
+            }
+        }
+        // Check for rainbow player (called all 4 colors)
+        if wildColorCalls.keys.count == UnoColor.allCases.count {
+            text += " · 🌈 all 4 colors called"
+        }
+        if bestDrawStreak >= 4 { text += " · 😵 \(bestDrawStreak) forced draws in a row" }
+        if bestDrawFourStreak >= 2 { text += " · 🃏 \(bestDrawFourStreak)-Draw4 streak" }
+        if longestPlayChain >= 6 { text += " · ⚡ \(longestPlayChain)-play chain" }
+        if deckReshuffles > 0 { text += " · 🔄 \(deckReshuffles) deck drought\(deckReshuffles == 1 ? "" : "s")" }
+        // Comeback: the winner once held the biggest hand at the table.
+        if let biggest = maxHandSize.indices.max(by: { maxHandSize[$0] < maxHandSize[$1] }),
+           biggest == winner, maxHandSize[winner] >= 9 {
+            text += " · 🔄 comeback from \(maxHandSize[winner]) cards!"
+        }
+        return text
     }
 }
 

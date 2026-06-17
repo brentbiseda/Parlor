@@ -29,7 +29,10 @@ struct PlayerProfile: Codable, Hashable, Identifiable {
     static let symbols = ["person.fill", "suit.spade.fill", "suit.heart.fill", "crown.fill",
                           "star.fill", "bolt.fill", "flame.fill", "moon.stars.fill",
                           "leaf.fill", "pawprint.fill", "music.note", "bird.fill",
-                          "diamond.fill", "theatermasks.fill", "sailboat.fill", "cup.and.saucer.fill"]
+                          "diamond.fill", "theatermasks.fill", "sailboat.fill", "cup.and.saucer.fill",
+                          "figure.chess", "gamecontroller.fill", "brain.head.profile", "wand.and.stars",
+                          "snowflake", "sun.max.fill", "mountain.2.fill", "fish.fill",
+                          "atom", "guitars.fill", "bicycle", "trophy.fill"]
 }
 
 /// Per-game competitive record for one profile.

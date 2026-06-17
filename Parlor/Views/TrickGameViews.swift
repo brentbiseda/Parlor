@@ -113,6 +113,7 @@ struct TrickTableView: View {
     @ObservedObject var session: GameSession
     @State private var passSelection: Set<Card> = []
     @State private var showScores = false
+    @State private var bagPulse = false
 
     var adapter: TrickGameAdapter? { session.game?.engine as? TrickGameAdapter }
 
@@ -133,13 +134,44 @@ struct TrickTableView: View {
                     .padding(.horizontal, 6)
 
                     Spacer(minLength: 0)
-                    trickArea(adapter: adapter, perspective: perspective)
+                    ZStack(alignment: .topLeading) {
+                        trickArea(adapter: adapter, perspective: perspective)
+                        // Trump suit badge shown during playing phase
+                        if let trump = activeTrump(game: game) {
+                            Text(trump.symbol)
+                                .font(.title2.weight(.bold))
+                                .foregroundStyle(trump.isRed ? .red : .primary)
+                                .padding(6)
+                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+                                .padding(.leading, 4)
+                                .padding(.top, 4)
+                        }
+                    }
                     Spacer(minLength: 0)
 
+                    // Euchre tricks progress indicator (5 dots).
+                    if let euchre = game.engine as? EuchreGame, euchre.phase == .playing,
+                       let makerTeam = euchre.makerTeam {
+                        euchreTricksBar(euchre: euchre, makerTeam: makerTeam, perspective: perspective)
+                            .padding(.bottom, 2)
+                    }
+
                     if let summary = adapter.lastTrickSummary, adapter.trick.isEmpty {
-                        Text(summary)
-                            .font(.caption)
-                            .foregroundStyle(.white.opacity(0.8))
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.circle.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.green.opacity(0.85))
+                            Text(summary)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                        .animation(.easeInOut(duration: 0.25), value: summary)
                     }
 
                     if acting {
@@ -168,6 +200,33 @@ struct TrickTableView: View {
 
     func seatName(_ seat: Int) -> String { session.playerName(seat: seat) }
 
+    // MARK: - Euchre tricks progress
+
+    @ViewBuilder
+    func euchreTricksBar(euchre: EuchreGame, makerTeam: Int, perspective: Int) -> some View {
+        let perspTeam = perspective % 2
+        HStack(spacing: 5) {
+            ForEach(0..<5, id: \.self) { i in
+                let makerTricks = euchre.trickCounts[makerTeam] + euchre.trickCounts[makerTeam + 2]
+                let defenderTricks = euchre.trickCounts[1 - makerTeam] + euchre.trickCounts[(1 - makerTeam) + 2]
+                let totalPlayed = makerTricks + defenderTricks
+                let filledByMaker = i < makerTricks
+                let filledByDefender = i < defenderTricks && !filledByMaker
+                let played = i < totalPlayed
+                let makerIsUs = makerTeam == perspTeam
+                let dotColor: Color = filledByMaker
+                    ? (makerIsUs ? .blue : .red)
+                    : filledByDefender
+                        ? (makerIsUs ? .red : .blue)
+                        : .clear
+                Circle()
+                    .fill(dotColor)
+                    .overlay(Circle().strokeBorder(played ? .white.opacity(0.5) : .white.opacity(0.25), lineWidth: 1))
+                    .frame(width: 10, height: 10)
+            }
+        }
+    }
+
     // MARK: - Always-visible scores
 
     /// Compact scoreboard pinned above the table, so nobody has to open the
@@ -177,10 +236,28 @@ struct TrickTableView: View {
         switch game.engine {
         case let g as SpadesGame:
             let us = perspective % 2
+            let usBags = g.teamBags[us]
+            let themBags = g.teamBags[1 - us]
             HStack(spacing: 8) {
-                scoreChip("Us", "\(g.teamScores[us])", detail: "\(g.teamBags[us]) bags", highlight: true)
+                scoreChip("Us", "\(g.teamScores[us])", detail: "\(usBags) 🎒", highlight: true,
+                          bagWarning: usBags >= 7)
+                    .scaleEffect(usBags >= 7 && bagPulse ? 1.06 : 1.0)
                 Text("to 500").font(.caption2).foregroundStyle(.white.opacity(0.5))
-                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(g.teamBags[1 - us]) bags", highlight: false)
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(themBags) 🎒", highlight: false,
+                          bagWarning: themBags >= 7)
+                    .scaleEffect(themBags >= 7 && bagPulse ? 1.06 : 1.0)
+            }
+            .onAppear {
+                if usBags >= 7 || themBags >= 7 {
+                    withAnimation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true)) { bagPulse = true }
+                }
+            }
+            .onChange(of: max(usBags, themBags)) { _, bags in
+                if bags >= 7 {
+                    withAnimation(.easeInOut(duration: 0.65).repeatForever(autoreverses: true)) { bagPulse = true }
+                } else {
+                    bagPulse = false
+                }
             }
         case let g as EuchreGame:
             let us = perspective % 2
@@ -215,7 +292,8 @@ struct TrickTableView: View {
         }
     }
 
-    func scoreChip(_ label: String, _ value: String, detail: String?, highlight: Bool) -> some View {
+    func scoreChip(_ label: String, _ value: String, detail: String?, highlight: Bool,
+                   bagWarning: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(label)
                 .font(.caption2.weight(.semibold))
@@ -227,13 +305,14 @@ struct TrickTableView: View {
             if let detail {
                 Text(detail)
                     .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.6))
+                    .foregroundStyle(bagWarning ? Color.orange : .white.opacity(0.6))
+                    .fontWeight(bagWarning ? .bold : .regular)
             }
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(.black.opacity(highlight ? 0.4 : 0.25), in: Capsule())
-        .overlay(Capsule().strokeBorder(.white.opacity(highlight ? 0.3 : 0.12), lineWidth: 1))
+        .background(bagWarning ? Color.orange.opacity(0.22) : .black.opacity(highlight ? 0.4 : 0.25), in: Capsule())
+        .overlay(Capsule().strokeBorder(bagWarning ? .orange.opacity(0.6) : .white.opacity(highlight ? 0.3 : 0.12), lineWidth: bagWarning ? 1.5 : 1))
     }
 
     func opponentBadge(offset: Int, adapter: TrickGameAdapter, game: AnyGame) -> some View {
@@ -272,6 +351,14 @@ struct TrickTableView: View {
                 }
         }
         .frame(maxWidth: 320)
+    }
+
+    /// Returns the trump suit for the current game, if in playing phase.
+    func activeTrump(game: AnyGame) -> Suit? {
+        if let g = game.engine as? EuchreGame, g.phase == .playing { return g.trump }
+        if let g = game.engine as? SpadesGame, g.phase == .playing { return .spades }
+        if let g = game.engine as? BridgeGame, g.phase == .playing { return g.contract?.strain.suit }
+        return nil  // Hearts: no trump
     }
 
     /// Played cards spring in from their seat's side of the table.
@@ -325,7 +412,10 @@ struct TrickTableView: View {
         let cards = adapter.hands[handSeat]
         let isPassing: Bool
         if case .heartsPassing = adapter.panel { isPassing = true } else { isPassing = false }
-        let legal = isPassing ? Set(cards) : adapter.legalCardSet
+        // During Hearts passing every card is selectable, so legal = [] avoids
+        // painting all 13 with a yellow border.  Only the selected cards are highlighted.
+        let legalCards = adapter.legalCardSet
+        let legal: Set<Card> = isPassing ? [] : legalCards
 
         return HandView(cards: cards,
                         legal: legal,
@@ -354,9 +444,16 @@ struct TrickTableView: View {
             EmptyView()
         case .heartsPassing(let direction):
             VStack(spacing: 6) {
-                Text("Select 3 cards to pass \(direction)")
+                Text("Pass 3 cards \(direction)")
                     .font(.callout).foregroundStyle(.white)
-                Button("Pass \(passSelection.count)/3") {
+                HStack(spacing: 8) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Circle()
+                            .frame(width: 10, height: 10)
+                            .foregroundStyle(i < passSelection.count ? Color.yellow : Color.white.opacity(0.3))
+                    }
+                }
+                Button("Pass →") {
                     session.submit(.passCards(Array(passSelection).displaySorted()))
                     passSelection = []
                 }
@@ -439,14 +536,43 @@ struct BridgeAuctionPanel: View {
 
     var bridge: BridgeGame? { session.game?.engine as? BridgeGame }
 
+    func strainColor(_ strain: BridgeStrain) -> Color {
+        switch strain {
+        case .clubs: return Color(red: 0.2, green: 0.62, blue: 0.3)
+        case .diamonds: return Color(red: 0.88, green: 0.3, blue: 0.2)
+        case .hearts: return Color(red: 0.88, green: 0.2, blue: 0.3)
+        case .spades: return Color(white: 0.15)
+        case .notrump: return Color(red: 0.2, green: 0.45, blue: 0.85)
+        }
+    }
+
     var body: some View {
         let legal = bridge?.legalCalls() ?? []
         VStack(spacing: 6) {
             if let calls = bridge?.calls, !calls.isEmpty {
-                Text("Auction: " + calls.map(\.label).joined(separator: " · "))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .lineLimit(2)
+                // Show last 4 bids as compact colored chips
+                let recentCalls = calls.suffix(4)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 4) {
+                        ForEach(Array(recentCalls.enumerated()), id: \.offset) { _, call in
+                            if case .bid(let lvl, let strain) = call {
+                                Text("\(lvl)\(strain.label)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background(strainColor(strain), in: RoundedRectangle(cornerRadius: 5))
+                            } else {
+                                Text(call.label)
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(.white.opacity(0.7))
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 3)
+                                    .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 5))
+                            }
+                        }
+                    }
+                }
             }
             HStack(spacing: 6) {
                 Picker("Level", selection: $level) {

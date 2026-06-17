@@ -1,11 +1,22 @@
 import Foundation
 
-/// 4-player partnership Spades (seats 0&2 vs 1&3). Bids 0–13 with 0 = nil.
-/// Spades are always trump and can't be led until broken. Contracts score
-/// 10 × bid plus 1 per bag; collecting 10 bags costs 100. Nil is ±100.
-/// First team to 500 wins (or last above −200).
+/// 4-player partnership Spades (seats 0&2 vs 1&3). Bids 0–13; 0 = nil bid.
+/// Spades are always trump and can't be led until broken.
+///
+/// Scoring per round:
+///   - Made contract:   10 × bid + bags earned this round
+///   - Set (undertrick): −10 × bid
+///   - Nil made:        +100  Nil set: −100
+///   - Bag overflow:    −100 when a team accumulates 10 bags (bags reset to remainder)
+///
+/// Game ends when a team reaches ≥ 500 points or drops to ≤ −200.
 struct SpadesGame: GameEngine {
     static let kind = GameKind.spades
+    static let targetScore = 500
+    static let bustedScore = -200
+    static let bagPenaltyThreshold = 10
+    static let bagPenalty = 100
+    static let nilBonus = 100
 
     enum Phase: Codable, Hashable {
         case bidding
@@ -26,10 +37,29 @@ struct SpadesGame: GameEngine {
     var teamBags = [0, 0]
     var roundNumber = 0
     var lastTrickSummary: String? = nil
+    /// Summary of the round just scored (shown until next round starts).
+    var lastRoundSummary: String? = nil
+    /// Consecutive successful nil bids per seat (resets on a miss or non-nil bid).
+    var nilStreaks = [0, 0, 0, 0]
+    /// Count of "Boston" rounds (team wins all 13 tricks) per team.
+    var bostonCount = [0, 0]
+    /// Largest single-round point swing recorded this game (abs value, with seat label).
+    var biggestSwing = 0
+    var biggestSwingTeam = 0
+    /// Successful nil bids per team across the game.
+    var nilsMade = [0, 0]
+    /// Cumulative bags accumulated per seat across the game (individual, never reset).
+    var seatBags = [0, 0, 0, 0]
+    /// Count of "nil slams" — a nil made while partner sweeps the rest (≥12 tricks).
+    var nilSlams = [0, 0]
+    /// Rounds where a team made exactly its contract with zero bags.
+    var perfectBids = [0, 0]
+    /// Track when either team reaches 7+ bags — penalty risk warning.
+    var sandbagsWarned: Bool = false
+    /// Tricks won per round per team (inner array = rounds, outer = teams).
+    var teamTricksWonPerRound: [[Int]] = [[], []]
 
-    init() {
-        startRound()
-    }
+    init() { startRound() }
 
     mutating func startRound() {
         let (dealt, _) = TrickTaking.deal(deck: Card.standardDeck(), players: 4, count: 13)
@@ -47,29 +77,31 @@ struct SpadesGame: GameEngine {
     var currentPlayer: Int {
         switch phase {
         case .bidding:
-            // Bid in order starting left of dealer.
             for offset in 1...4 {
                 let seat = (dealer + offset) % 4
                 if bids[seat] == nil { return seat }
             }
             return 0
-        case .playing:
-            return (trickLeader + trick.count) % 4
-        case .gameOver:
-            return 0
+        case .playing:  return (trickLeader + trick.count) % 4
+        case .gameOver: return 0
         }
     }
 
     var isOver: Bool { phase == .gameOver }
 
+    func isNilBid(_ seat: Int) -> Bool { bids[seat] == 0 }
+
+    /// Team contract for team 0 or 1 (sum of non-nil bids).
+    func teamContract(_ team: Int) -> Int {
+        let seats = [team, team + 2]
+        return seats.compactMap { bids[$0] }.filter { $0 > 0 }.reduce(0, +)
+    }
+
     func legalMoves() -> [Move] {
         switch phase {
-        case .gameOver:
-            return []
-        case .bidding:
-            return (0...13).map { .bid($0) }
-        case .playing:
-            return legalCards().map { .playCard($0) }
+        case .gameOver: return []
+        case .bidding:  return (0...13).map { .bid($0) }
+        case .playing:  return legalCards().map { .playCard($0) }
         }
     }
 
@@ -110,10 +142,14 @@ struct SpadesGame: GameEngine {
 
         if trick.count == 4 {
             let led = trick[0].card.suit
-            let winner = TrickTaking.winner(plays: trick, ledSuit: led, suitOf: { $0.suit },
+            let winner = TrickTaking.winner(plays: trick, ledSuit: led,
+                                            suitOf: { $0.suit },
                                             value: { TrickTaking.trumpValue($0, trump: .spades) })
             tricksWon[winner] += 1
-            lastTrickSummary = "Trick to seat \(winner + 1)"
+            let highCard = trick.max(by: { TrickTaking.trumpValue($0.card, trump: .spades)
+                                        < TrickTaking.trumpValue($1.card, trump: .spades) })?.card
+            let highLabel = highCard.map { "\($0.rank.label)\($0.suit.symbol)" } ?? ""
+            lastTrickSummary = "Seat \(winner + 1) wins — \(highLabel)"
             trick = []
             trickLeader = winner
             tricksPlayed += 1
@@ -122,40 +158,73 @@ struct SpadesGame: GameEngine {
     }
 
     mutating func finishRound() {
+        var summaryParts: [String] = []
         for team in 0...1 {
-            let a = team, b = team + 2
+            let seats = [team, team + 2]
             var roundScore = 0
-            var contract = 0
-            var contractTricks = 0
-            for seat in [a, b] {
+            var teamContract = 0
+            let teamTricks = tricksWon[seats[0]] + tricksWon[seats[1]]
+
+            for seat in seats {
                 let bid = bids[seat] ?? 0
                 if bid == 0 {
-                    roundScore += tricksWon[seat] == 0 ? 100 : -100
+                    let made = tricksWon[seat] == 0
+                    roundScore += made ? Self.nilBonus : -Self.nilBonus
+                    if made { nilsMade[team] += 1 }
+                    let partner = (seat + 2) % 4
+                    var slamNote = ""
+                    if made && tricksWon[partner] >= 12 { nilSlams[team] += 1; slamNote = " 💎slam" }
+                    nilStreaks[seat] = made ? nilStreaks[seat] + 1 : 0
+                    let streakNote = made && nilStreaks[seat] >= 2 ? " (streak \(nilStreaks[seat]))" : ""
+                    summaryParts.append("S\(seat + 1) nil \(made ? "✓+100" : "✗−100")\(streakNote)\(slamNote)")
                 } else {
-                    contract += bid
-                    contractTricks += tricksWon[seat]
+                    nilStreaks[seat] = 0
+                    teamContract += bid
                 }
             }
-            // Nil bidder's tricks still help cover the partner's contract.
-            let teamTricks = tricksWon[a] + tricksWon[b]
-            if contract > 0 {
-                if teamTricks >= contract {
-                    let bags = teamTricks - contract
-                    roundScore += contract * 10 + bags
-                    teamBags[team] += bags
-                    if teamBags[team] >= 10 {
-                        teamBags[team] -= 10
-                        roundScore -= 100
-                    }
-                } else {
-                    roundScore -= contract * 10
-                }
-            }
-            _ = contractTricks
-            teamScores[team] += roundScore
-        }
 
-        if teamScores.contains(where: { $0 >= 500 }) || teamScores.contains(where: { $0 <= -200 }) {
+            if teamContract > 0 {
+                if teamTricks >= teamContract {
+                    let bags = teamTricks - teamContract
+                    roundScore += teamContract * 10 + bags
+                    teamBags[team] += bags
+                    for s in seats where bids[s] != nil && bids[s]! > 0 {
+                        seatBags[s] += max(0, tricksWon[s] - bids[s]!)
+                    }
+                    var bagNote = bags > 0 ? " +\(bags)bag" : ""
+                    if teamBags[team] >= Self.bagPenaltyThreshold {
+                        teamBags[team] -= Self.bagPenaltyThreshold
+                        roundScore -= Self.bagPenalty
+                        bagNote += " overflow−100"
+                    }
+                    if bags == 0 { perfectBids[team] += 1; bagNote += " 🎯exact" }
+                    if teamTricks == 13 { bagNote += " 🏆 Boston!"; bostonCount[team] += 1 }
+                    summaryParts.append("T\(team + 1) made \(teamTricks)/\(teamContract)\(bagNote)")
+                } else {
+                    roundScore -= teamContract * 10
+                    summaryParts.append("T\(team + 1) set \(teamTricks)/\(teamContract)−\(teamContract * 10)")
+                }
+            }
+            teamScores[team] += roundScore
+            if abs(roundScore) > biggestSwing {
+                biggestSwing = abs(roundScore)
+                biggestSwingTeam = team
+            }
+        }
+        lastRoundSummary = summaryParts.joined(separator: " · ")
+
+        // Record tricks won this round per team
+        for team in 0...1 {
+            let seats = [team, team + 2]
+            let teamTricks = tricksWon[seats[0]] + tricksWon[seats[1]]
+            teamTricksWonPerRound[team].append(teamTricks)
+        }
+        // Set sandbag warning if either team hits 7+ bags
+        if teamBags[0] >= 7 || teamBags[1] >= 7 { sandbagsWarned = true }
+
+        let gameEndCondition = teamScores.contains { $0 >= Self.targetScore }
+                            || teamScores.contains { $0 <= Self.bustedScore }
+        if gameEndCondition {
             phase = .gameOver
         } else {
             dealer = (dealer + 1) % 4
@@ -163,16 +232,38 @@ struct SpadesGame: GameEngine {
         }
     }
 
-    func teamLabel(_ team: Int) -> String { team == 0 ? "Seats 1 & 3" : "Seats 2 & 4" }
+    func teamLabel(_ team: Int) -> String { team == 0 ? "N/S" : "E/W" }
 
     var statusText: String {
         switch phase {
         case .bidding:
             let made = bids.compactMap { $0 }.count
-            return "Round \(roundNumber): bidding (\(made)/4)"
+            let bidStr = (0..<4).map { bids[$0].map { $0 == 0 ? "nil" : "\($0)" } ?? "?" }.joined(separator: "/")
+            return "R\(roundNumber) bidding (\(made)/4): \(bidStr)"
         case .playing:
-            let contracts = (0..<4).map { seat in bids[seat].map { $0 == 0 ? "nil" : "\($0)" } ?? "–" }
-            return "Bids \(contracts.joined(separator: "/")) · trick \(tricksPlayed + 1) of 13"
+            let bidStr = (0..<4).map { bids[$0].map { $0 == 0 ? "nil" : "\($0)" } ?? "–" }.joined(separator: "/")
+            let t0 = tricksWon[0] + tricksWon[2]; let t1 = tricksWon[1] + tricksWon[3]
+            let c0 = teamContract(0); let c1 = teamContract(1)
+            let trickBar = "\(teamLabel(0)) \(t0)/\(c0) · \(teamLabel(1)) \(t1)/\(c1)"
+            let lead: String
+            if teamScores[0] == teamScores[1] { lead = "tied" }
+            else { let l = teamScores[0] > teamScores[1] ? 0 : 1; lead = "\(teamLabel(l)) +\(abs(teamScores[0] - teamScores[1]))" }
+            let scoreBar = "\(teamLabel(0)) \(teamScores[0]) · \(teamLabel(1)) \(teamScores[1]) (\(lead))"
+            let bag0Warn = teamBags[0] % 10 >= 8 ? "⚠️" : ""
+            let bag1Warn = teamBags[1] % 10 >= 8 ? "⚠️" : ""
+            let seatBagDetail = (0..<4).compactMap { s -> String? in
+                let b = seatBags[s]; return b >= 2 ? "S\(s+1):\(b)bg" : nil
+            }.joined(separator: " ")
+            let bagExtra = seatBagDetail.isEmpty ? "" : " [\(seatBagDetail)]"
+            let bag0Critical = teamBags[0] >= 7 ? "⚠️ BAGS:\(teamBags[0]) · " : ""
+            let bag1Critical = teamBags[1] >= 7 ? "⚠️ BAGS:\(teamBags[1]) · " : ""
+            let criticalWarn = bag0Critical + bag1Critical
+            let bagBar = "\(criticalWarn)bags \(teamBags[0])\(bag0Warn)/\(teamBags[1])\(bag1Warn)\(bagExtra)"
+            let nilWarn = (0..<4).compactMap { seat -> String? in
+                guard bids[seat] == 0 && tricksWon[seat] > 0 else { return nil }
+                return "S\(seat + 1) nil busted!"
+            }.first.map { " · 💀 \($0)" } ?? ""
+            return "R\(roundNumber) bids \(bidStr) · \(trickBar) · \(scoreBar) · \(bagBar)\(nilWarn)"
         case .gameOver:
             return resultText ?? "Game over"
         }
@@ -180,12 +271,39 @@ struct SpadesGame: GameEngine {
 
     var resultText: String? {
         guard isOver else { return nil }
-        let winner = teamScores[0] >= teamScores[1] ? 0 : 1
-        return "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner])"
+        let winner = teamScores[0] > teamScores[1] ? 0 : (teamScores[1] > teamScores[0] ? 1 : -1)
+        if winner == -1 { return "Draw — \(teamScores[0]) each" }
+        var text = "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner]) in \(roundNumber) round\(roundNumber == 1 ? "" : "s")"
+        let totalBostons = bostonCount[0] + bostonCount[1]
+        if totalBostons > 0 {
+            let detail = (0...1).compactMap { bostonCount[$0] > 0 ? "\(teamLabel($0))×\(bostonCount[$0])" : nil }
+            text += " · 🏆 Boston \(detail.joined(separator: " "))"
+        }
+        let totalNils = nilsMade[0] + nilsMade[1]
+        if totalNils > 0 { text += " · 🎯 \(totalNils) nil made" }
+        if biggestSwing >= 100 { text += " · ⚡ \(teamLabel(biggestSwingTeam)) \(biggestSwing)pt swing" }
+        let totalSlams = nilSlams[0] + nilSlams[1]
+        if totalSlams > 0 { text += " · 💎 \(totalSlams) nil slam\(totalSlams == 1 ? "" : "s")" }
+        let totalPerfect = perfectBids[0] + perfectBids[1]
+        if totalPerfect > 0 { text += " · 🎯 \(totalPerfect) exact bid\(totalPerfect == 1 ? "" : "s")" }
+        if let baggiest = (0..<4).max(by: { seatBags[$0] < seatBags[$1] }), seatBags[baggiest] >= 5 {
+            text += " · 🛍️ S\(baggiest + 1) \(seatBags[baggiest]) bags"
+        }
+        if sandbagsWarned { text += " · ⚠️ Bag crisis!" }
+        // Average tricks per round per team
+        for team in 0...1 {
+            let rounds = teamTricksWonPerRound[team]
+            if rounds.count >= 3 {
+                let avg = Double(rounds.reduce(0, +)) / Double(rounds.count)
+                text += " · \(teamLabel(team)) avg \(String(format: "%.1f", avg)) tricks/rd"
+            }
+        }
+        return text
     }
 
     func ranking() -> [[Int]] {
         guard isOver else { return [] }
+        if teamScores[0] == teamScores[1] { return [[0, 1, 2, 3]] }
         let winner = teamScores[0] >= teamScores[1] ? 0 : 1
         return [[winner, winner + 2], [1 - winner, 3 - winner]]
     }

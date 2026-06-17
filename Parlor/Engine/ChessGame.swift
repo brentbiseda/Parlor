@@ -40,6 +40,17 @@ struct ChessGame: GameEngine {
     var moveNumber = 1
     var resigned: Int? = nil
     var lastMove: BoardMove? = nil
+    /// Captures per color (for resultText stats).
+    var captureCount = [0, 0]
+    /// Pawn promotions per color.
+    var promotionCount = [0, 0]
+    /// Checks delivered per color.
+    var checksDelivered = [0, 0]
+    /// Peak material advantage either side ever held (points, with the color).
+    var peakLead = 0
+    var peakLeadColor = 0
+    /// Whether each player castled during the game.
+    var castled = [false, false]
 
     init() {
         let back: [ChessPieceKind] = [.rook, .knight, .bishop, .queen, .king, .bishop, .knight, .rook]
@@ -223,9 +234,12 @@ struct ChessGame: GameEngine {
                 self[Point(x: 3, y: rank)] = self[Point(x: 0, y: rank)]
                 self[Point(x: 0, y: rank)] = nil
             }
+            castled[color] = true
         }
 
         let captured = self[move.to] != nil
+        if captured { captureCount[color] += 1 }
+        if move.promotion != nil { promotionCount[color] += 1 }
         self[move.to] = move.promotion.map { ChessPiece(color: color, kind: $0) } ?? piece
         self[move.from] = nil
 
@@ -246,6 +260,9 @@ struct ChessGame: GameEngine {
         }
 
         halfmoveClock = (piece.kind == .pawn || captured) ? 0 : halfmoveClock + 1
+        if inCheck(1 - color) { checksDelivered[color] += 1 }
+        let lead = materialDiff()
+        if abs(lead) > peakLead { peakLead = abs(lead); peakLeadColor = lead > 0 ? 0 : 1 }
     }
 
     var isOver: Bool {
@@ -283,21 +300,46 @@ struct ChessGame: GameEngine {
 
     func colorName(_ color: Int) -> String { color == 0 ? "White" : "Black" }
 
+    func pieceValue(_ kind: ChessPieceKind) -> Int {
+        switch kind { case .queen: return 9; case .rook: return 5; case .bishop, .knight: return 3; case .pawn: return 1; default: return 0 }
+    }
+
+    func materialDiff() -> Int {
+        board.compactMap { $0 }.reduce(0) { acc, p in
+            acc + (p.color == 0 ? 1 : -1) * pieceValue(p.kind)
+        }
+    }
+
     var statusText: String {
         if let text = resultText { return text }
         let check = inCheck(currentPlayer) ? " — check!" : ""
-        return "Move \(moveNumber): \(colorName(currentPlayer)) to play\(check)"
+        let diff = materialDiff()
+        var matStr = diff > 0 ? " · W+\(diff)" : (diff < 0 ? " · B+\(-diff)" : "")
+        if abs(diff) >= 5 { matStr += " 👑" }
+        else if abs(diff) >= 3 { matStr += " ↑" }
+        let fiftyNote = halfmoveClock >= 80 ? " · ⚠️ 50-move rule \(halfmoveClock / 2)/50" : ""
+        return "Move \(moveNumber): \(colorName(currentPlayer)) to play\(check)\(matStr)\(fiftyNote)"
     }
 
     var resultText: String? {
-        if let resigned { return "\(colorName(resigned)) resigned — \(colorName(1 - resigned)) wins" }
+        if let resigned { return "\(colorName(resigned)) resigned — \(colorName(1 - resigned)) wins after \(moveNumber - 1) moves" }
         if legalBoardMoves(for: currentPlayer).isEmpty {
+            let captures = captureCount[0] + captureCount[1]
+            let promos = promotionCount[0] + promotionCount[1]
+            let totalChecks = checksDelivered[0] + checksDelivered[1]
+            var extras = captures > 0 ? " · \(captures) captures" : ""
+            if promos > 0 { extras += " · \(promos) promo\(promos == 1 ? "" : "s")" }
+            if totalChecks > 0 { extras += " · \(totalChecks) check\(totalChecks == 1 ? "" : "s")" }
+            if peakLead >= 5 { extras += " · 👑 \(colorName(peakLeadColor)) peaked +\(peakLead)" }
+            let castleNote = castled.enumerated().compactMap { idx, did in did ? "\(colorName(idx)) O-O" : nil }.joined(separator: " · ")
+            if !castleNote.isEmpty { extras += " · \(castleNote)" }
             if inCheck(currentPlayer) {
-                return "Checkmate — \(colorName(1 - currentPlayer)) wins"
+                if moveNumber <= 10 { extras += " · ⚡ quick mate!" }
+                return "Checkmate — \(colorName(1 - currentPlayer)) wins (move \(moveNumber))\(extras)"
             }
-            return "Stalemate — draw"
+            return "Stalemate — draw (move \(moveNumber))\(extras)"
         }
-        if isDraw { return "Draw" }
+        if isDraw { return "Draw — \(halfmoveClock >= 100 ? "50-move rule" : "insufficient material")" }
         return nil
     }
 

@@ -24,9 +24,15 @@ struct GameStats: Codable {
 
     var summary: String? {
         guard played > 0 else { return nil }
-        var text = "\(played) played · \(wins) won"
-        if streak >= 2 { text += " · 🔥\(streak)" }
+        let losses = played - wins
+        var text = "\(wins)W \(losses)L"
+        if streak >= 3 { text += " · 🔥\(streak)" }
         return text
+    }
+
+    var winRate: Double? {
+        guard played > 0 else { return nil }
+        return Double(wins) / Double(played)
     }
 }
 

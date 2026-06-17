@@ -1,14 +1,32 @@
 import Foundation
 
-/// Klondike solitaire. Draw one or three, unlimited stock passes.
+/// Klondike solitaire. Draw one or three, limited or unlimited stock passes.
 /// Foundations build up by suit from ace; tableau builds down alternating color.
+/// Undo is supported for up to 50 moves; each move snapshots the mutable state.
 struct KlondikeGame: GameEngine {
     static let kind = GameKind.solitaire
+    static let maxUndoDepth = 50
 
     struct TableauPile: Codable, Hashable {
         var faceDown: [Card] = []
         var faceUp: [Card] = []
     }
+
+    // MARK: - Undo snapshot
+
+    private struct Snapshot: Codable {
+        var tableau: [TableauPile]
+        var stock: [Card]
+        var waste: [Card]
+        var foundations: [[Card]]
+        var passesUsed: Int
+        var moveCount: Int
+        var foundationStreak: Int
+        var bestFoundationStreak: Int
+        var stockResets: Int
+    }
+
+    // MARK: - State
 
     var tableau: [TableauPile] = []
     var stock: [Card] = []
@@ -18,9 +36,18 @@ struct KlondikeGame: GameEngine {
     var drawThree: Bool
     /// Times allowed through the stock; 0 = unlimited.
     var maxPasses: Int = 0
-    /// Completed trips through the stock (the deal itself is pass 1).
+    /// Completed trips through the stock (initial deal counts as pass 1).
     var passesUsed: Int = 1
     var moveCount = 0
+    /// Consecutive moves that sent a card straight to a foundation (resets on any other move).
+    var foundationStreak = 0
+    var bestFoundationStreak = 0
+    /// Times the waste was recycled into the stock (0 = clean solve).
+    var stockResets = 0
+    /// Times the player used undo.
+    var undoCount = 0
+
+    private var history: [Snapshot] = []
 
     init(drawThree: Bool = false, maxPasses: Int = 0) {
         self.drawThree = drawThree
@@ -38,6 +65,7 @@ struct KlondikeGame: GameEngine {
 
     var currentPlayer: Int { 0 }
     var isOver: Bool { foundations.allSatisfy { $0.count == 13 } }
+    var canUndo: Bool { !history.isEmpty }
 
     func foundationIndex(for suit: Suit) -> Int {
         Suit.allCases.firstIndex(of: suit)!
@@ -56,10 +84,11 @@ struct KlondikeGame: GameEngine {
         return tableau[column].faceDown.isEmpty && card.rank == .king
     }
 
-    /// Whether the stock may be flipped back over for another pass.
     var canResetStock: Bool {
         stock.isEmpty && !waste.isEmpty && (maxPasses == 0 || passesUsed < maxPasses)
     }
+
+    // MARK: - Moves
 
     func legalMoves() -> [Move] {
         var moves: [Move] = []
@@ -81,6 +110,9 @@ struct KlondikeGame: GameEngine {
             }
             for index in ups.indices {
                 for dest in 0..<7 where dest != col && canPlaceOnTableau(ups[index], column: dest) {
+                    // Skip futile moves: relocating a full king-run from one
+                    // empty-backed column to another empty column gains nothing.
+                    if index == 0, tableau[col].faceDown.isEmpty, tableau[dest].faceUp.isEmpty { continue }
                     moves.append(.klondike(.tableauToTableau(from: col, index: index, to: dest)))
                 }
             }
@@ -97,42 +129,66 @@ struct KlondikeGame: GameEngine {
 
     mutating func apply(_ move: Move) throws {
         guard case .klondike(let m) = move else { throw GameError.illegalMove }
+        saveSnapshot()
         switch m {
         case .draw:
-            guard !stock.isEmpty else { throw GameError.illegalMove }
+            guard !stock.isEmpty else { rollback(); throw GameError.illegalMove }
             let n = drawThree ? min(3, stock.count) : 1
             for _ in 0..<n { waste.append(stock.removeLast()) }
         case .resetStock:
-            guard canResetStock else { throw GameError.illegalMove }
+            guard canResetStock else { rollback(); throw GameError.illegalMove }
             stock = waste.reversed()
             waste = []
             passesUsed += 1
+            stockResets += 1
         case .wasteToFoundation:
-            guard let top = waste.last, canPlaceOnFoundation(top) else { throw GameError.illegalMove }
+            guard let top = waste.last, canPlaceOnFoundation(top) else { rollback(); throw GameError.illegalMove }
             waste.removeLast()
             foundations[foundationIndex(for: top.suit)].append(top)
         case .wasteToTableau(let col):
-            guard let top = waste.last, canPlaceOnTableau(top, column: col) else { throw GameError.illegalMove }
+            guard let top = waste.last, canPlaceOnTableau(top, column: col) else { rollback(); throw GameError.illegalMove }
             waste.removeLast()
             tableau[col].faceUp.append(top)
         case .tableauToFoundation(let col):
-            guard let top = tableau[col].faceUp.last, canPlaceOnFoundation(top) else { throw GameError.illegalMove }
+            guard let top = tableau[col].faceUp.last, canPlaceOnFoundation(top) else { rollback(); throw GameError.illegalMove }
             tableau[col].faceUp.removeLast()
             foundations[foundationIndex(for: top.suit)].append(top)
             flipIfNeeded(col)
         case .tableauToTableau(let from, let index, let to):
             guard from != to, tableau[from].faceUp.indices.contains(index),
-                  canPlaceOnTableau(tableau[from].faceUp[index], column: to) else { throw GameError.illegalMove }
+                  canPlaceOnTableau(tableau[from].faceUp[index], column: to) else { rollback(); throw GameError.illegalMove }
             let run = Array(tableau[from].faceUp[index...])
             tableau[from].faceUp.removeSubrange(index...)
             tableau[to].faceUp.append(contentsOf: run)
             flipIfNeeded(from)
         case .foundationToTableau(let f, let to):
-            guard let top = foundations[f].last, canPlaceOnTableau(top, column: to) else { throw GameError.illegalMove }
+            guard let top = foundations[f].last, canPlaceOnTableau(top, column: to) else { rollback(); throw GameError.illegalMove }
             foundations[f].removeLast()
             tableau[to].faceUp.append(top)
         }
         moveCount += 1
+        switch m {
+        case .wasteToFoundation, .tableauToFoundation:
+            foundationStreak += 1
+            bestFoundationStreak = max(bestFoundationStreak, foundationStreak)
+        default:
+            foundationStreak = 0
+        }
+    }
+
+    /// Revert the last move (does nothing if history is empty).
+    mutating func undo() {
+        guard let snap = history.popLast() else { return }
+        tableau = snap.tableau
+        stock = snap.stock
+        waste = snap.waste
+        foundations = snap.foundations
+        passesUsed = snap.passesUsed
+        moveCount = snap.moveCount
+        foundationStreak = snap.foundationStreak
+        bestFoundationStreak = snap.bestFoundationStreak
+        stockResets = snap.stockResets
+        undoCount += 1
     }
 
     /// Klondike moves are validated structurally in `apply`, not by enumeration.
@@ -147,14 +203,65 @@ struct KlondikeGame: GameEngine {
         }
     }
 
+    // MARK: - Private
+
+    private mutating func saveSnapshot() {
+        if history.count >= Self.maxUndoDepth { history.removeFirst() }
+        history.append(Snapshot(tableau: tableau, stock: stock, waste: waste,
+                                foundations: foundations,
+                                passesUsed: passesUsed, moveCount: moveCount,
+                                foundationStreak: foundationStreak, bestFoundationStreak: bestFoundationStreak,
+                                stockResets: stockResets))
+    }
+
+    private mutating func rollback() {
+        guard let snap = history.popLast() else { return }
+        tableau = snap.tableau; stock = snap.stock; waste = snap.waste
+        foundations = snap.foundations; passesUsed = snap.passesUsed; moveCount = snap.moveCount
+        foundationStreak = snap.foundationStreak; bestFoundationStreak = snap.bestFoundationStreak
+        stockResets = snap.stockResets
+    }
+
+    // MARK: - Status
+
     var statusText: String {
         let done = foundations.reduce(0) { $0 + $1.count }
-        var text = "Foundations \(done)/52 · \(moveCount) moves"
-        if maxPasses > 0 { text += " · pass \(min(passesUsed, maxPasses))/\(maxPasses)" }
+        let faceDownCount = tableau.reduce(0) { $0 + $1.faceDown.count }
+        let faceDownStr = faceDownCount > 0 ? " · \(faceDownCount) face-down" : ""
+        var text = "Foundations \(done)/52\(faceDownStr) · \(moveCount) moves"
+        if stockResets > 0 {
+            let passLabel = maxPasses > 0 ? "Pass \(passesUsed)/\(maxPasses)" : "Pass \(passesUsed)"
+            text += " · \(passLabel)"
+        } else {
+            text += maxPasses > 0 ? " · pass \(passesUsed)/\(maxPasses)" : ""
+        }
+        if maxPasses > 0 && passesUsed >= maxPasses && !stock.isEmpty {
+            text += " ⚠️ last pass"
+        }
+        if done >= 48 { text += " · 🏁 almost there!" }
+        if foundationStreak >= 3 { text += " · 🔥 streak \(foundationStreak)" }
+        if stockResets == 0 && passesUsed == 1 && done >= 13 { text += " · ✨ clean so far" }
+        // No productive moves and the stock can't help: warn the player.
+        if legalMoves().allSatisfy({ if case .klondike(.draw) = $0 { return true }; if case .klondike(.resetStock) = $0 { return true }; return false }),
+           stock.isEmpty && !canResetStock, faceDownCount > 0 {
+            text += " · 🚫 no moves left"
+        }
         return text
     }
 
     var resultText: String? {
-        isOver ? "Solved in \(moveCount) moves!" : nil
+        guard isOver else { return nil }
+        var text = "Solved in \(moveCount) moves!"
+        if stockResets == 0 { text += " · ✨ Clean solve — no recycle!" }
+        if bestFoundationStreak >= 3 { text += " · 🔥 \(bestFoundationStreak)-card foundation streak" }
+        if moveCount > 52 {
+            let efficiency = Int(Double(52) / Double(moveCount) * 100)
+            text += " · \(efficiency)% efficient"
+        } else if moveCount > 0 {
+            text += " · perfect efficiency!"
+        }
+        if undoCount == 0 { text += " · 🏆 no undos!" }
+        else if undoCount > 0 { text += " · used \(undoCount) undo\(undoCount == 1 ? "" : "s")" }
+        return text
     }
 }

@@ -12,6 +12,7 @@ struct FreeCellView: View {
 
     @State private var selection: Selection? = nil
     @State private var autoFinishing = false
+    @State private var autoFinishPulse = false
 
     var game: FreeCellGame? { session.game?.engine as? FreeCellGame }
 
@@ -60,17 +61,38 @@ struct FreeCellView: View {
                 }
                 .padding(6)
                 .overlay(alignment: .bottom) {
-                    if canAutoFinish && !autoFinishing {
-                        Button {
-                            autoFinish()
-                        } label: {
-                            Label("Auto-finish", systemImage: "wand.and.stars")
-                                .font(.headline)
+                    HStack(spacing: 12) {
+                        if session.canUndo {
+                            Button { session.undo() } label: {
+                                Label("Undo", systemImage: "arrow.uturn.backward")
+                                    .font(.headline)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.secondary)
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(.orange)
-                        .padding(.bottom, 24)
+                        if game.moveCount > 0 {
+                            Text("Move \(game.moveCount)")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        if canAutoFinish && !autoFinishing {
+                            Button { autoFinish() } label: {
+                                Label("Auto-finish", systemImage: "wand.and.stars")
+                                    .font(.headline)
+                            }
+                            .buttonStyle(.borderedProminent)
+                            .tint(.orange)
+                            .scaleEffect(autoFinishPulse ? 1.06 : 1.0)
+                            .shadow(color: .orange.opacity(autoFinishPulse ? 0.6 : 0.2), radius: autoFinishPulse ? 12 : 4)
+                            .onAppear {
+                                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                    autoFinishPulse = true
+                                }
+                            }
+                            .onDisappear { autoFinishPulse = false }
+                        }
                     }
+                    .padding(.bottom, 24)
                 }
             }
         }
@@ -83,17 +105,30 @@ struct FreeCellView: View {
 
     func topRow(_ game: FreeCellGame, cardWidth: CGFloat) -> some View {
         HStack(spacing: 6) {
-            // Free cells
-            ForEach(0..<4, id: \.self) { cell in
-                Group {
-                    if let card = game.freeCells[cell] {
-                        CardView(card: card, width: cardWidth)
-                            .overlay(selectionHighlight(selection == .free(cell), width: cardWidth))
-                    } else {
-                        CardSlotView(width: cardWidth, label: "·")
+            // Free cells with usage indicator
+            VStack(alignment: .leading, spacing: 2) {
+                let filledCells = game.freeCells.compactMap { $0 }.count
+                if filledCells > 0 {
+                    Text("\(filledCells)/4 cells")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(filledCells >= 3 ? .red.opacity(0.9) : .white.opacity(0.7))
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(filledCells >= 3 ? Color.red.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
+                }
+                HStack(spacing: 6) {
+                    ForEach(0..<4, id: \.self) { cell in
+                        Group {
+                            if let card = game.freeCells[cell] {
+                                CardView(card: card, width: cardWidth)
+                                    .overlay(selectionHighlight(selection == .free(cell), width: cardWidth))
+                            } else {
+                                CardSlotView(width: cardWidth, label: "·")
+                            }
+                        }
+                        .onTapGesture { tapFreeCell(cell, game: game) }
                     }
                 }
-                .onTapGesture { tapFreeCell(cell, game: game) }
             }
 
             Spacer(minLength: 4)

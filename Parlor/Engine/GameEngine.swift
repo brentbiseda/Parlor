@@ -54,9 +54,33 @@ extension GameEngine {
         guard isLegal(move) else { throw GameError.illegalMove }
         try apply(move)
     }
+
+    /// Returns `.success` with the post-move state, or `.failure` with the
+    /// blocking error — without mutating the receiver.
+    func verify(_ move: Move) -> Result<Self, GameError> {
+        var copy = self
+        do {
+            try copy.applyValidated(move)
+            return .success(copy)
+        } catch let e as GameError {
+            return .failure(e)
+        } catch {
+            return .failure(.illegalMove)
+        }
+    }
 }
 
-/// Type-erased wrapper so one Codable payload carries any game across the wire.
+/// Type-erased wrapper so one `Codable` payload carries any `GameEngine`
+/// across the wire (Multipeer, SharePlay, persisted saves).
+///
+/// `AnyGame` manually dispatches Codable encoding/decoding because Swift's
+/// existential `any GameEngine` does not itself conform to `Codable`. Each
+/// supported game kind has a matching `case` in both `init(from:)` and
+/// `encode(to:)`. Adding a new game requires:
+///   1. A `GameEngine`-conforming struct with a unique `GameKind` static.
+///   2. A `case` in `GameKind`.
+///   3. Decode and encode cases here in `AnyGame`.
+///   4. An entry in `redactedEngine(for:)` if the game has hidden cards.
 struct AnyGame: Codable {
     var engine: any GameEngine
 
@@ -69,6 +93,7 @@ struct AnyGame: Codable {
     var statusText: String { engine.statusText }
     var resultText: String? { engine.resultText }
     func legalMoves() -> [Move] { engine.legalMoves() }
+    func isLegal(_ move: Move) -> Bool { engine.isLegal(move) }
     func controller(of seat: Int) -> Int { engine.controller(of: seat) }
     func ranking() -> [[Int]] { engine.ranking() }
     func redacted(for seat: Int) -> AnyGame { AnyGame(redactedEngine(for: seat)) }

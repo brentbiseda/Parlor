@@ -31,6 +31,29 @@ struct HopperGame: GameEngine {
     var ticks = 0
     var highestRow = height - 1   // for forward-progress scoring
     var over = false
+    /// Ticks elapsed since this crossing attempt started (reset on respawn and pad landing).
+    var crossingTicks = 0
+    /// Total successful frog crossings this game (each pad landing counts).
+    var crossings = 0
+    /// Crossings where the frog never died on that approach AND earned a time bonus.
+    var perfectCrossings = 0
+    /// Full levels cleared (all 5 pads filled).
+    var levelsCleared = 0
+    /// Consecutive crossings without losing a life.
+    var crossingStreak = 0
+    var bestCrossingStreak = 0
+    /// Lives at the start of the current crossing approach (reset on respawn/landing).
+    var livesAtCrossingStart = 3
+    /// Fewest ticks taken to complete any crossing this game (0 = none yet).
+    var fastestCrossing = 0
+    /// Total lives lost this game.
+    var livesLost = 0
+    /// Times the frog was hit by traffic.
+    var roadKills: Int = 0
+    /// Times the frog drowned in the river.
+    var drownings: Int = 0
+    /// Max time-bonus ticks budget per crossing (scales with level).
+    static let timeBonusBudget = 200
 
     static let padXs = [1, 4, 6, 8, 11]
 
@@ -114,6 +137,7 @@ struct HopperGame: GameEngine {
 
     private mutating func tick() {
         ticks += 1
+        crossingTicks += 1
         // Shift lanes on their periods; carry the frog with river traffic.
         for row in [1, 2, 3, 4, 5, 7, 8, 9, 10, 11] {
             let isRiver = row <= 5
@@ -146,10 +170,19 @@ struct HopperGame: GameEngine {
             if let pad = Self.padXs.min(by: { abs($0 - frogX) < abs($1 - frogX) }),
                abs(pad - frogX) <= 1, !homePads.contains(pad) {
                 homePads.insert(pad)
-                score += 50
+                crossings += 1
+                if fastestCrossing == 0 || crossingTicks < fastestCrossing { fastestCrossing = crossingTicks }
+                crossingStreak += 1
+                bestCrossingStreak = max(bestCrossingStreak, crossingStreak)
+                // Time bonus: up to 50 pts for fast crossing.
+                let budget = Self.timeBonusBudget
+                let timeBonus = max(0, (budget - crossingTicks) * 50 / budget)
+                score += 50 + timeBonus
+                if timeBonus > 0 && lives == livesAtCrossingStart { perfectCrossings += 1 }
                 if homePads.count == Self.padXs.count {
+                    levelsCleared += 1
                     level += 1
-                    score += 250
+                    score += 250 + 50 * level  // escalating level-clear bonus
                     homePads = []
                     buildLanes()
                 }
@@ -167,6 +200,13 @@ struct HopperGame: GameEngine {
     }
 
     private mutating func loseLife() {
+        crossingStreak = 0
+        if (1...5).contains(frogY) {
+            drownings += 1
+        } else {
+            roadKills += 1
+        }
+        livesLost += 1
         lives -= 1
         if lives <= 0 {
             over = true
@@ -179,14 +219,35 @@ struct HopperGame: GameEngine {
         frogX = Self.width / 2
         frogY = Self.height - 1
         highestRow = Self.height - 1
+        crossingTicks = 0
+        livesAtCrossingStart = lives
     }
 
     var statusText: String {
-        "Score \(score) · Pads \(homePads.count)/5 · Level \(level) · " +
-        String(repeating: "●", count: max(lives, 0))
+        let timeLeft = max(0, Self.timeBonusBudget - crossingTicks)
+        let timerStr = timeLeft > 0 ? " · ⏱\(timeLeft)" : ""
+        let padsLeft = Self.padXs.count - homePads.count
+        let streakStr = crossingStreak >= 3 ? " · 🔥\(crossingStreak)" : ""
+        return "Score \(score) · Pads \(padsLeft) left · Lv\(level)\(timerStr)\(streakStr) · " +
+               String(repeating: "●", count: max(lives, 0))
     }
 
     var resultText: String? {
-        over ? "Game over — \(score) points · level \(level)" : nil
+        guard over else { return nil }
+        var parts = ["Game over — \(score) pts", "level \(level)"]
+        if levelsCleared > 0 { parts.append("\(levelsCleared) level\(levelsCleared == 1 ? "" : "s") cleared") }
+        if crossings > 0 { parts.append("\(crossings) crossing\(crossings == 1 ? "" : "s")") }
+        if perfectCrossings > 0 { parts.append("⭐ \(perfectCrossings) perfect") }
+        if bestCrossingStreak >= 3 { parts.append("🔥 \(bestCrossingStreak)-crossing streak") }
+        if fastestCrossing > 0 { parts.append("⚡ fastest \(fastestCrossing) ticks") }
+        if livesLost == 0 { parts.append("🛡️ flawless!") }
+        else {
+            parts.append("\(livesLost) life\(livesLost == 1 ? "" : "s") lost")
+            if roadKills > 0 || drownings > 0 {
+                parts.append("\(roadKills) flattened, \(drownings) drowned")
+            }
+        }
+        if ticks > 0 { parts.append("\(ticks) ticks survived") }
+        return parts.joined(separator: " · ")
     }
 }

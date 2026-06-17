@@ -112,7 +112,7 @@ final class SmokeTests: XCTestCase {
             var game = MinesweeperGame()
             try? game.applyValidated(.minesweeper(.reveal(x: 4, y: 5)))
             XCTAssertFalse(game.lost, "first reveal must never be a mine")
-            XCTAssertEqual(game.mines.count, MinesweeperGame.mineCount)
+            XCTAssertEqual(game.mines.count, game.difficulty.mines)
         }
     }
 
@@ -120,16 +120,16 @@ final class SmokeTests: XCTestCase {
         var game = MinesweeperGame()
         // Construct a known field: one mine next to a revealed "1".
         game.minesPlaced = true
-        game.mines = [MinesweeperGame.index(0, 0)]
+        game.mines = [game.index(0, 0)]
         try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1)))   // shows "1"
-        XCTAssertEqual(game.adjacentMines(MinesweeperGame.index(1, 1)), 1)
+        XCTAssertEqual(game.adjacentMines(game.index(1, 1)), 1)
         // Unsatisfied chord (no flags) must be rejected.
         XCTAssertThrowsError(try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1))))
         // Flag the mine, chord again: the rest of the neighborhood opens.
         try game.applyValidated(.minesweeper(.flag(x: 0, y: 0)))
         try game.applyValidated(.minesweeper(.reveal(x: 1, y: 1)))
-        XCTAssertTrue(game.revealed.contains(MinesweeperGame.index(1, 0)))
-        XCTAssertTrue(game.revealed.contains(MinesweeperGame.index(0, 1)))
+        XCTAssertTrue(game.revealed.contains(game.index(1, 0)))
+        XCTAssertTrue(game.revealed.contains(game.index(0, 1)))
         XCTAssertFalse(game.lost)
     }
 
@@ -235,8 +235,9 @@ final class SmokeTests: XCTestCase {
         for _ in 0..<BreakoutGame.livesPerGame { try? game.applyValidated(.breakout(.ballLost)) }
         XCTAssertTrue(game.isOver)
         let breakout = game.engine as! BreakoutGame
-        XCTAssertEqual(breakout.score, 650)   // 150 + 500 level bonus
+        XCTAssertEqual(breakout.score, 900)   // 150 + 500 level bonus + 250 perfect-level (no ball lost)
         XCTAssertEqual(breakout.level, 2)
+        XCTAssertEqual(breakout.perfectLevels, 1)
         XCTAssertThrowsError(try game.applyValidated(.breakout(.score(10))))
     }
 
@@ -414,6 +415,34 @@ final class SmokeTests: XCTestCase {
         XCTAssertEqual(decoded.players, players)
         XCTAssertEqual(decoded.match, match)
         XCTAssertFalse(decoded.game.isOver)
+    }
+
+    func testFreeCellSupermoveLimits() throws {
+        var game = FreeCellGame()
+        // 4 free cells empty, 0 empty cascades → limit = (1+4)*1 = 5
+        game.freeCells = [nil, nil, nil, nil]
+        // Build a 6-card alternating-color run in cascade 0, 3-card run in cascade 1.
+        let runCards: [Card] = [
+            Card(suit: .spades, rank: .king),  Card(suit: .hearts, rank: .queen),
+            Card(suit: .clubs, rank: .jack),   Card(suit: .diamonds, rank: .ten),
+            Card(suit: .spades, rank: .nine),  Card(suit: .hearts, rank: .eight)
+        ]
+        game.cascades[0] = runCards
+        game.cascades[1] = [Card(suit: .diamonds, rank: .seven)]
+        game.cascades[2] = []
+
+        // limit onto non-empty cascade (dest 1): (1+4)*2^0 = 5 (cascade 2 is empty → emptyCascadeCount=1)
+        let limitNonEmpty = game.maxRunLength(toEmptyCascade: false)
+        XCTAssertEqual(limitNonEmpty, 10, "supermove limit should be (1+4)*2^1=10 with one empty cascade")
+        // Moving onto cascade 1 (non-empty): head = nine of spades fits on ten of diamonds? No — needs alternating color.
+        // Moving 1 card (eight of hearts) onto seven of... no, seven is diamonds (red), eight is hearts (red): same color — illegal.
+        // The exact cards aren't critical; what we're verifying is the formula value.
+        XCTAssertGreaterThanOrEqual(limitNonEmpty, 1)
+
+        // limit onto empty cascade: subtract 1 empty → (1+4)*2^0 = 5
+        let limitToEmpty = game.maxRunLength(toEmptyCascade: true)
+        XCTAssertEqual(limitToEmpty, 5, "supermove to empty cascade removes one empty from the exponent")
+        XCTAssertLessThan(limitToEmpty, limitNonEmpty)
     }
 
     func testPartnershipKnockoutKeepsPairsTogether() {

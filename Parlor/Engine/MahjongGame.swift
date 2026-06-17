@@ -52,6 +52,15 @@ struct MahjongGame: GameEngine {
     var tiles: [Tile] = []
     var matchedPairs = 0
     var shufflesUsed = 0
+    /// Most free-pair matches available at any single moment (skill indicator — higher = better openings).
+    var peakAvailableMatches = 0
+    /// Number of times the player hit a stuck position and needed to shuffle.
+    var stuckCount = 0
+    /// Consecutive matches made without a shuffle (resets on shuffle).
+    var currentMatchRun = 0
+    var longestMatchRun = 0
+    /// Times the player was down to a single available match (clutch moment).
+    var clutchMoments = 0
 
     init() {
         let positions = MahjongGame.turtleLayout()
@@ -150,13 +159,24 @@ struct MahjongGame: GameEngine {
                 tiles[idx].removed = true
             }
             matchedPairs += 1
+            currentMatchRun += 1
+            longestMatchRun = max(longestMatchRun, currentMatchRun)
+            let available = availableMatches().count
+            peakAvailableMatches = max(peakAvailableMatches, available)
+            if available == 1 && !isOver { clutchMoments += 1 }
         case .shuffleRemaining:
-            var faces = tiles.filter { !$0.removed }.map(\.face)
-            faces.shuffle()
-            for idx in tiles.indices where !tiles[idx].removed {
-                tiles[idx].face = faces.removeLast()
+            let activeIndices = tiles.indices.filter { !tiles[$0].removed }
+            let originalFaces = activeIndices.map { tiles[$0].face }
+            // Retry the shuffle a few times until a playable position appears.
+            for attempt in 0..<24 {
+                var faces = originalFaces
+                faces.shuffle()
+                for (i, idx) in activeIndices.enumerated() { tiles[idx].face = faces[i] }
+                if !availableMatches().isEmpty || attempt == 23 { break }
             }
             shufflesUsed += 1
+            stuckCount += 1
+            currentMatchRun = 0
         default:
             throw GameError.illegalMove
         }
@@ -170,11 +190,26 @@ struct MahjongGame: GameEngine {
     }
 
     var statusText: String {
-        if isStuck { return "No matches left — shuffle the remaining tiles" }
-        return "\(remainingCount) tiles · \(availableMatches().count) matches available"
+        if isStuck { return "No matches left — shuffle the remaining tiles\(shufflesUsed > 0 ? " (used \(shufflesUsed))" : "")" }
+        let total = 72
+        let pct = matchedPairs * 100 / total
+        let available = availableMatches().count
+        var tail = ""
+        if available == 1 { tail = " · ⚠️ only 1 move!" }
+        else if remainingCount <= 8 { tail = " · 🏁 final stretch" }
+        let shuffleStr = shufflesUsed > 0 ? " · 🔀 \(shufflesUsed) shuffle\(shufflesUsed == 1 ? "" : "s")" : ""
+        return "\(remainingCount) tiles (\(pct)%) · \(matchedPairs) matches made\(shuffleStr) · \(available) pairs open\(tail)"
     }
 
     var resultText: String? {
-        isOver ? "Cleared the board" + (shufflesUsed > 0 ? " (\(shufflesUsed) shuffles)" : "!") : nil
+        guard isOver else { return nil }
+        var text = "Cleared all 72 pairs"
+        if shufflesUsed > 0 { text += " (\(shufflesUsed) shuffle\(shufflesUsed == 1 ? "" : "s"))" }
+        text += "!"
+        if peakAvailableMatches >= 10 { text += " · Peak \(peakAvailableMatches) pairs open 🏆" }
+        if stuckCount == 0 { text += " · 🏆 No shuffles needed!" }
+        else if longestMatchRun >= 20 { text += " · 🔥 \(longestMatchRun)-match run" }
+        if clutchMoments > 0 { text += " · 😰 \(clutchMoments) clutch escape\(clutchMoments == 1 ? "" : "s")" }
+        return text
     }
 }

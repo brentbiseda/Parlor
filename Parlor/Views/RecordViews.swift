@@ -54,13 +54,30 @@ struct LeaderboardsView: View {
     @ViewBuilder
     private func medal(for index: Int) -> some View {
         switch index {
-        case 0: Image(systemName: "medal.fill").font(.title3).foregroundStyle(.yellow)
-        case 1: Image(systemName: "medal.fill").font(.title3).foregroundStyle(.gray)
-        case 2: Image(systemName: "medal.fill").font(.title3).foregroundStyle(Color(red: 0.72, green: 0.45, blue: 0.2))
+        case 0:
+            ZStack {
+                Circle().strokeBorder(Color(red: 1.0, green: 0.84, blue: 0.0), lineWidth: 2)
+                    .frame(width: 30, height: 30)
+                Image(systemName: "medal.fill").font(.system(size: 16)).foregroundStyle(.yellow)
+            }
+        case 1:
+            ZStack {
+                Circle().strokeBorder(Color(white: 0.7), lineWidth: 2)
+                    .frame(width: 30, height: 30)
+                Image(systemName: "medal.fill").font(.system(size: 16)).foregroundStyle(.gray)
+            }
+        case 2:
+            ZStack {
+                Circle().strokeBorder(Color(red: 0.72, green: 0.45, blue: 0.2), lineWidth: 2)
+                    .frame(width: 30, height: 30)
+                Image(systemName: "medal.fill").font(.system(size: 16))
+                    .foregroundStyle(Color(red: 0.72, green: 0.45, blue: 0.2))
+            }
         default:
             Text("\(index + 1)")
                 .font(.subheadline.weight(.semibold))
                 .foregroundStyle(.secondary)
+                .frame(width: 30, alignment: .center)
         }
     }
 }
@@ -92,30 +109,54 @@ struct RankingsView: View {
                                            description: Text("Finish a game of \(kind.title) — every player at the table gets a rating."))
                 }
                 ForEach(Array(table.enumerated()), id: \.element.profile.id) { index, row in
-                    HStack(spacing: 12) {
-                        Text("\(index + 1)")
-                            .font(.subheadline.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .frame(width: 24, alignment: .trailing)
-                        AvatarView(profile: row.profile, size: 34)
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 5) {
-                                Text(row.profile.name)
-                                    .font(.subheadline.weight(.semibold))
-                                if index == 0 {
-                                    Image(systemName: "crown.fill")
-                                        .font(.caption)
-                                        .foregroundStyle(.yellow)
+                    let total = row.rating.played
+                    let wins = row.rating.wins
+                    let winRate = total > 0 ? Double(wins) / Double(total) : 0
+                    let rateColor: Color = winRate >= 0.56 ? Color(red: 0.3, green: 0.85, blue: 0.45)
+                                        : winRate >= 0.35 ? Color(red: 0.95, green: 0.78, blue: 0.2)
+                                        : Color(red: 0.9, green: 0.4, blue: 0.35)
+                    VStack(spacing: 4) {
+                        HStack(spacing: 12) {
+                            Text("\(index + 1)")
+                                .font(.subheadline.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .frame(width: 24, alignment: .trailing)
+                            AvatarView(profile: row.profile, size: 34)
+                            VStack(alignment: .leading, spacing: 2) {
+                                HStack(spacing: 5) {
+                                    Text(row.profile.name)
+                                        .font(.subheadline.weight(.semibold))
+                                    if index == 0 {
+                                        Image(systemName: "crown.fill")
+                                            .font(.caption)
+                                            .foregroundStyle(.yellow)
+                                    }
+                                }
+                                Text("\(row.rating.played) played · \(row.rating.record)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            VStack(alignment: .trailing, spacing: 1) {
+                                Text("\(Int(row.rating.elo.rounded()))")
+                                    .font(.title3.weight(.bold))
+                                    .monospacedDigit()
+                                Text(total > 0 ? "\(Int(winRate * 100))%" : "—")
+                                    .font(.caption2.weight(.semibold))
+                                    .foregroundStyle(total > 0 ? rateColor : .secondary)
+                            }
+                        }
+                        if total > 0 {
+                            GeometryReader { geo in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.secondary.opacity(0.18))
+                                    Capsule().fill(rateColor.opacity(0.75))
+                                        .frame(width: geo.size.width * winRate)
                                 }
                             }
-                            Text("\(row.rating.played) played · \(row.rating.record)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
+                            .frame(height: 3)
+                            .padding(.leading, 60)
                         }
-                        Spacer()
-                        Text("\(Int(row.rating.elo.rounded()))")
-                            .font(.title3.weight(.bold))
-                            .monospacedDigit()
                     }
                     .padding(.vertical, 2)
                 }

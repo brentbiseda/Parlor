@@ -9,8 +9,17 @@ struct MinesweeperView: View {
 
     var game: MinesweeperGame? { session.game?.engine as? MinesweeperGame }
 
+    // Tuned for readability on the light cell background.
     private let numberColors: [Color] = [
-        .clear, .blue, .green, .red, .purple, .orange, .cyan, .pink, .black,
+        .clear,
+        Color(red: 0.10, green: 0.18, blue: 0.85),   // 1 — blue
+        Color(red: 0.05, green: 0.58, blue: 0.18),   // 2 — green
+        Color(red: 0.82, green: 0.10, blue: 0.10),   // 3 — red
+        Color(red: 0.48, green: 0.05, blue: 0.65),   // 4 — purple
+        Color(red: 0.72, green: 0.10, blue: 0.10),   // 5 — maroon
+        Color(red: 0.05, green: 0.58, blue: 0.72),   // 6 — teal
+        Color(red: 0.08, green: 0.08, blue: 0.08),   // 7 — near-black
+        Color(red: 0.48, green: 0.48, blue: 0.48),   // 8 — gray
     ]
 
     var body: some View {
@@ -19,6 +28,10 @@ struct MinesweeperView: View {
                 timerChip(game)
                 grid(game)
                     .padding(.horizontal, 12)
+
+                if game.won, let elapsed = finalTime {
+                    speedTierBadge(game: game, elapsed: elapsed)
+                }
 
                 Picker("Mode", selection: $flagMode) {
                     Label("Dig", systemImage: "hand.tap.fill").tag(false)
@@ -44,27 +57,79 @@ struct MinesweeperView: View {
         }
     }
 
-    /// Stopwatch from the first dig until the board resolves.
+    func speedTierLabel(game: MinesweeperGame, elapsed: TimeInterval) -> (String, Color)? {
+        if game.difficulty == .easy && elapsed < 30 { return ("⚡ Lightning", .yellow) }
+        if game.difficulty == .easy && elapsed < 60 { return ("🏃 Quick", .green) }
+        if game.difficulty == .medium && elapsed < 90 { return ("🏃 Quick", .green) }
+        return nil
+    }
+
+    @ViewBuilder
+    func speedTierBadge(game: MinesweeperGame, elapsed: TimeInterval) -> some View {
+        if let (label, color) = speedTierLabel(game: game, elapsed: elapsed) {
+            Text(label)
+                .font(.caption.weight(.bold))
+                .foregroundStyle(color)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(color.opacity(0.15), in: Capsule())
+                .overlay(Capsule().strokeBorder(color.opacity(0.5), lineWidth: 1))
+                .transition(.scale.combined(with: .opacity))
+                .animation(.spring(response: 0.35), value: elapsed)
+        }
+    }
+
+    /// Difficulty badge + stopwatch from the first dig until the board resolves.
     func timerChip(_ game: MinesweeperGame) -> some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
             let elapsed = finalTime
                 ?? startedAt.map { timeline.date.timeIntervalSince($0) }
                 ?? 0
-            Label(String(format: "%d:%02d", Int(elapsed) / 60, Int(elapsed) % 60),
-                  systemImage: "stopwatch.fill")
-                .font(.subheadline.weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(.black.opacity(0.35), in: Capsule())
+            HStack(spacing: 10) {
+                // Difficulty badge.
+                Text(game.difficulty.label)
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.7))
+                Divider()
+                    .frame(height: 14)
+                    .overlay(.white.opacity(0.3))
+                // Mine counter: remaining unflagged mines.
+                let minesLeft = max(0, game.difficulty.mines - game.flagCount)
+                HStack(spacing: 3) {
+                    Text("💣")
+                        .font(.caption)
+                    Text("\(minesLeft)")
+                        .font(.subheadline.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(minesLeft == 0 ? Color.yellow : .white)
+                }
+                Divider()
+                    .frame(height: 14)
+                    .overlay(.white.opacity(0.3))
+                // Stopwatch.
+                HStack(spacing: 3) {
+                    Image(systemName: "stopwatch.fill")
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text(String(format: "%d:%02d", Int(elapsed) / 60, Int(elapsed) % 60))
+                        .font(.subheadline.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.35), in: Capsule())
+            .overlay(Capsule().strokeBorder(
+                game.won ? Color.green.opacity(0.5) : (game.lost ? Color.red.opacity(0.5) : .clear),
+                lineWidth: 1.5))
         }
     }
 
     func grid(_ game: MinesweeperGame) -> some View {
         GeometryReader { geo in
-            let cols = MinesweeperGame.width
-            let rows = MinesweeperGame.height
+            let cols = game.difficulty.width
+            let rows = game.difficulty.height
             let cell = min(geo.size.width / CGFloat(cols), geo.size.height / CGFloat(rows))
             let originX = (geo.size.width - cell * CGFloat(cols)) / 2
 
@@ -79,13 +144,13 @@ struct MinesweeperView: View {
             }
             .offset(x: originX)
         }
-        .aspectRatio(CGFloat(MinesweeperGame.width) / CGFloat(MinesweeperGame.height),
+        .aspectRatio(CGFloat(game.difficulty.width) / CGFloat(game.difficulty.height),
                      contentMode: .fit)
     }
 
     @ViewBuilder
     func cellView(x: Int, y: Int, game: MinesweeperGame, size: CGFloat) -> some View {
-        let index = MinesweeperGame.index(x, y)
+        let index = game.index(x, y)
         let revealed = game.revealed.contains(index)
         let flagged = game.flagged.contains(index)
         let isMine = game.mines.contains(index)
@@ -98,6 +163,20 @@ struct MinesweeperView: View {
                       : ((x + y).isMultiple(of: 2)
                          ? Color(red: 0.3, green: 0.55, blue: 0.35)
                          : Color(red: 0.26, green: 0.49, blue: 0.31)))
+                .overlay(alignment: .top) {
+                    if !revealed {
+                        // Raised-tile highlight for tactile depth.
+                        LinearGradient(colors: [.white.opacity(0.22), .clear],
+                                       startPoint: .top, endPoint: .center)
+                            .clipShape(RoundedRectangle(cornerRadius: 3))
+                            .allowsHitTesting(false)
+                    }
+                }
+                .overlay {
+                    if showMine && !revealed {
+                        RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.25))
+                    }
+                }
             if revealed {
                 if isMine {
                     Text("💥").font(.system(size: size * 0.6))
@@ -126,10 +205,10 @@ struct MinesweeperView: View {
 
     func tap(x: Int, y: Int, game: MinesweeperGame) {
         guard !game.isOver else { return }
-        let index = MinesweeperGame.index(x, y)
+        let index = game.index(x, y)
         if game.revealed.contains(index) {
             // Chord: only submit when the number is satisfied and has work to do.
-            let neighbors = MinesweeperGame.neighbors(index)
+            let neighbors = game.neighbors(index)
             let count = game.adjacentMines(index)
             let flags = neighbors.filter { game.flagged.contains($0) }.count
             let hidden = neighbors.contains { !game.flagged.contains($0) && !game.revealed.contains($0) }

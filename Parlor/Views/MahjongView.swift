@@ -5,6 +5,7 @@ struct MahjongView: View {
     @ObservedObject var session: GameSession
     @State private var selectedTileID: Int? = nil
     @State private var hint: (Int, Int)? = nil
+    @State private var clutchPulse = false
 
     var game: MahjongGame? { session.game?.engine as? MahjongGame }
 
@@ -27,7 +28,39 @@ struct MahjongView: View {
                                 y: originY + CGFloat(tile.y) * unit * 1.2 + tileH / 2 - CGFloat(tile.z) * unit * 0.22
                             )
                     }
+                    // Clutch glow: only one pair available
+                    if game.availableMatches().count == 1 {
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(Color.orange.opacity(clutchPulse ? 0.18 : 0.04))
+                            .allowsHitTesting(false)
+                            .animation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true), value: clutchPulse)
+                    }
                 }
+                .onAppear {
+                    if game.availableMatches().count == 1 { clutchPulse = true }
+                }
+                .onChange(of: game.availableMatches().count) { _, newCount in
+                    if newCount == 1 {
+                        clutchPulse = true
+                    } else {
+                        clutchPulse = false
+                    }
+                }
+            }
+        }
+        .overlay(alignment: .topTrailing) {
+            if let game, game.currentMatchRun >= 5 {
+                Text("🔥\(game.currentMatchRun)")
+                    .font(.title3.weight(.black))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .orange.opacity(0.8), radius: 6)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.orange.opacity(0.2), in: RoundedRectangle(cornerRadius: 10))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.orange.opacity(0.5), lineWidth: 1))
+                    .padding(8)
+                    .transition(.scale.combined(with: .opacity))
+                    .animation(.spring(response: 0.3, dampingFraction: 0.6), value: game.currentMatchRun)
             }
         }
         .overlay(alignment: .bottom) {

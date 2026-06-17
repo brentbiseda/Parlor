@@ -24,6 +24,8 @@ struct GridBoardView: View {
             board
                 .aspectRatio(1, contentMode: .fit)
                 .padding(10)
+            capturedBar
+                .padding(.horizontal, 12)
             Spacer()
             if session.actionableSeat != nil, session.game?.isOver == false {
                 Button("Resign", role: .destructive) { session.submit(.resign) }
@@ -44,6 +46,66 @@ struct GridBoardView: View {
                 }
             }
         }
+    }
+
+    /// Captured-piece display and move counter for chess/checkers.
+    @ViewBuilder
+    var capturedBar: some View {
+        if let chess = session.game?.engine as? ChessGame {
+            let white = capturedPieces(chess: chess, byColor: 1)  // pieces captured BY black (white's losses)
+            let black = capturedPieces(chess: chess, byColor: 0)
+            HStack {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("White lost: \(white.isEmpty ? "—" : white)")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Text("Black lost: \(black.isEmpty ? "—" : black)")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text("Move \(chess.moveNumber)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        } else if let checkers = session.game?.engine as? CheckersGame {
+            let red = 12 - checkers.pieceCount(color: 0)
+            let black = 12 - checkers.pieceCount(color: 1)
+            VStack(alignment: .leading, spacing: 2) {
+                HStack {
+                    Text("Red lost: \(red)  ·  Black lost: \(black)")
+                        .font(.caption).foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(checkers.movesWithoutCapture) no-cap")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if let desc = checkers.lastMoveDesc {
+                    Text(desc)
+                        .font(.caption2.weight(.medium))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+                if checkers.longestMultiJump >= 3 {
+                    Text("⛓ Best: \(checkers.longestMultiJump)-jump")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.white.opacity(0.1), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+                }
+            }
+        }
+    }
+
+    func capturedPieces(chess: ChessGame, byColor capturedColor: Int) -> String {
+        let remaining = chess.board.compactMap { $0 }.filter { $0.color == capturedColor }
+        let counts: [ChessPieceKind: Int] = remaining.reduce(into: [:]) { $0[$1.kind, default: 0] += 1 }
+        let full: [ChessPieceKind: Int] = [.pawn: 8, .rook: 2, .knight: 2, .bishop: 2, .queen: 1, .king: 1]
+        var lost: [String] = []
+        for kind in [ChessPieceKind.queen, .rook, .bishop, .knight, .pawn] {
+            let diff = (full[kind] ?? 0) - (counts[kind] ?? 0)
+            if diff > 0 { lost.append("\(filledGlyph(kind))×\(diff)") }
+        }
+        return lost.joined(separator: " ")
     }
 
     var board: some View {
@@ -248,6 +310,8 @@ struct GoBoardView: View {
                 boardView(go)
                     .aspectRatio(1, contentMode: .fit)
                     .padding(12)
+                captureBar(go)
+                    .padding(.horizontal, 20)
             }
             Spacer()
             if session.actionableSeat != nil, session.game?.isOver == false {
@@ -260,6 +324,36 @@ struct GoBoardView: View {
                 .padding(.bottom, 6)
             }
         }
+    }
+
+    func captureBar(_ go: GoGame) -> some View {
+        HStack(spacing: 12) {
+            HStack(spacing: 4) {
+                Circle()
+                    .fill(RadialGradient(colors: [Color(white: 0.35), .black],
+                                         center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
+                    .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
+                    .frame(width: 14, height: 14)
+                Text("B: \(go.captures[0]) captured")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+            }
+            Spacer()
+            HStack(spacing: 4) {
+                Text("W: \(go.captures[1]) captured")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.white.opacity(0.75))
+                Circle()
+                    .fill(RadialGradient(colors: [.white, Color(white: 0.78)],
+                                         center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
+                    .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
+                    .frame(width: 14, height: 14)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 5)
+        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.1), lineWidth: 0.75))
     }
 
     func boardView(_ go: GoGame) -> some View {
