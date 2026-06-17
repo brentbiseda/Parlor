@@ -14,8 +14,14 @@ struct CentipedeView: View {
 
     @StateObject private var holder = SceneHolder()
 
+    var game: CentipedeGame? { session.game?.engine as? CentipedeGame }
+
     var body: some View {
         VStack(spacing: 6) {
+            if let g = game {
+                centipedeHeader(g)
+                    .padding(.horizontal, 12)
+            }
             SpriteView(scene: holder.scene, options: [.allowsTransparency])
                 .aspectRatio(390.0 / 700.0, contentMode: .fit)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -39,6 +45,53 @@ struct CentipedeView: View {
                 }
             }
         }
+    }
+
+    @ViewBuilder
+    func centipedeHeader(_ game: CentipedeGame) -> some View {
+        HStack(spacing: 10) {
+            // Lives dots
+            HStack(spacing: 4) {
+                ForEach(0..<CentipedeGame.livesPerGame, id: \.self) { i in
+                    Circle()
+                        .fill(i < game.livesLeft ? Color.green : Color.white.opacity(0.15))
+                        .frame(width: 8, height: 8)
+                }
+            }
+            // Score
+            Text("\(game.score)")
+                .font(.system(size: 15, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+            Spacer(minLength: 0)
+            // Wave chip
+            Text("Wave \(game.level)")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.green)
+                .padding(.horizontal, 7)
+                .padding(.vertical, 3)
+                .background(Color.green.opacity(0.15), in: Capsule())
+            // Segments shot badge
+            if game.segmentsShot > 0 {
+                Text("🎯\(game.segmentsShot)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.yellow)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.yellow.opacity(0.12), in: Capsule())
+            }
+            // Best life callout
+            if game.bestLifeScore > 0 {
+                Text("⭐\(game.bestLifeScore)")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.65))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+            }
+        }
+        .padding(.vertical, 4)
+        .padding(.horizontal, 2)
+        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 

@@ -670,9 +670,20 @@ enum Bot {
     }
 
     /// Static evaluation of a chess position from `player`'s perspective.
-    /// Material + centrality + development + king safety.
+    /// Material + centrality + development + pawn structure + rook activity.
     private static func evaluateChess(_ g: ChessGame, for player: Int) -> Double {
         var score = 0.0
+        // Pre-compute pawn column presence for each color (for structure bonuses).
+        var pawnCols = [[Bool]](repeating: [Bool](repeating: false, count: 8), count: 2)
+        var pawnRowByCol = [[Int?]](repeating: [Int?](repeating: nil, count: 8), count: 2)
+        for y in 0..<8 {
+            for x in 0..<8 {
+                if let p = g[Point(x: x, y: y)], p.kind == .pawn {
+                    pawnCols[p.color][x] = true
+                    if pawnRowByCol[p.color][x] == nil { pawnRowByCol[p.color][x] = y }
+                }
+            }
+        }
         for y in 0..<8 {
             for x in 0..<8 {
                 guard let piece = g[Point(x: x, y: y)] else { continue }
@@ -680,10 +691,31 @@ enum Bot {
                 let sign: Double = piece.color == player ? 1 : -1
                 let cx = Double(x), cy = Double(y)
                 let centrality = (3.5 - abs(cx - 3.5)) * (3.5 - abs(cy - 3.5)) * 0.01
-                // Pawn advancement
-                let pawnAdv: Double = piece.kind == .pawn
-                    ? (piece.color == 0 ? (7 - cy) * 0.04 : cy * 0.04) : 0
-                score += sign * (val + centrality + pawnAdv)
+                var bonus = 0.0
+                switch piece.kind {
+                case .pawn:
+                    // Advancement
+                    bonus += piece.color == 0 ? (7 - cy) * 0.04 : cy * 0.04
+                    // Doubled pawn penalty: another own pawn on same file
+                    if pawnRowByCol[piece.color][x] != y { bonus -= 0.2 }
+                    // Passed pawn bonus: no opposing pawn on same or adjacent files ahead
+                    let opp = 1 - piece.color
+                    let adjacentFiles = [max(0, x-1), x, min(7, x+1)]
+                    let frontRowRange = piece.color == 0 ? Array((y+1)..<8) : Array((0..<y).reversed())
+                    let blocked = frontRowRange.contains { row in
+                        adjacentFiles.contains { col in g[Point(x: col, y: row)]?.kind == .pawn && g[Point(x: col, y: row)]?.color == opp }
+                    }
+                    if !blocked { bonus += 0.35 }
+                case .rook:
+                    // Rook on open file (no own pawn blocking)
+                    if !pawnCols[piece.color][x] { bonus += pawnCols[1 - piece.color][x] ? 0.15 : 0.25 }
+                case .bishop:
+                    // Bishop pair bonus applied when evaluating second bishop
+                    let bishops = g.board.compactMap { $0 }.filter { $0.color == piece.color && $0.kind == .bishop }
+                    if bishops.count >= 2 { bonus += 0.1 }
+                default: break
+                }
+                score += sign * (val + centrality + bonus)
             }
         }
         return score

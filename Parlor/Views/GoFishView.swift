@@ -48,6 +48,36 @@ struct GoFishView: View {
                                             .background(.orange.opacity(0.15), in: Capsule())
                                     }
                                 }
+                                HStack(spacing: 6) {
+                                    // Ask accuracy chip
+                                    if game.totalAsks > 0 {
+                                        let pct = Int(Double(game.successfulAsks) / Double(game.totalAsks) * 100)
+                                        let chipColor: Color = pct >= 60 ? .green : pct >= 40 ? .yellow : .red
+                                        Text("🎣 \(pct)% hit")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(chipColor)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(chipColor.opacity(0.15), in: Capsule())
+                                    }
+                                    // Biggest haul badge
+                                    if game.biggestHaul >= 3 {
+                                        Text("💰 \(game.biggestHaul) haul")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.yellow)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(.yellow.opacity(0.15), in: Capsule())
+                                    }
+                                    if game.luckyPondBooks > 0 {
+                                        Text("🌊×\(game.luckyPondBooks)")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.cyan)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(.cyan.opacity(0.15), in: Capsule())
+                                    }
+                                }
                                 if let event = game.lastEvent {
                                     Text(event)
                                         .font(.caption)
