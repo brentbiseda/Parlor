@@ -31,6 +31,9 @@ struct HopperGame: GameEngine {
     var ticks = 0
     var highestRow = height - 1   // for forward-progress scoring
     var over = false
+    /// Invincibility ticks remaining after a respawn (prevents double-deaths).
+    var invincibleTicks = 0
+    static let respawnInvincibilityTicks = 6
     /// Ticks elapsed since this crossing attempt started (reset on respawn and pad landing).
     var crossingTicks = 0
     /// Total successful frog crossings this game (each pad landing counts).
@@ -138,6 +141,7 @@ struct HopperGame: GameEngine {
     private mutating func tick() {
         ticks += 1
         crossingTicks += 1
+        if invincibleTicks > 0 { invincibleTicks -= 1 }
         // Shift lanes on their periods; carry the frog with river traffic.
         for row in [1, 2, 3, 4, 5, 7, 8, 9, 10, 11] {
             let isRiver = row <= 5
@@ -164,6 +168,7 @@ struct HopperGame: GameEngine {
     }
 
     private mutating func resolveFrogCell(afterHop: Bool) {
+        guard invincibleTicks == 0 else { return }  // brief post-respawn grace period
         switch frogY {
         case 0:
             // Lily pads: land on an open one or splash.
@@ -221,6 +226,7 @@ struct HopperGame: GameEngine {
         highestRow = Self.height - 1
         crossingTicks = 0
         livesAtCrossingStart = lives
+        invincibleTicks = Self.respawnInvincibilityTicks
     }
 
     var statusText: String {

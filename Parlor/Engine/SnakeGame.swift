@@ -32,6 +32,8 @@ struct SnakeGame: GameEngine {
     var body: [Int] = []
     var direction: GridDirection = .right
     var pendingDirection: GridDirection? = nil
+    /// Up to 2 buffered direction changes (allows fast-corner queuing).
+    var directionQueue: [GridDirection] = []
     var walls: Set<Int> = []
     var food = 0
     var bonusFood: Int? = nil        // nil when no bonus is active
@@ -81,6 +83,7 @@ struct SnakeGame: GameEngine {
         body = [Self.index(cx + 2, cy), Self.index(cx + 1, cy), Self.index(cx, cy)]
         direction = .right
         pendingDirection = nil
+        directionQueue = []
         growth = 0
     }
 
@@ -163,7 +166,15 @@ struct SnakeGame: GameEngine {
         justLeveledUp = false
         switch m {
         case .turn(let dir):
-            if dir != direction.opposite { pendingDirection = dir }
+            // Enqueue up to 2 buffered turns so corners feel snappy.
+            let currentEffective = pendingDirection ?? direction
+            if dir != currentEffective && dir != currentEffective.opposite {
+                if directionQueue.count < 2 { directionQueue.append(dir) }
+                pendingDirection = directionQueue.first
+            } else if dir != direction.opposite && dir != direction {
+                if directionQueue.count < 2 { directionQueue.append(dir) }
+                pendingDirection = pendingDirection ?? dir
+            }
             started = true
         case .tick:
             guard started else { return }
@@ -183,10 +194,16 @@ struct SnakeGame: GameEngine {
             if bonusTicks <= 0 { bonusFood = nil; bonusFoodMissed += 1 }
         }
 
+        // Consume the next queued direction (skip if it would reverse).
         if let pending = pendingDirection, pending != direction.opposite {
             direction = pending
+            directionQueue.removeFirst()
+            pendingDirection = directionQueue.first
+        } else if pendingDirection != nil {
+            // Was a reverse (stale), discard and pull next.
+            directionQueue.removeFirst()
+            pendingDirection = directionQueue.first
         }
-        pendingDirection = nil
 
         guard let head = body.first else { return }
         let nx = Self.x(head) + direction.dx

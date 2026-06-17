@@ -60,6 +60,8 @@ struct TetrisGame: GameEngine {
     var current: Piece?
     var nextKind: PieceKind
     var bag: [PieceKind]
+    var hold: PieceKind? = nil
+    var holdUsed = false
     var score = 0
     var lines = 0
     var piecesPlaced = 0
@@ -71,6 +73,12 @@ struct TetrisGame: GameEngine {
     var lastClearLabel: String? = nil  // "TETRIS", "TRIPLE", etc. for UI
     var lastWasRotation = false    // for T-spin detection
     var pendingTSpin = false       // set in lock(), consumed by clearLines()
+    /// Lock delay: how many extra ticks the piece stays on the ground before locking.
+    /// Resets when the piece moves or rotates (max 15 resets = infinite lock protection).
+    var lockDelayTicks = 0
+    var lockDelayResets = 0
+    static let lockDelayMax = 3    // ticks before piece locks (view drives ~0.5s window)
+    static let lockDelayResetMax = 15  // max resets before forced lock
     var tSpinCount = 0             // lifetime T-spins this game
     var tetrisCount = 0           // lifetime 4-line clears this game
     var perfectClears = 0         // times the board was emptied by a clear
@@ -126,6 +134,7 @@ struct TetrisGame: GameEngine {
         var piece = Piece(kind: nextKind, rotation: 0, x: (Self.width - nextKind.boxSize) / 2, y: -1)
         if bag.isEmpty { bag = PieceKind.allCases.shuffled() }
         nextKind = bag.removeFirst()
+        holdUsed = false
         if !fits(piece) {
             piece.y -= 1
             if !fits(piece) {
@@ -135,6 +144,27 @@ struct TetrisGame: GameEngine {
             }
         }
         current = piece
+    }
+
+    private mutating func activateHold() {
+        guard !holdUsed, let piece = current else { return }
+        holdUsed = true
+        let incoming = hold ?? nextKind
+        if hold == nil {
+            // First time holding: consume next from bag
+            if bag.isEmpty { bag = PieceKind.allCases.shuffled() }
+            nextKind = bag.removeFirst()
+        }
+        hold = piece.kind
+        let spawned = Piece(kind: incoming, rotation: 0,
+                            x: (Self.width - incoming.boxSize) / 2, y: -1)
+        if fits(spawned) {
+            current = spawned
+        } else {
+            var s2 = spawned; s2.y -= 1
+            current = fits(s2) ? s2 : nil
+            if current == nil { over = true }
+        }
     }
 
     private func isTSpin(_ piece: Piece) -> Bool {
@@ -225,6 +255,8 @@ struct TetrisGame: GameEngine {
 
     func legalMoves() -> [Move] { over ? [] : [.tetris(.tick)] }
 
+    var canHold: Bool { !holdUsed && current != nil && !over }
+
     func isLegal(_ move: Move) -> Bool {
         if case .tetris = move { return !over }
         return false
@@ -238,26 +270,55 @@ struct TetrisGame: GameEngine {
         switch m {
         case .left:
             piece.x -= 1
-            if fits(piece) { current = piece }
+            if fits(piece) {
+                current = piece
+                if !fits(grounded(piece)) && lockDelayResets < Self.lockDelayResetMax {
+                    lockDelayTicks = 0; lockDelayResets += 1
+                }
+            }
             lastWasRotation = false
         case .right:
             piece.x += 1
-            if fits(piece) { current = piece }
+            if fits(piece) {
+                current = piece
+                if !fits(grounded(piece)) && lockDelayResets < Self.lockDelayResetMax {
+                    lockDelayTicks = 0; lockDelayResets += 1
+                }
+            }
             lastWasRotation = false
-        case .rotate:
-            piece.rotation += 1
-            for kick in [0, -1, 1, -2, 2] {
+        case .rotate, .rotateLeft:
+            let delta = m == .rotate ? 1 : -1
+            piece.rotation = ((piece.rotation + delta) & 3 + 4) & 3
+            let kicks: [Int] = piece.kind == .i ? [0, -2, 1, -3, 3] : [0, -1, 1, -2, 2]
+            for kick in kicks {
                 var kicked = piece
                 kicked.x += kick
-                if fits(kicked) { current = kicked; lastWasRotation = true; return }
+                if fits(kicked) {
+                    current = kicked
+                    lastWasRotation = true
+                    // Reset lock delay on rotation while grounded.
+                    if !fits(grounded(kicked)) && lockDelayResets < Self.lockDelayResetMax {
+                        lockDelayTicks = 0; lockDelayResets += 1
+                    }
+                    return
+                }
             }
+        case .hold:
+            activateHold()
         case .softDrop, .tick:
             piece.y += 1
             if fits(piece) {
                 current = piece
+                lockDelayTicks = 0; lockDelayResets = 0  // piece is airborne again
                 if m == .softDrop { score += Self.softDropScore }
             } else {
                 piece.y -= 1
+                // Lock delay: on tick (gravity), increment counter and only lock after max.
+                if m == .tick {
+                    lockDelayTicks += 1
+                    if lockDelayTicks < Self.lockDelayMax { return }
+                }
+                lockDelayTicks = 0; lockDelayResets = 0
                 lock(piece)
             }
             survivalTicks += 1
@@ -278,6 +339,11 @@ struct TetrisGame: GameEngine {
         while fits(piece) { piece.y += 1 }
         piece.y -= 1
         return piece
+    }
+
+    /// Returns `piece` shifted one row down (for lock-delay grounded check).
+    private func grounded(_ piece: Piece) -> Piece {
+        var p = piece; p.y += 1; return p
     }
 
     var statusText: String {

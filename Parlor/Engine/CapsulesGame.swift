@@ -55,6 +55,8 @@ struct CapsulesGame: GameEngine {
     var board: [Cell?] = Array(repeating: nil, count: width * height)
     var current: Pill?
     var nextColors: [Int]
+    /// Queue of upcoming pill color pairs (up to 3 shown in preview).
+    var upcomingColors: [[Int]] = []
     var score = 0
     var level = 1
     var virusesLeft = 0
@@ -93,9 +95,19 @@ struct CapsulesGame: GameEngine {
     init(level: Int = 1) {
         self.level = level
         nextColors = [Int.random(in: 0..<3), Int.random(in: 0..<3)]
+        upcomingColors = (0..<3).map { _ in [Int.random(in: 0..<3), Int.random(in: 0..<3)] }
         levelStartPills = 0
         seedViruses()
         spawn()
+    }
+
+    private mutating func drawNextColors() -> [Int] {
+        if upcomingColors.isEmpty {
+            return [Int.random(in: 0..<3), Int.random(in: 0..<3)]
+        }
+        let colors = upcomingColors.removeFirst()
+        upcomingColors.append([Int.random(in: 0..<3), Int.random(in: 0..<3)])
+        return colors
     }
 
     var currentPlayer: Int { 0 }
@@ -137,7 +149,7 @@ struct CapsulesGame: GameEngine {
 
     private mutating func spawn() {
         let pill = Pill(colors: nextColors, x: Self.width / 2 - 1, y: 0, rotation: 0)
-        nextColors = [Int.random(in: 0..<3), Int.random(in: 0..<3)]
+        nextColors = drawNextColors()
         if fits(pill) {
             current = pill
         } else {
@@ -169,13 +181,15 @@ struct CapsulesGame: GameEngine {
         case .right:
             pill.x += 1
             if fits(pill) { current = pill }
-        case .rotate:
-            pill.rotation += 1
+        case .rotate, .rotateLeft:
+            pill.rotation += (m == .rotate ? 1 : -1)
             for kick in [0, -1, 1] {
                 var kicked = pill
                 kicked.x += kick
                 if fits(kicked) { current = kicked; return }
             }
+        case .hold:
+            break   // Capsules has no hold mechanic
         case .softDrop, .tick:
             pill.y += 1
             if fits(pill) {
@@ -236,6 +250,7 @@ struct CapsulesGame: GameEngine {
         pillsAtLevelStart = pillsUsed
         levelStartPills = pillsUsed
         nextColors = [Int.random(in: 0..<3), Int.random(in: 0..<3)]
+        upcomingColors = (0..<3).map { _ in [Int.random(in: 0..<3), Int.random(in: 0..<3)] }
         seedViruses()
         spawn()
     }

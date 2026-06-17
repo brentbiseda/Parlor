@@ -282,10 +282,47 @@ enum Bot {
         return Array(ranked.prefix(3)).displaySorted()
     }
 
+    /// True when `seat` appears to be attempting a moon shoot:
+    ///   - Has taken ≥ 2 heart tricks OR holds both the Q♠ and 4+ hearts.
+    ///   - Has not let any points reach another player this round.
+    private static func attemptingMoonShot(_ g: HeartsGame, seat: Int) -> Bool {
+        let myPoints = g.roundPoints[seat]
+        guard myPoints > 0 else { return false }
+        let othersHavePoints = (0..<4).filter { $0 != seat }.contains { g.roundPoints[$0] > 0 }
+        guard !othersHavePoints else { return false }
+        let hand = g.hands[seat]
+        let heartsInHand = hand.filter { $0.suit == .hearts }.count
+        let hasQueen = hand.contains(queenOfSpades)
+        // Credible moon attempt: taken ≥ 8 points with none escaped, or holds queen + 4 hearts.
+        return myPoints >= 8 || (hasQueen && heartsInHand >= 4)
+    }
+
     static func hardHeartsPlay(_ g: HeartsGame) -> Card? {
         let legal = g.legalCards()
         guard !legal.isEmpty else { return nil }
         let seat = g.currentPlayer
+
+        // Moon-shoot mode: if we're attempting it, always take the trick aggressively.
+        if attemptingMoonShot(g, seat: seat) {
+            if g.trick.isEmpty {
+                // Lead highest hearts or Q♠ to maintain control.
+                let pointCards = legal.filter { heartsPoints($0) > 0 }.sorted { $0.rank.rawValue > $1.rank.rawValue }
+                if let top = pointCards.first { return top }
+            } else {
+                let led = g.trick[0].card.suit
+                let following = legal.filter { $0.suit == led }
+                let winningRank = g.trick.filter { $0.card.suit == led }.map(\.card.rank.rawValue).max() ?? 0
+                if !following.isEmpty {
+                    // Win the trick if possible.
+                    let winners = following.filter { $0.rank.rawValue > winningRank }
+                    if !winners.isEmpty { return winners.min { $0.rank.rawValue < $1.rank.rawValue } }
+                    return following.max { $0.rank.rawValue < $1.rank.rawValue }
+                }
+                // Void: dump a low side card (save the point cards for later tricks).
+                let nonPoints = legal.filter { heartsPoints($0) == 0 }
+                return (nonPoints.isEmpty ? legal : nonPoints).min { $0.rank.rawValue < $1.rank.rawValue }
+            }
+        }
 
         if g.trick.isEmpty {
             // If losing (highest score among players with scores > 0), dump Q♠ ASAP on lead.
@@ -293,28 +330,21 @@ enum Bot {
             let maxScore = g.scores.max() ?? 0
             let holdingQueen = legal.contains(queenOfSpades)
             if holdingQueen && myScore == maxScore && myScore > 0 {
-                // Only lead queen if spades are broken or we have only spades — otherwise
-                // wait to discard it; leading it hands 13 pts to whoever wins.
                 let nonQueenSpades = legal.filter { $0.suit == .spades && $0 != queenOfSpades }
                 if nonQueenSpades.isEmpty && g.heartsBroken {
-                    // Can't avoid leading it — opponent likely wins it anyway.
                     return queenOfSpades
                 }
             }
-            // If winning (lowest score), bleed hearts when safe: lead lowest heart
-            // after hearts are broken to drain opponents' holdings.
+            // If winning (lowest score), bleed hearts when safe.
             let minScore = g.scores.min() ?? 0
             if myScore == minScore && g.heartsBroken && g.tricksPlayed >= 4 {
                 let hearts = legal.filter { $0.suit == .hearts }
                 if hearts.count >= 2, let lowest = hearts.min(by: { $0.rank.rawValue < $1.rank.rawValue }) {
-                    // Only bleed if we hold many hearts (controlling, not at risk).
                     return lowest
                 }
             }
-            // Don't lead hearts until broken; if forced (only hearts), lead lowest.
             let nonHearts = legal.filter { $0.suit != .hearts }
             let pool = (!g.heartsBroken && !nonHearts.isEmpty) ? nonHearts : legal
-            // Lead from longest non-heart suit to create voids quickly.
             if let safeLead = TrickTaking.safeLead(from: pool, trump: nil) { return safeLead }
             return pool.min { $0.rank.rawValue < $1.rank.rawValue }
         }
@@ -324,19 +354,15 @@ enum Bot {
         let winningRank = g.trick.filter { $0.card.suit == led }.map(\.card.rank.rawValue).max() ?? 0
 
         if !following.isEmpty {
-            // If we're last to play and the trick has no points, safely take it
-            // with our highest card of the led suit to dump a high card cheaply.
             let trickPoints = g.trick.reduce(0) { $0 + g.points(for: $1.card) }
             if g.trick.count == 3 && trickPoints == 0 {
                 return following.max { $0.rank.rawValue < $1.rank.rawValue }
             }
             let ducks = following.filter { $0.rank.rawValue < winningRank }
             if !ducks.isEmpty {
-                // Slip the Q♠ under a higher spade when we safely can.
                 if led == .spades, ducks.contains(queenOfSpades) { return queenOfSpades }
                 return ducks.max { $0.rank.rawValue < $1.rank.rawValue }
             }
-            // Forced to win: shed the highest card, but cling to the Q♠.
             let candidates = following.filter { $0 != queenOfSpades }
             return (candidates.isEmpty ? following : candidates)
                 .max { $0.rank.rawValue < $1.rank.rawValue }
@@ -611,48 +637,72 @@ enum Bot {
         }
     }
 
-    /// Greedy capture search with one ply of lookahead: take material, don't
-    /// hang pieces, jump on checkmate when it's there.
+    /// Static evaluation of a chess position from `player`'s perspective.
+    /// Material + centrality + development + king safety.
+    private static func evaluateChess(_ g: ChessGame, for player: Int) -> Double {
+        var score = 0.0
+        for y in 0..<8 {
+            for x in 0..<8 {
+                guard let piece = g[Point(x: x, y: y)] else { continue }
+                let val = Double(chessValue(piece.kind))
+                let sign: Double = piece.color == player ? 1 : -1
+                let cx = Double(x), cy = Double(y)
+                let centrality = (3.5 - abs(cx - 3.5)) * (3.5 - abs(cy - 3.5)) * 0.01
+                // Pawn advancement
+                let pawnAdv: Double = piece.kind == .pawn
+                    ? (piece.color == 0 ? (7 - cy) * 0.04 : cy * 0.04) : 0
+                score += sign * (val + centrality + pawnAdv)
+            }
+        }
+        return score
+    }
+
+    /// 2-ply alpha-beta minimax chess bot. Evaluates all opponent responses to
+    /// each candidate move and picks the move with the best guaranteed outcome.
     static func hardChessMove(_ g: ChessGame) -> Move? {
         let me = g.currentPlayer
         let moves = g.legalBoardMoves(for: me)
         guard !moves.isEmpty else { return nil }
+
+        // Move ordering: captures and promotions first (improves alpha-beta cutoffs).
+        let ordered = moves.sorted { a, b in
+            let aCapture = g[a.to] != nil || a.promotion != nil
+            let bCapture = g[b.to] != nil || b.promotion != nil
+            return aCapture && !bCapture
+        }
+
         var best: (score: Double, move: BoardMove)? = nil
-        for move in moves {
+        var alpha = -Double.infinity
+
+        for move in ordered {
             var copy = g
             guard (try? copy.apply(.board(move))) != nil else { continue }
-            let captured = g[move.to].map { chessValue($0.kind) }
-                ?? (g[move.from]?.kind == .pawn && move.to.x != move.from.x ? 1 : 0)   // en passant
-            let replies = copy.legalBoardMoves(for: 1 - me)
-            if replies.isEmpty {
-                if copy.inCheck(1 - me) { return .board(move) }   // checkmate
-                continue   // stalemate — only if nothing better
+
+            let oppMoves = copy.legalBoardMoves(for: 1 - me)
+            let score: Double
+            if oppMoves.isEmpty {
+                // Terminal: checkmate = huge win; stalemate = draw (small penalty vs winning).
+                score = copy.inCheck(1 - me) ? 999.0 : -0.5
+            } else {
+                // Minimise: pick opponent's best reply, then evaluate.
+                var minScore = Double.infinity
+                for oppMove in oppMoves {
+                    var copy2 = copy
+                    guard (try? copy2.apply(.board(oppMove))) != nil else { continue }
+                    let s = evaluateChess(copy2, for: me)
+                    if s < minScore { minScore = s }
+                    if minScore <= alpha { break }  // alpha-beta pruning
+                }
+                score = minScore
             }
-            let hanging = replies.map { copy[$0.to].map { chessValue($0.kind) } ?? 0 }.max() ?? 0
-            let promotion = move.promotion != nil ? 8.0 : 0.0
-            let check = copy.inCheck(1 - me) ? 0.3 : 0.0
-            // Centrality bonus: reward moves toward the centre squares (c3–f6).
-            let cx = Double(move.to.x)
-            let cy = Double(move.to.y)
-            let centrality = (3.5 - abs(cx - 3.5)) * (3.5 - abs(cy - 3.5)) * 0.02
-            // Avoid moving queen very early (first 4 moves per side).
-            let earlyQueenPenalty: Double
-            if g[move.from]?.kind == .queen && g.moveNumber < 8 { earlyQueenPenalty = -0.4 } else { earlyQueenPenalty = 0 }
-            let movedKind = g[move.from]?.kind
-            // Castling (king moves two files) is a strong development/safety move.
-            let castleBonus = (movedKind == .king && abs(move.to.x - move.from.x) == 2) ? 0.5 : 0.0
-            // Discourage moving the king sideways early (loses castling rights).
-            let kingWanderPenalty = (movedKind == .king && abs(move.to.x - move.from.x) != 2 && g.moveNumber < 16) ? -0.25 : 0.0
-            // Reward developing minor pieces off the back rank in the opening.
-            let backRank = me == 0 ? 7 : 0
-            let developBonus = ((movedKind == .knight || movedKind == .bishop)
-                                && move.from.y == backRank && g.moveNumber < 16) ? 0.2 : 0.0
-            let score = Double(captured) + promotion + check + centrality + earlyQueenPenalty
-                + castleBonus + kingWanderPenalty + developBonus
-                - Double(hanging) * 0.9
-                + Double.random(in: 0..<0.2)
-            if best == nil || score > best!.score { best = (score, move) }
+
+            let jitter = Double.random(in: 0..<0.05)
+            if best == nil || score + jitter > best!.score {
+                best = (score + jitter, move)
+                alpha = max(alpha, score)
+            }
         }
+
         return best.map { .board($0.move) } ?? moves.randomElement().map { .board($0) }
     }
 
@@ -666,50 +716,80 @@ enum Bot {
         return total
     }
 
-    /// Material-greedy with a one-move lookahead for return jumps and king-crowning preference.
+    /// Static evaluation of checkers position from `player`'s perspective:
+    /// material balance + advancement + king-safety + back-rank bonus.
+    private static func evaluateCheckers(_ g: CheckersGame, for player: Int) -> Double {
+        var score = checkersMaterial(g, color: player) - checkersMaterial(g, color: 1 - player)
+        for (i, piece) in g.board.enumerated() {
+            guard let p = piece else { continue }
+            let row = Double(i / 8)
+            let sign: Double = p.color == player ? 1 : -1
+            if !p.king {
+                let advance = p.color == 0 ? row / 7.0 : (7.0 - row) / 7.0
+                score += sign * advance * 0.12
+            }
+            let homeRank = p.color == 0 ? 0.0 : 7.0
+            if row == homeRank { score += sign * 0.08 }
+        }
+        return score
+    }
+
+    /// 2-ply alpha-beta minimax checkers bot. Handles multi-jump chains
+    /// (the game passes turn back to the same player mid-jump).
     static func hardCheckersMove(_ g: CheckersGame) -> Move? {
         let me = g.currentPlayer
         let moves = g.legalBoardMoves(for: me)
         guard !moves.isEmpty else { return nil }
-        let crowningRank = me == 0 ? 7 : 0
+
+        // Prioritise jumps (mandatory in checkers, and they produce deeper trees).
+        let jumps = moves.filter { abs($0.to.x - $0.from.x) == 2 }
+        let ordered = jumps.isEmpty ? moves : jumps + moves.filter { abs($0.to.x - $0.from.x) != 2 }
+
         var best: (score: Double, move: BoardMove)? = nil
-        for move in moves {
+        var alpha = -Double.infinity
+
+        for move in ordered {
             var copy = g
             guard (try? copy.apply(.board(move))) != nil else { continue }
-            var score = checkersMaterial(copy, color: me) - checkersMaterial(copy, color: 1 - me)
+
+            let score: Double
             if copy.currentPlayer == me {
-                score += 0.8   // multi-jump continues
-                // Extra bonus for each additional piece captured beyond the first.
-                let capturedSoFar = checkersMaterial(g, color: 1 - me) - checkersMaterial(copy, color: 1 - me)
-                if capturedSoFar > 1 { score += (capturedSoFar - 1) * 0.5 }
+                // Multi-jump still in progress — evaluate this line deeper (1 more ply).
+                let contMoves = copy.legalBoardMoves(for: me)
+                if contMoves.isEmpty {
+                    score = evaluateCheckers(copy, for: me)
+                } else {
+                    score = contMoves.compactMap { cm -> Double? in
+                        var c2 = copy
+                        guard (try? c2.apply(.board(cm))) != nil else { return nil }
+                        return evaluateCheckers(c2, for: me)
+                    }.max() ?? evaluateCheckers(copy, for: me)
+                }
             } else {
-                // Bonus for deep capture chains (3+ jumps).
-                let capturedCount = checkersMaterial(g, color: 1 - me) - checkersMaterial(copy, color: 1 - me)
-                if capturedCount >= 3 { score += 1.5 }
-                else if capturedCount >= 2 { score += 0.5 }
-                // Weigh the worst return jump by the value of what we'd lose.
-                let returnJumps = copy.legalBoardMoves(for: 1 - me).filter { abs($0.to.x - $0.from.x) == 2 }
-                let worstLoss = returnJumps.compactMap { rj -> Double? in
-                    let midX = (rj.from.x + rj.to.x) / 2
-                    let midY = (rj.from.y + rj.to.y) / 2
-                    guard let victim = copy[Point(x: midX, y: midY)] else { return nil }
-                    return victim.king ? 1.6 : 1.0
-                }.max() ?? 0
-                score -= worstLoss * 0.9
+                // Opponent's turn: minimise over their responses.
+                let oppMoves = copy.legalBoardMoves(for: 1 - me)
+                if oppMoves.isEmpty {
+                    score = evaluateCheckers(copy, for: me) + (copy.isOver ? 50 : 0)
+                } else {
+                    var minScore = Double.infinity
+                    for oppMove in oppMoves {
+                        var c2 = copy
+                        guard (try? c2.apply(.board(oppMove))) != nil else { continue }
+                        let s = evaluateCheckers(c2, for: me)
+                        if s < minScore { minScore = s }
+                        if minScore <= alpha { break }
+                    }
+                    score = minScore
+                }
             }
-            // Bonus for crowning a piece.
-            if move.to.y == crowningRank, let piece = g[move.from], !piece.king { score += 0.6 }
-            // Advancement: push men toward the crowning row.
-            if let piece = g[move.from], !piece.king {
-                let progress = me == 0 ? Double(move.to.y) : Double(7 - move.to.y)
-                score += progress * 0.03
+
+            let jitter = Double.random(in: 0..<0.05)
+            if best == nil || score + jitter > best!.score {
+                best = (score + jitter, move)
+                alpha = max(alpha, score)
             }
-            // Prefer safer back-rank positions.
-            let homeRank = me == 0 ? 0 : 7
-            if move.from.y == homeRank { score += 0.1 }
-            score += Double.random(in: 0..<0.1)
-            if best == nil || score > best!.score { best = (score, move) }
         }
+
         return best.map { .board($0.move) }
     }
 

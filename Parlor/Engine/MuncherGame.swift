@@ -281,6 +281,35 @@ struct MuncherGame: GameEngine {
         }
     }
 
+    /// BFS from `origin` to `target`, respecting maze walls. Returns the first
+    /// direction to take, or nil when no path exists. The ghost's current
+    /// reverse direction is excluded so ghosts don't double-back mid-corridor.
+    private func bfsDirection(from origin: Int, to target: Int, forbidReverse: GridDirection?) -> GridDirection? {
+        guard origin != target else { return nil }
+        // Each entry: (position, firstDirectionTaken)
+        var visited = Set<Int>([origin])
+        var queue: [(pos: Int, first: GridDirection)] = []
+        for dir in GridDirection.allCases {
+            guard dir != forbidReverse, let next = step(from: origin, direction: dir) else { continue }
+            if !visited.contains(next) {
+                visited.insert(next)
+                queue.append((next, dir))
+            }
+        }
+        var head = 0
+        while head < queue.count {
+            let (pos, first) = queue[head]; head += 1
+            if pos == target { return first }
+            for dir in GridDirection.allCases {
+                guard let next = step(from: pos, direction: dir), !visited.contains(next) else { continue }
+                visited.insert(next)
+                queue.append((next, dir))
+            }
+        }
+        // No path found — fall back to any open direction.
+        return nil
+    }
+
     /// ~12% chance to wander at an intersection; blinky stays disciplined.
     private func ghostWander(_ ghost: Ghost) -> Bool {
         guard ghost.type != .blinky else { return false }
@@ -296,9 +325,9 @@ struct MuncherGame: GameEngine {
             : options
         guard !choices.isEmpty else { return }
 
-        let target: Int
         if frightened {
-            // Flee: maximize distance to pac.
+            // Flee: BFS toward the cell farthest from pac (use reverse BFS heuristic).
+            // For frightened mode, pick the open neighbor that maximizes distance to pac.
             let pick = choices.max { d1, d2 in
                 let n1 = step(from: ghost.pos, direction: d1).map {
                     abs(Self.x($0) - Self.x(pac)) + abs(Self.y($0) - Self.y(pac)) } ?? 0
@@ -311,20 +340,32 @@ struct MuncherGame: GameEngine {
             return
         }
 
-        target = isScatterPhase ? scatterTarget(for: ghost.type) : chaseTarget(for: ghost)
+        let target = isScatterPhase ? scatterTarget(for: ghost.type) : chaseTarget(for: ghost)
 
-        func dist(_ direction: GridDirection) -> Int {
-            guard let next = step(from: ghost.pos, direction: direction) else { return .max }
-            return abs(Self.x(next) - Self.x(target)) + abs(Self.y(next) - Self.y(target))
-        }
-
-        // At a real intersection (3+ open exits), occasionally take a non-optimal
-        // turn so ghosts aren't perfectly predictable.
-        var pick: GridDirection
-        if choices.count >= 3, ghostWander(ghost) {
+        // At a real intersection, occasionally wander to stay unpredictable.
+        let shouldWander = choices.count >= 3 && ghostWander(ghost)
+        let pick: GridDirection
+        if shouldWander {
             pick = choices.randomElement() ?? choices[0]
+        } else if let bfsDir = bfsDirection(from: ghost.pos, to: target,
+                                             forbidReverse: ghost.dir.opposite) {
+            // BFS gives the optimal first step through the maze.
+            pick = choices.contains(bfsDir) ? bfsDir : (choices.min { d1, d2 in
+                let n1 = step(from: ghost.pos, direction: d1).map {
+                    abs(Self.x($0) - Self.x(target)) + abs(Self.y($0) - Self.y(target)) } ?? Int.max
+                let n2 = step(from: ghost.pos, direction: d2).map {
+                    abs(Self.x($0) - Self.x(target)) + abs(Self.y($0) - Self.y(target)) } ?? Int.max
+                return n1 < n2
+            } ?? choices[0])
         } else {
-            pick = choices.min { dist($0) < dist($1) } ?? choices[0]
+            // BFS found no path (shouldn't happen in a connected maze) — fall back to Manhattan.
+            pick = choices.min { d1, d2 in
+                let n1 = step(from: ghost.pos, direction: d1).map {
+                    abs(Self.x($0) - Self.x(target)) + abs(Self.y($0) - Self.y(target)) } ?? Int.max
+                let n2 = step(from: ghost.pos, direction: d2).map {
+                    abs(Self.x($0) - Self.x(target)) + abs(Self.y($0) - Self.y(target)) } ?? Int.max
+                return n1 < n2
+            } ?? choices[0]
         }
         ghost.dir = pick
         if let next = step(from: ghost.pos, direction: pick) { ghost.pos = next }

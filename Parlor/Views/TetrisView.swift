@@ -201,6 +201,12 @@ struct TetrisView: View {
                     .foregroundStyle(.white.opacity(0.6))
                 nextPreview
             }
+            VStack(alignment: .leading, spacing: 4) {
+                Text("HOLD")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.6))
+                holdPreview
+            }
             if let game {
                 statBlock("SCORE", "\(game.score)")
                 statBlock("LINES", "\(game.lines)")
@@ -256,10 +262,9 @@ struct TetrisView: View {
         .frame(width: 86)
     }
 
-    var nextPreview: some View {
+    func piecePreview(kind: TetrisGame.PieceKind?, dimmed: Bool = false) -> some View {
         Canvas { context, size in
-            guard let game else { return }
-            let kind = game.nextKind
+            guard let kind else { return }
             let cell: CGFloat = size.width / 4.5
             let cells = TetrisGame.Piece(kind: kind, rotation: 0, x: 0, y: 0).cells()
             let minX = cells.map(\.x).min() ?? 0
@@ -269,12 +274,27 @@ struct TetrisView: View {
                                   y: CGFloat(y - minY) * cell + 4,
                                   width: cell - 1, height: cell - 1)
                 context.fill(Path(roundedRect: rect, cornerRadius: 2),
-                             with: .color(pieceColors[kind.colorIndex]))
+                             with: .color(pieceColors[kind.colorIndex].opacity(dimmed ? 0.45 : 1.0)))
             }
         }
         .frame(width: 86, height: 48)
         .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+    }
+
+    var nextPreview: some View { piecePreview(kind: game?.nextKind) }
+
+    var holdPreview: some View {
+        let held = game?.hold
+        let dimmed = game?.holdUsed ?? false
+        return piecePreview(kind: held, dimmed: dimmed)
+            .overlay(alignment: .center) {
+                if held == nil {
+                    Text("—")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.3))
+                }
+            }
     }
 
     func statBlock(_ label: String, _ value: String) -> some View {
@@ -290,23 +310,32 @@ struct TetrisView: View {
     }
 
     var controls: some View {
-        HStack(spacing: 10) {
-            controlButton("arrowtriangle.left.fill") { submit(.left) }
-            controlButton("arrow.clockwise") { submit(.rotate) }
-            controlButton("arrowtriangle.down.fill") { submit(.softDrop) }
-            controlButton("arrow.down.to.line") { submit(.hardDrop) }
-            controlButton("arrowtriangle.right.fill") { submit(.right) }
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                controlButton("arrowtriangle.left.fill") { submit(.left) }
+                controlButton("arrow.counterclockwise") { submit(.rotateLeft) }
+                controlButton("arrow.clockwise") { submit(.rotate) }
+                controlButton("arrowtriangle.right.fill") { submit(.right) }
+            }
+            HStack(spacing: 10) {
+                controlButton("tray.and.arrow.down.fill",
+                              tint: (game?.canHold ?? false) ? .cyan : .white.opacity(0.3)) {
+                    submit(.hold)
+                }
+                controlButton("arrowtriangle.down.fill") { submit(.softDrop) }
+                controlButton("arrow.down.to.line") { submit(.hardDrop) }
+            }
         }
         .padding(.horizontal, 16)
     }
 
-    func controlButton(_ symbol: String, action: @escaping () -> Void) -> some View {
+    func controlButton(_ symbol: String, tint: Color = .white, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Image(systemName: symbol)
                 .font(.title3.weight(.bold))
                 .frame(maxWidth: .infinity, minHeight: 46)
                 .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
         }
         .buttonStyle(.plain)
     }

@@ -96,7 +96,7 @@ enum BreakoutEvent: Codable, Hashable {
 
 /// Shared by Blocks (tetrominoes) and Capsules (pill-dropping) — same controls.
 enum TetrisMove: Codable, Hashable {
-    case left, right, rotate, softDrop, hardDrop
+    case left, right, rotate, rotateLeft, softDrop, hardDrop, hold
     case tick            // gravity step, driven by the view's timer
 }
 
