@@ -205,9 +205,18 @@ struct HopperView: View {
                 }
             }
 
-            // The frog.
+            // The frog — flashes white during respawn invincibility frames.
             let frogRect = cellRect(game.frogX, game.frogY)
+            let isInvincible = game.invincibleTicks > 0
+            let frogOpacity = isInvincible && game.invincibleTicks % 2 == 0 ? 0.4 : 1.0
+            if isInvincible {
+                // White halo during invincibility.
+                context.fill(Path(ellipseIn: frogRect.insetBy(dx: -2, dy: -2)),
+                             with: .color(.white.opacity(0.55)))
+            }
+            context.opacity = frogOpacity
             context.draw(Text("🐸").font(.system(size: min(cw, ch) * 0.8)), in: frogRect)
+            context.opacity = 1.0
         }
         .aspectRatio(CGFloat(HopperGame.width) / CGFloat(HopperGame.height), contentMode: .fit)
         .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))

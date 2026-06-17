@@ -52,31 +52,52 @@ struct GridBoardView: View {
     @ViewBuilder
     var capturedBar: some View {
         if let chess = session.game?.engine as? ChessGame {
-            let white = capturedPieces(chess: chess, byColor: 1)  // pieces captured BY black (white's losses)
-            let black = capturedPieces(chess: chess, byColor: 0)
-            HStack {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("White lost: \(white.isEmpty ? "—" : white)")
-                        .font(.caption).foregroundStyle(.secondary)
-                    Text("Black lost: \(black.isEmpty ? "—" : black)")
-                        .font(.caption).foregroundStyle(.secondary)
+            VStack(spacing: 4) {
+                HStack(spacing: 8) {
+                    capturedRow(chess: chess, capturedColor: 1, label: "White")
+                    Spacer()
+                    Text("Move \(chess.moveNumber)")
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.45))
+                    Spacer()
+                    capturedRow(chess: chess, capturedColor: 0, label: "Black")
                 }
-                Spacer()
-                Text("Move \(chess.moveNumber)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundStyle(.secondary)
+                materialAdvantage(chess: chess)
             }
         } else if let checkers = session.game?.engine as? CheckersGame {
             let red = 12 - checkers.pieceCount(color: 0)
             let black = 12 - checkers.pieceCount(color: 1)
-            VStack(alignment: .leading, spacing: 2) {
+            let redKings = checkers.kingCount(color: 0)
+            let blackKings = checkers.kingCount(color: 1)
+            VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("Red lost: \(red)  ·  Black lost: \(black)")
-                        .font(.caption).foregroundStyle(.secondary)
+                    HStack(spacing: 6) {
+                        Text("🔴")
+                        Text("\(checkers.pieceCount(color: 0)) left")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.8))
+                        if redKings > 0 {
+                            Text("(\(redKings)♛)")
+                                .font(.caption2)
+                                .foregroundStyle(Color(red: 1.0, green: 0.8, blue: 0.2))
+                        }
+                    }
                     Spacer()
                     Text("\(checkers.movesWithoutCapture) no-cap")
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.white.opacity(0.45))
+                    Spacer()
+                    HStack(spacing: 6) {
+                        if blackKings > 0 {
+                            Text("(\(blackKings)♛)")
+                                .font(.caption2)
+                                .foregroundStyle(Color(red: 1.0, green: 0.8, blue: 0.2))
+                        }
+                        Text("\(checkers.pieceCount(color: 1)) left")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.8))
+                        Text("⚫")
+                    }
                 }
                 if let desc = checkers.lastMoveDesc {
                     Text(desc)
@@ -93,6 +114,53 @@ struct GridBoardView: View {
                         .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
                 }
             }
+        }
+    }
+
+    /// Inline row of captured piece glyphs with repeat stacking.
+    func capturedRow(chess: ChessGame, capturedColor: Int, label: String) -> some View {
+        let remaining = chess.board.compactMap { $0 }.filter { $0.color == capturedColor }
+        let counts: [ChessPieceKind: Int] = remaining.reduce(into: [:]) { $0[$1.kind, default: 0] += 1 }
+        let full: [ChessPieceKind: Int] = [.pawn: 8, .rook: 2, .knight: 2, .bishop: 2, .queen: 1, .king: 1]
+        let kinds: [ChessPieceKind] = [.queen, .rook, .bishop, .knight, .pawn]
+
+        return HStack(spacing: 2) {
+            Text(label)
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.4))
+            ForEach(kinds, id: \.rawValue) { kind in
+                let diff = (full[kind] ?? 0) - (counts[kind] ?? 0)
+                if diff > 0 {
+                    HStack(spacing: 0) {
+                        ForEach(0..<diff, id: \.self) { _ in
+                            Text(filledGlyph(kind))
+                                .font(.system(size: 11))
+                                .foregroundStyle(capturedColor == 1 ? Color.white.opacity(0.9) : Color(white: 0.25))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Thin bar showing material advantage (positive = white ahead).
+    @ViewBuilder
+    func materialAdvantage(chess: ChessGame) -> some View {
+        let values: [ChessPieceKind: Int] = [.queen: 9, .rook: 5, .bishop: 3, .knight: 3, .pawn: 1]
+        let total: (Int) -> Int = { color in
+            chess.board.compactMap { $0 }.filter { $0.color == color }
+                .reduce(0) { $0 + (values[$1.kind] ?? 0) }
+        }
+        let whiteMat = total(1)
+        let blackMat = total(0)
+        let diff = whiteMat - blackMat
+        if diff != 0 {
+            let leader = diff > 0 ? "White" : "Black"
+            let absDiff = abs(diff)
+            Text("\(leader) +\(absDiff)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(maxWidth: .infinity)
         }
     }
 

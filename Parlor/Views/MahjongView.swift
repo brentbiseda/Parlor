@@ -13,10 +13,44 @@ struct MahjongView: View {
         GeometryReader { geo in
             if let game {
                 // Layout spans x −2…28 half-units (15 tiles wide), y 0…16.
-                let unit = min(geo.size.width / 32, geo.size.height / 20)
+                let unit = min(geo.size.width / 32, (geo.size.height - 36) / 20)
                 let tileW = unit * 2, tileH = unit * 2.4
                 let originX = (geo.size.width - unit * 30) / 2 + unit * 2
-                let originY = (geo.size.height - unit * 18) / 2
+                let originY = 36 + (geo.size.height - 36 - unit * 18) / 2
+
+                // Top status bar
+                let pairs = game.matchedPairs
+                let total = 72
+                let progress = Double(pairs) / Double(total)
+                let available = game.availableMatches().count
+                HStack(spacing: 10) {
+                    GeometryReader { barGeo in
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Color.white.opacity(0.08))
+                            Capsule()
+                                .fill(progress >= 1 ? Color.green
+                                      : Color(hue: 0.12 + progress * 0.22, saturation: 0.85, brightness: 0.9))
+                                .frame(width: barGeo.size.width * progress)
+                                .animation(.easeOut(duration: 0.3), value: pairs)
+                        }
+                    }
+                    .frame(height: 5)
+                    HStack(spacing: 4) {
+                        Text("\(pairs)/\(total)")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .monospacedDigit()
+                        if available > 0 {
+                            Text("· \(available) pair\(available == 1 ? "" : "s")")
+                                .font(.caption2)
+                                .foregroundStyle(available == 1 ? Color.orange : .white.opacity(0.5))
+                        }
+                    }
+                }
+                .frame(height: 20)
+                .padding(.horizontal, 12)
+                .padding(.top, 4)
+                .position(x: geo.size.width / 2, y: 14)
 
                 ZStack {
                     ForEach(game.tiles.filter { !$0.removed }.sorted {

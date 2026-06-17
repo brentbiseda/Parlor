@@ -195,22 +195,20 @@ struct CapsulesView: View {
                 Text("NEXT")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white.opacity(0.6))
-                HStack(spacing: 3) {
-                    if let next = game?.nextColors {
-                        ForEach(0..<2, id: \.self) { i in
-                            RoundedRectangle(cornerRadius: 6)
-                                .fill(Self.cellColors[next[i]])
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 6)
-                                        .strokeBorder(.white.opacity(0.45), lineWidth: 1.5)
-                                )
-                                .frame(width: 26, height: 26)
+                pillPreview(game?.nextColors, scale: 1.0)
+            }
+            // Upcoming pills queue (up to 3 shown).
+            if let upcoming = game?.upcomingColors, !upcoming.isEmpty {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("QUEUE")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.4))
+                    VStack(spacing: 3) {
+                        ForEach(Array(upcoming.prefix(3).enumerated()), id: \.offset) { _, colors in
+                            pillPreview(colors, scale: 0.72)
                         }
                     }
                 }
-                .padding(6)
-                .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.15), lineWidth: 1))
             }
             if let game {
                 stat("SCORE", "\(game.score)")
@@ -219,39 +217,83 @@ struct CapsulesView: View {
                 if game.maxChain > 1 {
                     stat("CHAIN", "×\(game.maxChain)")
                 }
+                if game.efficientClears > 0 {
+                    stat("EFFICIENT", "×\(game.efficientClears)")
+                }
             }
             Spacer()
         }
         .frame(width: 86)
     }
 
+    func pillPreview(_ colors: [Int]?, scale: CGFloat) -> some View {
+        HStack(spacing: 3 * scale) {
+            if let colors {
+                ForEach(0..<2, id: \.self) { i in
+                    RoundedRectangle(cornerRadius: 6 * scale)
+                        .fill(Self.cellColors[colors[i]])
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6 * scale)
+                                .strokeBorder(.white.opacity(0.45), lineWidth: 1.5 * scale)
+                        )
+                        .frame(width: 26 * scale, height: 26 * scale)
+                }
+            } else {
+                ForEach(0..<2, id: \.self) { _ in
+                    RoundedRectangle(cornerRadius: 6 * scale)
+                        .fill(Color.white.opacity(0.08))
+                        .frame(width: 26 * scale, height: 26 * scale)
+                }
+            }
+        }
+        .padding(6 * scale)
+        .background(.black.opacity(0.35), in: RoundedRectangle(cornerRadius: 8 * scale))
+        .overlay(RoundedRectangle(cornerRadius: 8 * scale).strokeBorder(.white.opacity(0.15), lineWidth: 1))
+    }
+
     @ViewBuilder
     var levelClearOverlay: some View {
         if showLevelClear, let game {
             ZStack {
-                Color.black.opacity(0.55)
-                VStack(spacing: 8) {
-                    Text("CLEAR!")
-                        .font(.system(size: 36, weight: .black, design: .rounded))
+                Color.black.opacity(0.65)
+                VStack(spacing: 10) {
+                    Text("LEVEL \(game.level) CLEAR!")
+                        .font(.system(size: 28, weight: .black, design: .rounded))
                         .foregroundStyle(.yellow)
-                    Text("Level \(game.level)")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white)
-                    Text("\(game.score) pts")
-                        .font(.headline)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Button("Next Level") {
+                        .shadow(color: .orange.opacity(0.7), radius: 8)
+                    Divider().overlay(Color.white.opacity(0.2))
+                    VStack(spacing: 4) {
+                        let pillsThisLevel = game.pillsUsed - game.pillsAtLevelStart
+                        Text("Viruses cleared: \(game.virusesAtLevelStart)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.85))
+                        Text("Pills used: \(pillsThisLevel)")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(pillsThisLevel < game.virusesAtLevelStart ? .green : .white.opacity(0.85))
+                        if game.lastChain >= 2 {
+                            Text("Best chain: ×\(game.maxChain) 🔗")
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.cyan)
+                        }
+                    }
+                    Text("\(game.score) pts total")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Button("Next Level →") {
                         showLevelClear = false
                         session.submit(.capsules(.tick))
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(.yellow)
                     .foregroundStyle(.black)
-                    .font(.headline)
+                    .font(.headline.weight(.bold))
                     .padding(.top, 4)
                 }
+                .padding(20)
             }
             .clipShape(RoundedRectangle(cornerRadius: 10))
+            .transition(.scale(scale: 0.92).combined(with: .opacity))
+            .animation(.spring(response: 0.3), value: showLevelClear)
         }
     }
 
@@ -268,12 +310,17 @@ struct CapsulesView: View {
     }
 
     var controls: some View {
-        HStack(spacing: 10) {
-            control("arrowtriangle.left.fill") { submit(.left) }
-            control("arrow.clockwise") { submit(.rotate) }
-            control("arrowtriangle.down.fill") { submit(.softDrop) }
-            control("arrow.down.to.line") { submit(.hardDrop) }
-            control("arrowtriangle.right.fill") { submit(.right) }
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                control("arrowtriangle.left.fill") { submit(.left) }
+                control("arrow.counterclockwise") { submit(.rotateLeft) }
+                control("arrow.clockwise") { submit(.rotate) }
+                control("arrowtriangle.right.fill") { submit(.right) }
+            }
+            HStack(spacing: 10) {
+                control("arrowtriangle.down.fill") { submit(.softDrop) }
+                control("arrow.down.to.line") { submit(.hardDrop) }
+            }
         }
         .padding(.horizontal, 16)
     }

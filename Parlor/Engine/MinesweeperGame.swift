@@ -32,6 +32,7 @@ struct MinesweeperGame: GameEngine {
     var mines: Set<Int> = []
     var revealed: Set<Int> = []
     var flagged: Set<Int> = []
+    var questioned: Set<Int> = []  // cells marked with ? (uncertain)
     var minesPlaced = false
     var lost = false
     var moveCount = 0
@@ -156,9 +157,13 @@ struct MinesweeperGame: GameEngine {
             let idx = index(x, y)
             guard !revealed.contains(idx) else { throw GameError.illegalMove }
             if flagged.contains(idx) {
+                // Cycle: flag → ? → clear
                 flagged.remove(idx)
+                questioned.insert(idx)
+            } else if questioned.contains(idx) {
+                questioned.remove(idx)
             } else {
-                // Check if adjacent to an existing flag (pattern recognition indicator)
+                // Clear → flag
                 let adjacentToFlag = neighbors(idx).contains { flagged.contains($0) }
                 if adjacentToFlag { patternFlags += 1 }
                 flagged.insert(idx)
@@ -205,6 +210,7 @@ struct MinesweeperGame: GameEngine {
             guard !revealed.contains(idx), !mines.contains(idx) else { continue }
             revealed.insert(idx)
             flagged.remove(idx)
+            questioned.remove(idx)
             if adjacentMines(idx) == 0 {
                 frontier.append(contentsOf: neighbors(idx).filter { !revealed.contains($0) })
             }

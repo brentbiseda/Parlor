@@ -153,19 +153,26 @@ struct MinesweeperView: View {
         let index = game.index(x, y)
         let revealed = game.revealed.contains(index)
         let flagged = game.flagged.contains(index)
+        let questioned = game.questioned.contains(index)
         let isMine = game.mines.contains(index)
         let showMine = game.isOver && isMine
+        // Chord-ready: revealed number with exactly matching flag count among hidden neighbors.
+        let count = revealed && !isMine ? game.adjacentMines(index) : 0
+        let isChordReady: Bool = revealed && count > 0 && !game.isOver && {
+            let nbrs = game.neighbors(index)
+            let flagCount = nbrs.filter { game.flagged.contains($0) }.count
+            return flagCount == count && nbrs.contains { !game.flagged.contains($0) && !game.revealed.contains($0) }
+        }()
 
         ZStack {
             RoundedRectangle(cornerRadius: 3)
                 .fill(revealed
-                      ? Color(white: 0.88)
+                      ? (isChordReady ? Color(white: 0.94) : Color(white: 0.88))
                       : ((x + y).isMultiple(of: 2)
                          ? Color(red: 0.3, green: 0.55, blue: 0.35)
                          : Color(red: 0.26, green: 0.49, blue: 0.31)))
                 .overlay(alignment: .top) {
                     if !revealed {
-                        // Raised-tile highlight for tactile depth.
                         LinearGradient(colors: [.white.opacity(0.22), .clear],
                                        startPoint: .top, endPoint: .center)
                             .clipShape(RoundedRectangle(cornerRadius: 3))
@@ -176,22 +183,28 @@ struct MinesweeperView: View {
                     if showMine && !revealed {
                         RoundedRectangle(cornerRadius: 3).fill(Color.red.opacity(0.25))
                     }
+                    if isChordReady {
+                        // Subtle cyan glow around chord-ready numbers.
+                        RoundedRectangle(cornerRadius: 3)
+                            .strokeBorder(Color.cyan.opacity(0.55), lineWidth: 1.5)
+                    }
                 }
             if revealed {
                 if isMine {
                     Text("💥").font(.system(size: size * 0.6))
-                } else {
-                    let count = game.adjacentMines(index)
-                    if count > 0 {
-                        Text("\(count)")
-                            .font(.system(size: size * 0.55, weight: .bold, design: .rounded))
-                            .foregroundStyle(numberColors[count])
-                    }
+                } else if count > 0 {
+                    Text("\(count)")
+                        .font(.system(size: size * 0.55, weight: .bold, design: .rounded))
+                        .foregroundStyle(numberColors[count])
                 }
             } else if showMine {
                 Text("💣").font(.system(size: size * 0.55))
             } else if flagged {
                 Text("🚩").font(.system(size: size * 0.55))
+            } else if questioned {
+                Text("?")
+                    .font(.system(size: size * 0.5, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color.orange.opacity(0.9))
             }
         }
         .frame(width: size, height: size)

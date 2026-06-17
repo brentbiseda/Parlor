@@ -280,18 +280,36 @@ struct KlondikeView: View {
     func foundationProgressBar(_ game: KlondikeGame) -> some View {
         let placed = game.foundations.map(\.count).reduce(0, +)
         let progress = Double(placed) / 52.0
-        return GeometryReader { geo in
-            ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(Color.white.opacity(0.12))
-                    .frame(height: 5)
-                Capsule()
-                    .fill(progress >= 1 ? Color.green : Color(hue: 0.33 - progress * 0.1, saturation: 0.8, brightness: 0.85))
-                    .frame(width: geo.size.width * progress, height: 5)
-                    .animation(.easeOut(duration: 0.3), value: placed)
+        return HStack(spacing: 8) {
+            // Draw mode badge
+            Text(game.drawThree ? "Draw 3" : "Draw 1")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.white.opacity(0.6))
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.white.opacity(0.08), in: Capsule())
+
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.12))
+                        .frame(height: 5)
+                    Capsule()
+                        .fill(progress >= 1 ? Color.green : Color(hue: 0.33 - progress * 0.1, saturation: 0.8, brightness: 0.85))
+                        .frame(width: geo.size.width * progress, height: 5)
+                        .animation(.easeOut(duration: 0.3), value: placed)
+                }
+            }
+            .frame(height: 5)
+
+            // Move count
+            if game.moveCount > 0 {
+                Text("\(game.moveCount)m")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .monospacedDigit()
             }
         }
-        .frame(height: 5)
         .padding(.horizontal, 4)
     }
 

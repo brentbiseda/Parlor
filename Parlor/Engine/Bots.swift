@@ -32,7 +32,7 @@ enum Bot {
     private static func normalMove(_ game: AnyGame) -> Move? {
         switch game.engine {
         case let g as SpadesGame where g.phase == .bidding:
-            return .bid(estimateSpadesBid(hand: g.hands[g.currentPlayer]))
+            return .bid(contextAwareSpadesBid(g))
         case let g as BridgeGame where g.phase == .auction:
             return .bridgeCall(bridgeBotCall(game: g))
         case let g as EuchreGame where g.phase == .orderingUp || g.phase == .callingTrump:
@@ -525,6 +525,38 @@ enum Bot {
         }()
         if !hasHighCard && highSpades.isEmpty && spadeCount <= 1 && lowCards >= 9 && !hasDangerSingleton { return 0 }
         return max(1, min(8, Int(tricks.rounded())))
+    }
+
+    /// Bid-aware Spades bidding: adjusts the raw hand estimate for partner nil coverage
+    /// and bag-penalty danger. If partner has already bid nil, we must bid at least 2 more
+    /// to absorb the tricks they'll duck. If our team bags are at 8+, shave 1 to avoid overflow.
+    static func contextAwareSpadesBid(_ g: SpadesGame) -> Int {
+        let seat = g.currentPlayer
+        let hand = g.hands[seat]
+        var bid = estimateSpadesBid(hand: hand)
+        guard bid > 0 else { return 0 }  // nil bid stays nil
+
+        let partner = (seat + 2) % 4
+        let team = seat % 2
+
+        // Partner bid nil: we cover their ducks — bump up to ensure ≥2 bid
+        if let partnerBid = g.bids[partner], partnerBid == 0 {
+            bid = max(bid, 2)
+            // Also avoid nil ourselves when partner is already going nil
+            if bid == 0 { bid = 2 }
+        }
+
+        // Partner bid high: we can afford to bid conservatively
+        if let partnerBid = g.bids[partner], partnerBid >= 6, bid >= 3 {
+            bid = max(1, bid - 1)
+        }
+
+        // Bag danger: at 8+ bags, bid 1 less to avoid the −100 overflow
+        if g.teamBags[team] >= 8 && bid > 1 {
+            bid -= 1
+        }
+
+        return max(1, min(8, bid))
     }
 
     static func highCardPoints(_ hand: [Card]) -> Int {

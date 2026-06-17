@@ -53,8 +53,48 @@ struct UnoCardView: View {
     }
 }
 
+/// Inline color picker overlay for wild card plays in Wildcard (UNO-style).
+struct UnoColorPicker: View {
+    @Binding var pendingWild: UnoCard?
+    var session: GameSession
+    @State private var appeared = false
+
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Pick a Color")
+                .font(.title3.weight(.bold))
+                .foregroundStyle(.white)
+            HStack(spacing: 14) {
+                ForEach(Array(UnoColor.allCases.enumerated()), id: \.element) { index, color in
+                    Button {
+                        if let card = pendingWild {
+                            session.submit(.uno(.play(card, declared: color)))
+                        }
+                        pendingWild = nil
+                    } label: {
+                        VStack(spacing: 6) {
+                            Circle()
+                                .fill(UnoCardView.color(color))
+                                .frame(width: 44, height: 44)
+                                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 2))
+                            Text(color.rawValue.capitalized)
+                                .font(.caption.weight(.bold))
+                                .foregroundStyle(.white)
+                        }
+                    }
+                    .buttonStyle(PressableTileStyle())
+                    .scaleEffect(appeared ? 1.0 : 0.5)
+                    .animation(.spring(response: 0.35, dampingFraction: 0.6).delay(Double(index) * 0.06),
+                               value: appeared)
+                }
+            }
+        }
+        .onAppear { appeared = true }
+    }
+}
+
 /// Wildcard table: opponents around the top, discard + draw in the middle,
-/// your hand fanned along the bottom. Wilds ask for a color.
+/// your hand fanned along the bottom. Wilds ask for a color via inline overlay.
 struct UnoView: View {
     @ObservedObject var session: GameSession
     @State private var pendingWild: UnoCard? = nil
@@ -65,80 +105,130 @@ struct UnoView: View {
         if let game {
             let perspective = session.perspectiveSeat
             let acting = session.actionableSeat != nil
-            VStack(spacing: 6) {
-                opponentRow(game, perspective: perspective)
+            ZStack {
+                VStack(spacing: 6) {
+                    opponentRow(game, perspective: perspective)
 
-                Spacer(minLength: 0)
+                    Spacer(minLength: 0)
 
-                HStack(spacing: 24) {
-                    // Draw pile
-                    Button {
-                        guard acting else { return }
-                        session.submit(.uno(game.drewThisTurn ? .pass : .draw))
-                    } label: {
-                        ZStack {
-                            RoundedRectangle(cornerRadius: 9)
-                                .fill(Color(white: 0.18))
-                                .frame(width: 56, height: 84)
-                                .overlay(RoundedRectangle(cornerRadius: 9)
-                                    .strokeBorder(.white.opacity(0.5), lineWidth: 1.5))
-                            VStack(spacing: 2) {
-                                Text(game.drewThisTurn ? "PASS" : "DRAW")
-                                    .font(.caption.weight(.black))
-                                Text("\(game.drawPile.count)")
-                                    .font(.caption2)
-                                    .opacity(0.7)
+                    handSizeStrip(game, perspective: perspective)
+
+                    HStack(spacing: 24) {
+                        // Draw pile
+                        Button {
+                            guard acting else { return }
+                            session.submit(.uno(game.drewThisTurn ? .pass : .draw))
+                        } label: {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 9)
+                                    .fill(Color(white: 0.18))
+                                    .frame(width: 56, height: 84)
+                                    .overlay(RoundedRectangle(cornerRadius: 9)
+                                        .strokeBorder(.white.opacity(0.5), lineWidth: 1.5))
+                                VStack(spacing: 2) {
+                                    Text(game.drewThisTurn ? "PASS" : "DRAW")
+                                        .font(.caption.weight(.black))
+                                    Text("\(game.drawPile.count)")
+                                        .font(.caption2)
+                                        .opacity(0.7)
+                                }
+                                .foregroundStyle(.white)
                             }
-                            .foregroundStyle(.white)
                         }
-                    }
-                    .disabled(!acting)
+                        .disabled(!acting)
 
-                    // Discard
-                    if let top = game.topCard {
-                        UnoCardView(card: top, width: 60)
-                            .overlay(alignment: .bottom) {
-                                Text(game.activeColor.rawValue.capitalized)
-                                    .font(.caption2.weight(.bold))
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 2)
-                                    .background(UnoCardView.color(game.activeColor), in: Capsule())
-                                    .foregroundStyle(.white)
-                                    .offset(y: 14)
-                            }
+                        // Discard with active color chip
+                        if let top = game.topCard {
+                            UnoCardView(card: top, width: 60)
+                                .overlay(alignment: .bottom) {
+                                    Text(game.activeColor.rawValue.capitalized)
+                                        .font(.caption2.weight(.bold))
+                                        .padding(.horizontal, 8)
+                                        .padding(.vertical, 2)
+                                        .background(UnoCardView.color(game.activeColor), in: Capsule())
+                                        .foregroundStyle(.white)
+                                        .offset(y: 14)
+                                }
+                        }
+
+                        // Play direction indicator
+                        Image(systemName: game.clockwise
+                              ? "arrow.clockwise.circle.fill"
+                              : "arrow.counterclockwise.circle.fill")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.7))
+                            .symbolEffect(.bounce, value: game.clockwise)
                     }
 
-                    // Play direction.
-                    Image(systemName: game.clockwise
-                          ? "arrow.clockwise.circle.fill"
-                          : "arrow.counterclockwise.circle.fill")
-                        .font(.title2.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.7))
-                        .symbolEffect(.bounce, value: game.clockwise)
+                    Spacer(minLength: 0)
+
+                    myHand(game, perspective: perspective, acting: acting)
+                    SeatBadge(name: session.playerName(seat: perspective) + " (you)",
+                              isCurrent: !game.isOver && game.currentPlayer == perspective)
+                        .padding(.bottom, 4)
                 }
+                .padding(.top, 4)
 
-                Spacer(minLength: 0)
-
-                myHand(game, perspective: perspective, acting: acting)
-                SeatBadge(name: session.playerName(seat: perspective) + " (you)",
-                          isCurrent: !game.isOver && game.currentPlayer == perspective)
-                    .padding(.bottom, 4)
+                // Inline wild color picker overlay
+                if pendingWild != nil {
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .onTapGesture { pendingWild = nil }
+                    UnoColorPicker(pendingWild: $pendingWild, session: session)
+                        .padding(24)
+                        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 20))
+                        .overlay(RoundedRectangle(cornerRadius: 20)
+                            .strokeBorder(.white.opacity(0.15), lineWidth: 1))
+                        .transition(.scale(scale: 0.88).combined(with: .opacity))
+                }
             }
-            .padding(.top, 4)
-            .confirmationDialog("Pick a color", isPresented: Binding(
-                get: { pendingWild != nil },
-                set: { if !$0 { pendingWild = nil } }
-            ), titleVisibility: .visible) {
-                ForEach(UnoColor.allCases, id: \.self) { color in
-                    Button(color.rawValue.capitalized) {
-                        if let card = pendingWild {
-                            session.submit(.uno(.play(card, declared: color)))
-                        }
-                        pendingWild = nil
+            .animation(.spring(response: 0.3), value: pendingWild != nil)
+        }
+    }
+
+    /// Compact bar showing each player's card count with a color-coded threat indicator.
+    func handSizeStrip(_ game: UnoGame, perspective: Int) -> some View {
+        HStack(spacing: 8) {
+            ForEach(0..<4, id: \.self) { seat in
+                let count = game.hands[seat].count
+                let isMe = seat == perspective
+                let isCurrent = !game.isOver && game.currentPlayer == seat
+                let hasUno = game.calledUno.contains(seat) && count == 1
+                let exposed = count == 1 && !game.calledUno.contains(seat)
+                VStack(spacing: 2) {
+                    Text("\(count)")
+                        .font(.caption.weight(.black))
+                        .foregroundStyle(count <= 1 ? (hasUno ? .yellow : .red) : count <= 3 ? .orange : .white)
+                    GeometryReader { geo in
+                        let maxCards = 14.0
+                        let fraction = min(1.0, Double(count) / maxCards)
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(.white.opacity(0.12))
+                            .overlay(alignment: .bottom) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(count <= 1 ? (hasUno ? Color.yellow : Color.red)
+                                          : count <= 3 ? Color.orange : Color.white.opacity(0.6))
+                                    .frame(height: geo.size.height * fraction)
+                            }
+                    }
+                    .frame(height: 20)
+                    Text(isMe ? "you" : "S\(seat+1)")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(isCurrent ? Color.yellow : .white.opacity(0.5))
+                }
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .top) {
+                    if exposed {
+                        Text("!")
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(.red)
+                            .offset(x: 8, y: -2)
                     }
                 }
             }
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 4)
     }
 
     func opponentRow(_ game: UnoGame, perspective: Int) -> some View {
@@ -322,25 +412,44 @@ struct EightsView: View {
 
                     Spacer(minLength: 0)
 
-                    // Eights stats chip
-                    if game.eightPlays > 0 || game.suitChanges > 0 {
-                        HStack(spacing: 6) {
-                            if game.eightPlays > 0 {
-                                Label("\(game.eightPlays)", systemImage: "8.circle.fill")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.85))
+                    // Eights stats + draw chain indicator
+                    HStack(spacing: 8) {
+                        if game.eightPlays > 0 || game.suitChanges > 0 {
+                            HStack(spacing: 6) {
+                                if game.eightPlays > 0 {
+                                    Label("\(game.eightPlays)", systemImage: "8.circle.fill")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.white.opacity(0.85))
+                                }
+                                if game.suitChanges > 0 {
+                                    Text("\(game.suitChanges) suit\(game.suitChanges == 1 ? "" : "s")")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.white.opacity(0.7))
+                                }
                             }
-                            if game.suitChanges > 0 {
-                                Text("\(game.suitChanges) suit\(game.suitChanges == 1 ? "" : "s")")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.white.opacity(0.7))
-                            }
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.black.opacity(0.3), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.75))
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 4)
-                        .background(.black.opacity(0.3), in: Capsule())
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.75))
+                        // Show active draw chain when ≥2 twos are stacked
+                        if game.currentDrawChain >= 2 {
+                            HStack(spacing: 3) {
+                                Image(systemName: "arrow.up.circle.fill")
+                                    .font(.caption2)
+                                    .foregroundStyle(.orange)
+                                Text("Chain ×\(game.currentDrawChain) · DRAW \(game.pendingDraw)")
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(.orange)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.orange.opacity(0.15), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.orange.opacity(0.5), lineWidth: 1))
+                            .transition(.scale.combined(with: .opacity))
+                        }
                     }
+                    .animation(.easeInOut(duration: 0.2), value: game.currentDrawChain)
 
                     HStack(spacing: 24) {
                         Button {

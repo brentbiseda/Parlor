@@ -56,45 +56,85 @@ struct FreeCellView: View {
                 let cardWidth = min(50, (geo.size.width - 9 * 6) / 8)
                 VStack(spacing: 10) {
                     topRow(game, cardWidth: cardWidth)
+                    foundationProgressBar(game)
+                        .padding(.horizontal, 6)
                     cascadeRow(game, cardWidth: cardWidth)
                     Spacer(minLength: 0)
                 }
                 .padding(6)
                 .overlay(alignment: .bottom) {
-                    HStack(spacing: 12) {
-                        if session.canUndo {
-                            Button { session.undo() } label: {
-                                Label("Undo", systemImage: "arrow.uturn.backward")
-                                    .font(.headline)
+                    VStack(spacing: 8) {
+                        if game.deadlocked {
+                            HStack(spacing: 6) {
+                                Image(systemName: "xmark.octagon.fill")
+                                    .foregroundStyle(.red)
+                                Text("No moves — deal unwinnable")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.white)
                             }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.secondary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 6)
+                            .background(.red.opacity(0.2), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.red.opacity(0.5), lineWidth: 1))
                         }
-                        if game.moveCount > 0 {
-                            Text("Move \(game.moveCount)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        if canAutoFinish && !autoFinishing {
-                            Button { autoFinish() } label: {
-                                Label("Auto-finish", systemImage: "wand.and.stars")
-                                    .font(.headline)
-                            }
-                            .buttonStyle(.borderedProminent)
-                            .tint(.orange)
-                            .scaleEffect(autoFinishPulse ? 1.06 : 1.0)
-                            .shadow(color: .orange.opacity(autoFinishPulse ? 0.6 : 0.2), radius: autoFinishPulse ? 12 : 4)
-                            .onAppear {
-                                withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
-                                    autoFinishPulse = true
+                        HStack(spacing: 12) {
+                            if session.canUndo {
+                                Button { session.undo() } label: {
+                                    Label("Undo", systemImage: "arrow.uturn.backward")
+                                        .font(.headline)
                                 }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.secondary)
                             }
-                            .onDisappear { autoFinishPulse = false }
+                            if game.moveCount > 0 {
+                                Text("Move \(game.moveCount)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if canAutoFinish && !autoFinishing {
+                                Button { autoFinish() } label: {
+                                    Label("Auto-finish", systemImage: "wand.and.stars")
+                                        .font(.headline)
+                                }
+                                .buttonStyle(.borderedProminent)
+                                .tint(.orange)
+                                .scaleEffect(autoFinishPulse ? 1.06 : 1.0)
+                                .shadow(color: .orange.opacity(autoFinishPulse ? 0.6 : 0.2), radius: autoFinishPulse ? 12 : 4)
+                                .onAppear {
+                                    withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+                                        autoFinishPulse = true
+                                    }
+                                }
+                                .onDisappear { autoFinishPulse = false }
+                            }
                         }
                     }
                     .padding(.bottom, 24)
                 }
             }
+        }
+    }
+
+    /// Thin bar showing how many of 52 cards are on the foundation (0–52).
+    func foundationProgressBar(_ game: FreeCellGame) -> some View {
+        let placed = game.foundations.reduce(0) { $0 + $1.count }
+        let fraction = Double(placed) / 52.0
+        let barColor: Color = fraction >= 0.8 ? .green : fraction >= 0.5 ? .yellow : .white.opacity(0.5)
+        return GeometryReader { geo in
+            ZStack(alignment: .leading) {
+                RoundedRectangle(cornerRadius: 3).fill(.white.opacity(0.08))
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(barColor)
+                    .frame(width: geo.size.width * fraction)
+                    .animation(.easeInOut(duration: 0.3), value: placed)
+            }
+        }
+        .frame(height: 4)
+        .overlay(alignment: .trailing) {
+            Text("\(placed)/52")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(barColor)
+                .offset(x: 28)
         }
     }
 

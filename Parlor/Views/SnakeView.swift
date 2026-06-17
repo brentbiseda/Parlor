@@ -283,16 +283,46 @@ struct SnakeView: View {
         }
     }
 
-    var controls: some View {
-        HStack(spacing: 10) {
-            arrow("arrowtriangle.left.fill", .left)
-            VStack(spacing: 8) {
-                arrow("arrowtriangle.up.fill", .up)
-                arrow("arrowtriangle.down.fill", .down)
+    /// Shows the buffered direction queue as small arrow chips above the controls.
+    @ViewBuilder
+    var queueChip: some View {
+        if let game, !game.isOver, !game.directionQueue.isEmpty {
+            HStack(spacing: 3) {
+                Text("Queued:")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                ForEach(Array(game.directionQueue.enumerated()), id: \.offset) { _, dir in
+                    let arrow: String = switch dir {
+                    case .up: "↑"
+                    case .down: "↓"
+                    case .left: "←"
+                    case .right: "→"
+                    }
+                    Text(arrow)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.yellow.opacity(0.15), in: RoundedRectangle(cornerRadius: 4))
+                }
             }
-            arrow("arrowtriangle.right.fill", .right)
+            .transition(.opacity)
         }
-        .padding(.horizontal, 60)
+    }
+
+    var controls: some View {
+        VStack(spacing: 4) {
+            queueChip
+            HStack(spacing: 10) {
+                arrow("arrowtriangle.left.fill", .left)
+                VStack(spacing: 8) {
+                    arrow("arrowtriangle.up.fill", .up)
+                    arrow("arrowtriangle.down.fill", .down)
+                }
+                arrow("arrowtriangle.right.fill", .right)
+            }
+            .padding(.horizontal, 60)
+        }
     }
 
     func arrow(_ symbol: String, _ direction: GridDirection) -> some View {

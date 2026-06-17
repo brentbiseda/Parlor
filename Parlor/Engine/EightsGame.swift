@@ -38,6 +38,10 @@ struct EightsGame: GameEngine {
     var cardsForced = 0
     /// Largest single draw-two debt that ever resolved.
     var biggestDrawHit = 0
+    /// Number of consecutive 2s currently stacked without resolution.
+    var currentDrawChain = 0
+    /// Peak consecutive 2s stacked in one chain this game.
+    var maxDrawChain = 0
     /// Distinct suits that have been the active suit at any point (rainbow game = all 4).
     var suitsSeen: Set<Suit> = []
     /// Queens played (skips dealt out).
@@ -131,8 +135,14 @@ struct EightsGame: GameEngine {
             let isTwo = card.rank == .two
             let isQueen = card.rank == .queen
             if isQueen { queensPlayed += 1 }
-            if isTwo { pendingDraw += 2 }
-            else { pendingDraw = 0 }     // resolved by a non-2 play
+            if isTwo {
+                pendingDraw += 2
+                currentDrawChain += 1
+                if currentDrawChain > maxDrawChain { maxDrawChain = currentDrawChain }
+            } else {
+                pendingDraw = 0           // resolved by a non-2 play
+                currentDrawChain = 0
+            }
 
             if hands[currentPlayer].isEmpty {
                 winner = currentPlayer
@@ -154,6 +164,7 @@ struct EightsGame: GameEngine {
                 biggestDrawHit = max(biggestDrawHit, pendingDraw)
             }
             pendingDraw = 0
+            currentDrawChain = 0
             for _ in 0..<drawCount {
                 if stock.isEmpty, discard.count > 1 {
                     // Reshuffle all but the top discard card back into stock.

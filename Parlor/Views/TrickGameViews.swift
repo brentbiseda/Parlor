@@ -157,6 +157,19 @@ struct TrickTableView: View {
                             .padding(.bottom, 2)
                     }
 
+                    // Spades tricks-vs-contract progress bar (13 dots).
+                    if let spades = game.engine as? SpadesGame, spades.phase == .playing {
+                        spadesTricksBar(spades: spades, perspective: perspective)
+                            .padding(.bottom, 2)
+                    }
+
+                    // Hearts per-seat round score when any seat has scored this round.
+                    if let hearts = game.engine as? HeartsGame, hearts.phase == .playing,
+                       hearts.roundPoints.contains(where: { $0 > 0 }) {
+                        heartsRoundChips(hearts: hearts, perspective: perspective)
+                            .padding(.bottom, 2)
+                    }
+
                     if let summary = adapter.lastTrickSummary, adapter.trick.isEmpty {
                         HStack(spacing: 5) {
                             Image(systemName: "checkmark.circle.fill")
@@ -223,6 +236,85 @@ struct TrickTableView: View {
                     .fill(dotColor)
                     .overlay(Circle().strokeBorder(played ? .white.opacity(0.5) : .white.opacity(0.25), lineWidth: 1))
                     .frame(width: 10, height: 10)
+            }
+        }
+    }
+
+    // MARK: - Spades contract progress
+
+    /// 13-dot bar showing each trick as Us/Them/unplayed. Contract thresholds
+    /// are marked with a subtle white line so you can see "need 4 more" at a glance.
+    @ViewBuilder
+    func spadesTricksBar(spades: SpadesGame, perspective: Int) -> some View {
+        let us = perspective % 2
+        let them = 1 - us
+        let ourTricks = spades.tricksWon[us] + spades.tricksWon[us + 2]
+        let theirTricks = spades.tricksWon[them] + spades.tricksWon[them + 2]
+        let ourContract = spades.teamContract(us)
+        let theirContract = spades.teamContract(them)
+        let played = ourTricks + theirTricks
+
+        HStack(spacing: 3) {
+            ForEach(0..<13, id: \.self) { i in
+                let ours = i < ourTricks
+                let theirs = !ours && i < played
+                let atOurContract = ourContract > 0 && i == ourContract - 1
+                let atTheirContract = theirContract > 0 && i == 13 - theirContract
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(ours ? Color.blue : theirs ? Color.red : Color.white.opacity(0.12))
+                    .frame(width: 14, height: 10)
+                    .overlay(alignment: .trailing) {
+                        if atOurContract {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.6))
+                                .frame(width: 1.5)
+                        }
+                    }
+                    .overlay(alignment: .leading) {
+                        if atTheirContract && !atOurContract {
+                            Rectangle()
+                                .fill(Color.white.opacity(0.4))
+                                .frame(width: 1.5)
+                        }
+                    }
+            }
+            Spacer(minLength: 4)
+            Text("\(ourTricks)/\(ourContract) · \(theirTricks)/\(theirContract)")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+                .monospacedDigit()
+        }
+        .padding(.horizontal, 8)
+    }
+
+    // MARK: - Hearts round score chips
+
+    @ViewBuilder
+    func heartsRoundChips(hearts: HeartsGame, perspective: Int) -> some View {
+        let moonAttempt = (0..<4).first { hearts.roundPoints[$0] >= 12 && (1..<4).allSatisfy({ i in i == $0 || hearts.roundPoints[i] == 0 }) }
+        HStack(spacing: 5) {
+            ForEach(0..<4, id: \.self) { seat in
+                let pts = hearts.roundPoints[seat]
+                let isMoonCandidate = moonAttempt == seat
+                let isMe = seat == perspective
+                HStack(spacing: 2) {
+                    Text(String(session.playerName(seat: seat).prefix(4)))
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.7))
+                    Text("+\(pts)")
+                        .font(.system(size: 10, weight: .black))
+                        .foregroundStyle(isMoonCandidate ? .yellow : pts >= 13 ? .red : pts > 0 ? .orange : .white.opacity(0.5))
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 3)
+                .background(isMoonCandidate ? Color.yellow.opacity(0.15) : isMe ? .white.opacity(0.1) : .clear,
+                            in: Capsule())
+                .overlay(isMoonCandidate ? Capsule().strokeBorder(.yellow.opacity(0.5), lineWidth: 1) : nil)
+            }
+            if let moon = moonAttempt {
+                Text("🌙 S\(moon+1) going for moon!")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.yellow)
             }
         }
     }

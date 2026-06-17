@@ -138,11 +138,26 @@ struct GoFishView: View {
         let topBooks = game.books.map(\.count).max() ?? 0
         let isLeader = topBooks > 0 && game.books[seat].count == topBooks
             && game.books.filter({ $0.count == topBooks }).count == 1
+        let bookCount = game.books[seat].count
+        let handCount = game.hands[seat].count
         return VStack(spacing: 4) {
             SeatBadge(name: (isLeader ? "👑 " : "") + session.playerName(seat: seat),
                       isCurrent: !game.isOver && game.currentPlayer == seat,
-                      detail: "\(game.hands[seat].count) cards · \(game.books[seat].count) books")
-            OpponentHandView(count: min(game.hands[seat].count, 8), width: 16)
+                      detail: "\(handCount) card\(handCount == 1 ? "" : "s") · \(bookCount) book\(bookCount == 1 ? "" : "s")")
+            OpponentHandView(count: min(handCount, 8), width: 16)
+            // Mini book progress bar (filled = books / 13)
+            if bookCount > 0 {
+                GeometryReader { geo in
+                    ZStack(alignment: .leading) {
+                        RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.08))
+                        RoundedRectangle(cornerRadius: 2)
+                            .fill(isLeader ? Color.yellow : Color.white.opacity(0.5))
+                            .frame(width: geo.size.width * min(1.0, Double(bookCount) / 13.0))
+                    }
+                }
+                .frame(height: 4)
+                .padding(.horizontal, 6)
+            }
             if !game.books[seat].isEmpty {
                 bookRow(game.books[seat])
             }
@@ -152,10 +167,11 @@ struct GoFishView: View {
         .background(.white.opacity(askable ? 0.18 : 0), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(.yellow, lineWidth: askable ? 2 : 0)
+                .strokeBorder(askable ? Color.yellow : Color.clear, lineWidth: askable ? 2 : 0)
         )
         .onTapGesture {
             guard askable, let rank = selectedRank else { return }
+            SoundFX.shared.play(.tileSelect)
             session.submit(.fish(.ask(seat: seat, rank: rank)))
             selectedRank = nil
         }
@@ -201,41 +217,63 @@ struct GoFishView: View {
                 Text(game.stock.isEmpty ? "No cards left" : "Waiting to draw…")
                     .font(.callout)
                     .foregroundStyle(.white.opacity(0.6))
-                    .frame(height: 96)
+                    .frame(height: 110)
             )
         }
         return AnyView(ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(groups, id: \.key) { rank, cards in
-                    VStack(spacing: 3) {
-                        ZStack {
-                            ForEach(Array(cards.enumerated()), id: \.element) { index, card in
-                                CardView(card: card, width: 40)
-                                    .offset(x: CGFloat(index) * 9)
-                            }
-                        }
-                        .frame(width: 40 + CGFloat(cards.count - 1) * 9, height: 58)
-                        Text("\(cards.count)× \(rank.label)")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.white.opacity(0.8))
-                    }
-                    .padding(6)
-                    .background(.white.opacity(selectedRank == rank ? 0.25 : 0.06),
-                                in: RoundedRectangle(cornerRadius: 10))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(.yellow, lineWidth: selectedRank == rank ? 2 : 0)
-                    )
-                    .onTapGesture {
-                        guard acting else { return }
-                        SoundFX.shared.play(.tileSelect)
-                        selectedRank = selectedRank == rank ? nil : rank
-                    }
+                    rankTile(rank: rank, cards: cards, acting: acting)
                 }
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 4)
         }
-        .frame(height: 96))
+        .frame(height: 110))
+    }
+
+    func rankTile(rank: Rank, cards: [Card], acting: Bool) -> some View {
+        let count = cards.count
+        let isSelected = selectedRank == rank
+        // Progress toward a book of 4: color codes the tile edge.
+        let progressColor: Color = count == 4 ? .green : count == 3 ? .yellow : count == 2 ? .orange : .white.opacity(0.2)
+
+        return VStack(spacing: 4) {
+            // Fanned cards
+            ZStack(alignment: .bottom) {
+                ForEach(Array(cards.enumerated()), id: \.element) { index, card in
+                    CardView(card: card, width: 38)
+                        .offset(x: CGFloat(index) * 8)
+                }
+            }
+            .frame(width: 38 + CGFloat(count - 1) * 8, height: 56)
+
+            // Book progress pips
+            HStack(spacing: 3) {
+                ForEach(0..<4, id: \.self) { i in
+                    Circle()
+                        .fill(i < count ? progressColor : Color.white.opacity(0.1))
+                        .frame(width: 6, height: 6)
+                }
+            }
+
+            Text("\(rank.label)")
+                .font(.caption.weight(.black))
+                .foregroundStyle(.white)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 6)
+        .background(isSelected ? Color.yellow.opacity(0.18) : Color.white.opacity(0.06),
+                    in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(isSelected ? Color.yellow : progressColor.opacity(0.5),
+                              lineWidth: isSelected ? 2 : 1)
+        )
+        .onTapGesture {
+            guard acting else { return }
+            SoundFX.shared.play(.tileSelect)
+            selectedRank = selectedRank == rank ? nil : rank
+        }
     }
 }

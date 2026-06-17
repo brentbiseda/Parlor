@@ -6,6 +6,7 @@ struct MuncherView: View {
     @State private var lastScore = 0
     @State private var lastLives = 3
     @State private var paused = false
+    @State private var ghostComboPopup: String? = nil
 
     var game: MuncherGame? { session.game?.engine as? MuncherGame }
 
@@ -23,8 +24,19 @@ struct MuncherView: View {
                 powerTimer(game: game)
                     .padding(.horizontal, 12)
             }
-            maze
-                .padding(.horizontal, 8)
+            ZStack {
+                maze
+                    .padding(.horizontal, 8)
+                if let popup = ghostComboPopup {
+                    Text(popup)
+                        .font(.system(size: 22, weight: .black, design: .rounded))
+                        .foregroundStyle(.yellow)
+                        .shadow(color: .orange, radius: 4)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .allowsHitTesting(false)
+                }
+            }
+            .animation(.easeOut(duration: 0.4), value: ghostComboPopup)
             HStack(spacing: 8) {
                 Label("Swipe to steer", systemImage: "hand.draw.fill")
                     .font(.caption2)
@@ -33,9 +45,11 @@ struct MuncherView: View {
                     Text("SCATTER")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(.cyan)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(Color.cyan.opacity(0.12), in: Capsule())
                 }
                 Spacer(minLength: 0)
-                // Ghost count indicator
                 if let game {
                     let activeGhosts = game.ghosts.filter { !$0.inBox }.count
                     if activeGhosts > 0 {
@@ -45,6 +59,14 @@ struct MuncherView: View {
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
                             .background(.black.opacity(0.4), in: Capsule())
+                    }
+                    if game.totalGhostsEaten > 0 {
+                        Text("👻×\(game.totalGhostsEaten)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.purple.opacity(0.9))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.purple.opacity(0.15), in: Capsule())
                     }
                 }
             }
@@ -92,9 +114,16 @@ struct MuncherView: View {
             if after.lives < lastLives {
                 SoundFX.shared.play(after.isOver ? .lose : .lifeLost)
             } else if after.score >= lastScore + 200 {
-                SoundFX.shared.play(.jackpot)        // ate a ghost
+                SoundFX.shared.play(.jackpot)
+                let combo = after.ghostsEatenThisPower
+                let pts = 200 * (1 << min(combo - 1, 3))
+                ghostComboPopup = combo > 1 ? "×\(combo) 👻 +\(pts)!" : "👻 +\(pts)!"
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 900_000_000)
+                    ghostComboPopup = nil
+                }
             } else if after.score >= lastScore + 50 {
-                SoundFX.shared.play(.target)         // power pellet
+                SoundFX.shared.play(.target)
             }
             lastScore = after.score
             lastLives = after.lives
@@ -166,11 +195,12 @@ struct MuncherView: View {
             // Ghosts: personality-colored normally, blue/flashing when frightened.
             for ghost in game.ghosts {
                 let gc = center(ghost.pos)
+                let isFrightened = game.frightened && !ghost.inBox
                 let isWarning = game.frightenedTicks <= 20 && game.frightenedTicks % 4 < 2
                 let frightenedColor: Color = isWarning
                     ? Color(white: 0.95)
                     : Color(red: 0.25, green: 0.3, blue: 0.92)
-                let color = game.frightened && !ghost.inBox
+                let color = isFrightened
                     ? frightenedColor
                     : ghostColors[ghost.type.rawValue % ghostColors.count]
                 let r = min(cw, ch) * 0.44
@@ -185,12 +215,35 @@ struct MuncherView: View {
                 }
                 body.closeSubpath()
                 context.fill(body, with: .color(color))
-                // Eyes
-                let eye = r * 0.28
-                for dx in [-r * 0.4, r * 0.15] {
-                    context.fill(Path(ellipseIn: CGRect(x: gc.x + dx, y: gc.y - r * 0.5,
-                                                        width: eye, height: eye * 1.2)),
-                                 with: .color(.white))
+                if isFrightened {
+                    // Scared face: wavy mouth + white dot eyes.
+                    let ew = r * 0.18
+                    for dx: CGFloat in [-r * 0.28, r * 0.12] {
+                        context.fill(Path(ellipseIn: CGRect(x: gc.x + dx, y: gc.y - r * 0.4,
+                                                            width: ew, height: ew)),
+                                     with: .color(.white))
+                    }
+                    var mouth = Path()
+                    mouth.move(to: CGPoint(x: gc.x - r * 0.4, y: gc.y + r * 0.2))
+                    mouth.addCurve(to: CGPoint(x: gc.x + r * 0.4, y: gc.y + r * 0.2),
+                                   control1: CGPoint(x: gc.x - r * 0.15, y: gc.y + r * 0.45),
+                                   control2: CGPoint(x: gc.x + r * 0.15, y: gc.y))
+                    context.stroke(mouth, with: .color(.white.opacity(0.85)), lineWidth: 1.5)
+                } else {
+                    // Normal face: eyes with colored irises tracking movement direction.
+                    let eye = r * 0.28
+                    let labels = ["B", "P", "I", "C"]
+                    for (di, dx) in [(-r * 0.4, 0), (r * 0.15, 1)] as [(CGFloat, Int)] {
+                        let eyeRect = CGRect(x: gc.x + dx, y: gc.y - r * 0.5, width: eye, height: eye * 1.2)
+                        context.fill(Path(ellipseIn: eyeRect), with: .color(.white))
+                        context.fill(Path(ellipseIn: eyeRect.insetBy(dx: eye * 0.2, dy: eye * 0.2)),
+                                     with: .color(Color(red: 0.1, green: 0.2, blue: 0.9)))
+                    }
+                    // Ghost name initial (tiny, in-body label for clarity at small sizes).
+                    let label = labels[ghost.type.rawValue % labels.count]
+                    context.draw(Text(label).font(.system(size: r * 0.45, weight: .black, design: .rounded))
+                                    .foregroundColor(.white.opacity(0.55)),
+                                 at: CGPoint(x: gc.x, y: gc.y + r * 0.35))
                 }
             }
         }

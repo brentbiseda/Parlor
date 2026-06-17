@@ -91,6 +91,8 @@ struct FootballGame: GameEngine {
     var score = 0
     var kicksTaken = 0
     var made = 0
+    /// Per-kick result: true = made, false = missed. Populated on each attempt.
+    var kickResults: [Bool] = []
     /// Current consecutive made kicks (reset on a miss).
     var currentStreak = 0
     /// Best consecutive made kicks this game.
@@ -100,6 +102,8 @@ struct FootballGame: GameEngine {
     /// Worst run of consecutive missed kicks this game.
     var worstMissStreak = 0
     private var currentMissStreak = 0
+    /// Whether the most recent score event has been recorded for this attempt.
+    private var pendingMade = false
 
     var currentPlayer: Int { 0 }
     var isOver: Bool { kicksTaken >= Self.kicksPerGame }
@@ -118,13 +122,15 @@ struct FootballGame: GameEngine {
         case .score(let points) where points > 0:
             score += points
             made += 1
+            pendingMade = true
             currentStreak += 1
             currentMissStreak = 0
             if currentStreak > bestStreak { bestStreak = currentStreak }
             if points > longestKick { longestKick = points }
         case .attempt:
+            kickResults.append(pendingMade)
+            pendingMade = false
             kicksTaken += 1
-            // A miss resets the streak (attempt without score = miss).
             if kicksTaken > made {
                 currentStreak = 0
                 currentMissStreak += 1

@@ -75,11 +75,65 @@ class SportsScene: SKScene {
 
 struct FootballView: View {
     @ObservedObject var session: GameSession
+
+    var game: FootballGame? { session.game?.engine as? FootballGame }
+
     var body: some View {
-        SportsSceneView(session: session,
-                        scene: FieldGoalScene(size: CGSize(width: 390, height: 700)),
-                        hint: "Swipe up through the ball to kick — watch the wind",
-                        hintSymbol: "wind")
+        VStack(spacing: 0) {
+            if let game {
+                kickStrip(game)
+                    .padding(.horizontal, 14)
+                    .padding(.top, 6)
+                    .padding(.bottom, 2)
+            }
+            SportsSceneView(session: session,
+                            scene: FieldGoalScene(size: CGSize(width: 390, height: 700)),
+                            hint: "Swipe up through the ball to kick — watch the wind",
+                            hintSymbol: "wind")
+        }
+    }
+
+    func kickStrip(_ game: FootballGame) -> some View {
+        HStack(spacing: 5) {
+            ForEach(0..<FootballGame.kicksPerGame, id: \.self) { i in
+                let taken = i < game.kickResults.count
+                let active = i == game.kicksTaken && !game.isOver
+                let scored = taken && game.kickResults[i]
+                ZStack {
+                    RoundedRectangle(cornerRadius: 3)
+                        .fill(taken ? (scored ? Color.green.opacity(0.8) : Color.red.opacity(0.55))
+                              : Color.white.opacity(0.12))
+                        .frame(width: active ? 22 : 18, height: 22)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 3)
+                                .strokeBorder(active ? Color.yellow : Color.clear, lineWidth: 1.5)
+                        )
+                    if taken {
+                        Text(scored ? "✓" : "✗")
+                            .font(.system(size: 9, weight: .black))
+                            .foregroundStyle(.white)
+                    } else if active {
+                        Image(systemName: "american.football.fill")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.yellow)
+                    }
+                }
+                .animation(.spring(response: 0.25), value: active)
+            }
+            Spacer()
+            Text("\(game.made)/\(FootballGame.kicksPerGame)")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+                .monospacedDigit()
+            if game.currentStreak >= 2 {
+                Text("🔥\(game.currentStreak)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 6)
+        .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 10))
     }
 }
 
