@@ -155,13 +155,14 @@ struct ProfilesView: View {
                                                 .font(.subheadline.weight(.bold))
                                                 .monospacedDigit()
                                                 .foregroundStyle(eloColor(rating.elo))
-                                            // Trend indicator vs starting ELO of 1000
-                                            if rating.elo > 1001 {
-                                                Text("▲")
+                                            // Trend indicator vs starting ELO (1200)
+                                            let delta = Int(rating.elo) - 1200
+                                            if delta > 0 {
+                                                Text("+\(delta)")
                                                     .font(.caption2.weight(.bold))
                                                     .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
-                                            } else if rating.elo < 999 {
-                                                Text("▼")
+                                            } else if delta < 0 {
+                                                Text("\(delta)")
                                                     .font(.caption2.weight(.bold))
                                                     .foregroundStyle(Color(red: 0.9, green: 0.4, blue: 0.35))
                                             } else {
