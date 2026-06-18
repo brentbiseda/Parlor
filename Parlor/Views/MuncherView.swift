@@ -265,7 +265,7 @@ struct MuncherView: View {
                     let eye = r * 0.28
                     let labels = ["B", "P", "I", "C"]
                     for (di, dx) in [(-r * 0.4, 0), (r * 0.15, 1)] as [(CGFloat, Int)] {
-                        let eyeRect = CGRect(x: gc.x + dx, y: gc.y - r * 0.5, width: eye, height: eye * 1.2)
+                        let eyeRect = CGRect(x: gc.x + di, y: gc.y - r * 0.5, width: eye, height: eye * 1.2)
                         context.fill(Path(ellipseIn: eyeRect), with: .color(.white))
                         context.fill(Path(ellipseIn: eyeRect.insetBy(dx: eye * 0.2, dy: eye * 0.2)),
                                      with: .color(Color(red: 0.1, green: 0.2, blue: 0.9)))

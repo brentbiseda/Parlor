@@ -407,7 +407,7 @@ struct GoBoardView: View {
         let total = bScore + wScore
         let bFrac = total > 0 ? bScore / total : 0.5
         let margin = bScore - wScore
-        VStack(spacing: 6) {
+        return VStack(spacing: 6) {
             HStack(spacing: 12) {
                 let bStones = go.board.filter { $0 == 1 }.count
                 let wStones = go.board.filter { $0 == 2 }.count

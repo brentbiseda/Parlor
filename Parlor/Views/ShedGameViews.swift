@@ -170,6 +170,7 @@ struct UnoView: View {
                                 .font(.system(size: 9))
                                 .foregroundStyle(.white.opacity(0.5))
                         }
+                    }
 
                     Spacer(minLength: 0)
 
