@@ -285,16 +285,24 @@ enum Bot {
     /// True when `seat` appears to be attempting a moon shoot:
     ///   - Has taken ≥ 2 heart tricks OR holds both the Q♠ and 4+ hearts.
     ///   - Has not let any points reach another player this round.
-    private static func attemptingMoonShot(_ g: HeartsGame, seat: Int) -> Bool {
+    ///   - OR has a premium hand (≥7 hearts + Q♠) before any points have landed.
+    private static func attemptingMoonShoot(_ g: HeartsGame, seat: Int) -> Bool {
         let myPoints = g.roundPoints[seat]
-        guard myPoints > 0 else { return false }
         let othersHavePoints = (0..<4).filter { $0 != seat }.contains { g.roundPoints[$0] > 0 }
         guard !othersHavePoints else { return false }
         let hand = g.hands[seat]
         let heartsInHand = hand.filter { $0.suit == .hearts }.count
         let hasQueen = hand.contains(queenOfSpades)
-        // Credible moon attempt: taken ≥ 8 points with none escaped, or holds queen + 4 hearts.
-        return myPoints >= 8 || (hasQueen && heartsInHand >= 4)
+        if myPoints >= 8 { return true }
+        if hasQueen && heartsInHand >= 4 { return true }
+        // Proactive shoot: premium hand — 7+ hearts plus Q♠ before any points landed.
+        if myPoints == 0 && hasQueen && heartsInHand >= 7 { return true }
+        return false
+    }
+
+    // Backward-compat alias used below.
+    private static func attemptingMoonShot(_ g: HeartsGame, seat: Int) -> Bool {
+        attemptingMoonShoot(g, seat: seat)
     }
 
     static func hardHeartsPlay(_ g: HeartsGame) -> Card? {
@@ -798,8 +806,40 @@ enum Bot {
         return score
     }
 
-    /// 2-ply alpha-beta minimax checkers bot. Handles multi-jump chains
-    /// (the game passes turn back to the same player mid-jump).
+    /// Recursive alpha-beta for checkers. `depth` counts half-plies remaining.
+    private static func checkersAlphaBeta(_ g: CheckersGame, depth: Int, alpha: inout Double, beta: Double, me: Int) -> Double {
+        if depth == 0 || g.isOver {
+            return evaluateCheckers(g, for: me) + (g.isOver && g.currentPlayer != me ? 50 : 0)
+        }
+        let mover = g.currentPlayer
+        let moves = g.legalBoardMoves(for: mover)
+        if moves.isEmpty { return evaluateCheckers(g, for: me) }
+        if mover == me {
+            var value = -Double.infinity
+            for move in moves {
+                var copy = g
+                guard (try? copy.apply(.board(move))) != nil else { continue }
+                let child = checkersAlphaBeta(copy, depth: depth - 1, alpha: &alpha, beta: beta, me: me)
+                value = max(value, child)
+                alpha = max(alpha, value)
+                if alpha >= beta { break }
+            }
+            return value
+        } else {
+            var value = Double.infinity
+            var a = alpha
+            for move in moves {
+                var copy = g
+                guard (try? copy.apply(.board(move))) != nil else { continue }
+                let child = checkersAlphaBeta(copy, depth: depth - 1, alpha: &a, beta: value, me: me)
+                value = min(value, child)
+                if a >= value { break }
+            }
+            return value
+        }
+    }
+
+    /// 3-ply alpha-beta minimax checkers bot. Handles multi-jump chains.
     static func hardCheckersMove(_ g: CheckersGame) -> Move? {
         let me = g.currentPlayer
         let moves = g.legalBoardMoves(for: me)
@@ -815,39 +855,9 @@ enum Bot {
         for move in ordered {
             var copy = g
             guard (try? copy.apply(.board(move))) != nil else { continue }
-
-            let score: Double
-            if copy.currentPlayer == me {
-                // Multi-jump still in progress — evaluate this line deeper (1 more ply).
-                let contMoves = copy.legalBoardMoves(for: me)
-                if contMoves.isEmpty {
-                    score = evaluateCheckers(copy, for: me)
-                } else {
-                    score = contMoves.compactMap { cm -> Double? in
-                        var c2 = copy
-                        guard (try? c2.apply(.board(cm))) != nil else { return nil }
-                        return evaluateCheckers(c2, for: me)
-                    }.max() ?? evaluateCheckers(copy, for: me)
-                }
-            } else {
-                // Opponent's turn: minimise over their responses.
-                let oppMoves = copy.legalBoardMoves(for: 1 - me)
-                if oppMoves.isEmpty {
-                    score = evaluateCheckers(copy, for: me) + (copy.isOver ? 50 : 0)
-                } else {
-                    var minScore = Double.infinity
-                    for oppMove in oppMoves {
-                        var c2 = copy
-                        guard (try? c2.apply(.board(oppMove))) != nil else { continue }
-                        let s = evaluateCheckers(c2, for: me)
-                        if s < minScore { minScore = s }
-                        if minScore <= alpha { break }
-                    }
-                    score = minScore
-                }
-            }
-
-            let jitter = Double.random(in: 0..<0.05)
+            var a = alpha
+            let score = checkersAlphaBeta(copy, depth: 4, alpha: &a, beta: Double.infinity, me: me)
+            let jitter = Double.random(in: 0..<0.04)
             if best == nil || score + jitter > best!.score {
                 best = (score + jitter, move)
                 alpha = max(alpha, score)

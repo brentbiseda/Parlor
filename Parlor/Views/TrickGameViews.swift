@@ -658,13 +658,69 @@ struct TrickTableView: View {
                 .disabled(passSelection.count != 3)
             }
         case .spadesBidding:
-            VStack(spacing: 6) {
-                Text("Your bid").font(.callout).foregroundStyle(.white)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack {
-                        ForEach(0...13, id: \.self) { n in
-                            Button(n == 0 ? "Nil" : "\(n)") { session.submit(.bid(n)) }
-                                .buttonStyle(.borderedProminent)
+            if let spades = game.engine as? SpadesGame {
+                let seat = spades.currentPlayer
+                let hand = spades.hands[seat]
+                let bySuit = Dictionary(grouping: hand, by: \.suit)
+                let suggested = Bot.estimateSpadesBid(hand: hand)
+                VStack(spacing: 6) {
+                    // Per-suit hand strength strip
+                    HStack(spacing: 8) {
+                        ForEach(Suit.allCases, id: \.self) { suit in
+                            let cards = (bySuit[suit] ?? []).sorted { $0.rank.rawValue > $1.rank.rawValue }
+                            let highCards = cards.filter { $0.rank >= .queen }
+                            VStack(spacing: 2) {
+                                Text(suit.symbol)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(suit.isRed ? .red : (suit == .spades ? .white : .white.opacity(0.8)))
+                                Text("\(cards.count)")
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(suit == .spades ? .yellow : .white)
+                                if !highCards.isEmpty {
+                                    Text(highCards.map { String($0.rank.label.prefix(1)) }.joined())
+                                        .font(.system(size: 8))
+                                        .foregroundStyle(.white.opacity(0.7))
+                                }
+                            }
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background(suit == .spades ? Color.white.opacity(0.12) : Color.white.opacity(0.06),
+                                        in: RoundedRectangle(cornerRadius: 6))
+                        }
+                        Spacer()
+                        // Suggested bid chip
+                        VStack(spacing: 0) {
+                            Text("Rec.")
+                                .font(.system(size: 7, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.5))
+                            Text(suggested == 0 ? "Nil" : "\(suggested)")
+                                .font(.system(size: 15, weight: .black))
+                                .foregroundStyle(.cyan)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.cyan.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    Text("Your bid").font(.caption).foregroundStyle(.white.opacity(0.7))
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(0...13, id: \.self) { n in
+                                Button(n == 0 ? "Nil" : "\(n)") { session.submit(.bid(n)) }
+                                    .buttonStyle(.borderedProminent)
+                                    .tint(n == suggested ? .cyan : .blue)
+                            }
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 6) {
+                    Text("Your bid").font(.callout).foregroundStyle(.white)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack {
+                            ForEach(0...13, id: \.self) { n in
+                                Button(n == 0 ? "Nil" : "\(n)") { session.submit(.bid(n)) }
+                                    .buttonStyle(.borderedProminent)
+                            }
                         }
                     }
                 }
