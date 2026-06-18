@@ -409,33 +409,50 @@ struct GoBoardView: View {
         let margin = bScore - wScore
         VStack(spacing: 6) {
             HStack(spacing: 12) {
+                let bStones = go.board.filter { $0 == 1 }.count
+                let wStones = go.board.filter { $0 == 2 }.count
                 HStack(spacing: 4) {
                     Circle()
                         .fill(RadialGradient(colors: [Color(white: 0.35), .black],
                                              center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))
                         .overlay(Circle().strokeBorder(.black.opacity(0.35), lineWidth: 0.8))
                         .frame(width: 14, height: 14)
-                    Text("B \(go.captures[0])cap")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
+                    VStack(alignment: .leading, spacing: 0) {
+                        Text("B \(bStones) stones")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                        Text("cap \(go.captures[0])")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
                 }
                 Spacer()
-                // Territory score
-                let leader = margin > 0.5 ? "B" : margin < -0.5 ? "W" : nil
-                if let leader {
-                    Text("\(leader) +\(String(format: "%.1f", abs(margin)))")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(margin > 0 ? Color(white: 0.9) : .white)
-                } else {
-                    Text("Even")
-                        .font(.caption2.weight(.medium))
-                        .foregroundStyle(.white.opacity(0.6))
+                // Territory score + move count
+                VStack(spacing: 1) {
+                    let leader = margin > 0.5 ? "B" : margin < -0.5 ? "W" : nil
+                    if let leader {
+                        Text("\(leader) +\(String(format: "%.1f", abs(margin)))")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(margin > 0 ? Color(white: 0.9) : .white)
+                    } else {
+                        Text("Even")
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.white.opacity(0.6))
+                    }
+                    Text("move \(go.moveCount)")
+                        .font(.system(size: 7))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
                 Spacer()
                 HStack(spacing: 4) {
-                    Text("W \(go.captures[1])cap")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.75))
+                    VStack(alignment: .trailing, spacing: 0) {
+                        Text("W \(wStones) stones")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.75))
+                        Text("cap \(go.captures[1])")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
                     Circle()
                         .fill(RadialGradient(colors: [.white, Color(white: 0.78)],
                                              center: .init(x: 0.35, y: 0.3), startRadius: 0, endRadius: 8))

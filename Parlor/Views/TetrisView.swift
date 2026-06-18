@@ -211,6 +211,10 @@ struct TetrisView: View {
                 statBlock("SCORE", "\(game.score)")
                 statBlock("LINES", "\(game.lines)")
                 statBlock("LEVEL", "\(game.level)")
+                let toNext = 10 - (game.lines % 10)
+                if !game.isOver && toNext < 10 {
+                    statBlock("→LVL", "\(toNext)")
+                }
                 if let badge = clearBadge {
                     let isTSpin = badge.contains("T-SPIN")
                     let badgeColor: Color = isTSpin

@@ -449,10 +449,14 @@ struct TrickTableView: View {
             }
         case let g as BridgeGame:
             let us = perspective % 2
+            let usVul = g.isVulnerable(side: us)
+            let themVul = g.isVulnerable(side: 1 - us)
             HStack(spacing: 8) {
-                scoreChip("Us", "\(g.teamScores[us])", detail: nil, highlight: true)
+                scoreChip("Us", "\(g.teamScores[us])", detail: usVul ? "VUL" : nil, highlight: true,
+                          bagWarning: usVul)
                 Text("deal \(min(g.dealNumber, 4))/4").font(.caption2).foregroundStyle(.white.opacity(0.5))
-                scoreChip("Them", "\(g.teamScores[1 - us])", detail: nil, highlight: false)
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: themVul ? "VUL" : nil, highlight: false,
+                          bagWarning: themVul)
             }
         case let g as HeartsGame:
             HStack(spacing: 6) {
