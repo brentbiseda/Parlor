@@ -311,7 +311,7 @@ struct TrickTableView: View {
 
     @ViewBuilder
     func heartsRoundChips(hearts: HeartsGame, perspective: Int) -> some View {
-        let moonAttempt = (0..<4).first { hearts.roundPoints[$0] >= 12 && (1..<4).allSatisfy({ i in i == $0 || hearts.roundPoints[i] == 0 }) }
+        let moonAttempt = (0..<4).first { seat in hearts.roundPoints[seat] >= 12 && (1..<4).allSatisfy({ i in i == seat || hearts.roundPoints[i] == 0 }) }
         HStack(spacing: 5) {
             ForEach(0..<4, id: \.self) { seat in
                 let pts = hearts.roundPoints[seat]
