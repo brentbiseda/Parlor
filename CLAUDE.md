@@ -116,15 +116,16 @@ Chess, Checkers, Go — in `BoardGameViews.swift`. Bot logic in `Bots.swift`.
 - **normal** — sensible bids, casual card play
 - **hard** — `hardHeartsPlay`, `hardTrickPlay`, chess/checkers greedy search, Go territory capture
 
-Hearts pass bot uses `g.passDirection` to decide which cards to unload (direction-aware danger rankings). Hard bot uses `TrickTaking.safeLead` for opening leads.
+Hearts pass bot uses `g.passDirection` to decide which cards to unload (direction-aware danger rankings). Hard bot uses `TrickTaking.safeLead` for opening leads. Hearts hard bot proactively initiates moon-shoot when holding 7+ hearts + Q♠ before any points land (`attemptingMoonShoot`), in addition to the reactive trigger (≥8 pts with none escaped).
 Euchre bot threshold: `Bot.euchreTrumpThreshold = 8` (sum of bower/trump-card weights).
-Checkers hard bot: king-crowning bonus (+0.6), back-rank safety (+0.1).
-Chess hard bot: centrality bonus (up to 0.245), early-queen penalty (−0.4 before move 8).
+Checkers hard bot: recursive 4-half-ply alpha-beta (`checkersAlphaBeta`) with material + advancement + king-safety eval. King-crowning bonus (+0.6), back-rank safety (+0.1).
+Chess hard bot: 2-ply alpha-beta with enriched eval: centrality (up to 0.245), pawn advancement, **passed-pawn bonus (+0.35)**, **doubled-pawn penalty (−0.2)**, **rook-on-open-file bonus (+0.15/+0.25)**, **bishop-pair bonus (+0.1)**. Early-queen penalty (−0.4 before move 8).
 Uno bot prefers `wildDrawFour` over plain wild when opponent has ≤ 2 cards.
 Go hard bot: self-atari avoidance filter; prefers moves adjacent to own stones.
 Bridge bot (`bridgeBotCall`): opens with 13+ HCP only when `game.lastBid == nil`. Balanced hands (no void, no singleton) with 15–17 HCP open 1NT; otherwise opens longest suit at 1-level. When any bid has been made, the bot passes (safe over sophisticated). **Never bid without checking auction legality.**
 
 `TrickTaking` helpers: `highCardPoints(hand:)` (A=4, K=3, Q=2, J=1), `suitCounts(hand:suitOf:)`, `trickEstimate(hand:suit:)` — used by bidding bots. `safeLead(from:trump:suitOf:)` — picks a good opening lead (avoids bare K-Q tenace, leads fourth-best from longest suit).
+`Bot.estimateSpadesBid(hand:)` is `internal` — accessible from views for displaying a recommended bid chip in the Spades bidding panel.
 
 ## Views
 
@@ -150,14 +151,26 @@ Bridge bot (`bridgeBotCall`): opens with 13+ HCP only when `game.lastBid == nil`
 ### Tetris Colors (colorblind palette)
 S = lime `(0.55, 0.95, 0.22)`, Z = magenta `(0.95, 0.25, 0.65)` — distinguishable under deuteranopia/protanopia.
 
+`TetrisView` sidebar now shows a `→LVL N` stat block for lines remaining to the next level (`10 - (game.lines % 10)`). T-spin clear badge is purple `(0.72, 0.38, 0.92)`, PERFECT CLEAR is `.mint`, otherwise `.yellow`.
+
+### CentipedeView
+Stats header above the sprite view: life dots (green/empty), score, wave chip, 🎯N segments-shot badge, ⭐N best-life badge. Backed by `CentipedeGame.segmentsShot`, `livesLeft`, `bestLifeScore`.
+
+### BoardGameViews (Go)
+Go `captureBar` now shows stone counts per player (`game.board.filter { $0 == 1 }.count`) alongside capture counts, plus a move number label. The territory split bar and B/W margin remain unchanged.
+
 ### KlondikeView
 Foundation slots show two distinct highlight states, layered in `topRow(_:cardWidth:)`: a yellow border while a card is actively selected/dragged and can land on that suit (`foundationHintSuit(_:)`), and — when nothing is selected — a slow-pulsing green ring on any suit with an available auto-play candidate (`autoFoundationSuits(_:)`, driven by `foundationPulse` via a repeating `easeInOut` animation). A brief solid-green flash (`foundationLandFlash`, `flashFoundation(suit:)`) confirms a successful drop.
 
-### GoFishView
-Books render as mini playing-card tiles (rank + small suit glyphs, gold gradient) via `bookRow(_:)` rather than plain text chips. Completing a book triggers a 2-second gold flash banner (`bookFlash`, driven by `onChange(of: game.lastBookEvent)`) plus a `.jackpot` sound. The pond header shows a running `Books: N/13` total alongside stock count.
+Elapsed-time timer: `@State private var elapsedSeconds: Int` backed by `Timer.publish(every:1)`. Stops incrementing when `game.isOver`; resets via `.task(id: session.sessionID)`. Shown as `⏱N:NN` in the foundation progress bar.
 
-### ShedGameViews (EightsView)
+### GoFishView
+Books render as mini playing-card tiles (rank + small suit glyphs, gold gradient) via `bookRow(_:)` rather than plain text chips. Completing a book triggers a 2-second gold flash banner (`bookFlash`, driven by `onChange(of: game.lastBookEvent)`) plus a `.jackpot` sound. The pond header shows a running `Books: N/13` total alongside stock count. Stat chips shown below the event line: 🎣 `N%` hit (ask accuracy from `game.totalAsks`/`game.successfulAsks`), 💰 `N haul` badge when `game.biggestHaul ≥ 3`, 🌊×N lucky-pond-books count.
+
+### ShedGameViews (EightsView / UnoView)
 Naming a suit after playing an 8 uses an inline overlay (dimmed scrim + 4 large suit buttons in a centered card) instead of `confirmationDialog`, matching the rest of the app's visual language. A draw-two warning banner (`"DRAW N — play a 2 to stack or draw now"`) appears above the hand whenever it's your turn and `game.pendingDraw > 0`.
+
+`UnoView`: draw pile button turns red and shows "LOW!" label when `game.drawPile.count ≤ 5`. `handSizeStrip` now shows color-distribution pips (colored circles with counts) below the bar for the local player's hand.
 
 ### RootView / GameTile
 `GameTile` shows win/loss record (`statsLine`, format `"8W 4L"`, plus a `🔥N` streak suffix at streak ≥ 3 via `GameStats.summary`) and best-score (`bestLine`, with a star icon, gold tint) as two stacked pills rather than picking only one. Games with no `played` history show a green "NEW" badge in the top-right corner instead.
@@ -178,8 +191,16 @@ Win-rate is now displayed as a `%` badge (top-right of icon circle) and a colore
 
 ### ProfilesView
 - Shows per-game ELO + W/L/D record for the active profile's played games (sorted by games played), with a win-rate progress bar under each row and the ELO number color-tiered (`eloColor(_:)`: green ≥1200, yellow 1000–1199, red <1000).
+- ELO delta vs starting rating (1200) shown as green `+N` / red `-N` next to each ELO number. The starting baseline is 1200 (`Elo.initial`), not 1000.
 - `PlayerProfile.symbols` has 28 entries (was 16); includes chess, gamecontroller, brain, atom, etc.
 - `Avatar.colors` array drives both the avatar gradient and the color picker swatch row.
+
+### TrickGameViews
+- **Spades bidding panel**: now shows a per-suit hand-strength strip (card count + high-card labels per suit) and a cyan "Rec. N" chip from `Bot.estimateSpadesBid(hand:)`. Recommended bid is highlighted in cyan in the bid picker row.
+- **Bridge auction panel**: replaced 4-chip history with a full dealer-aligned grid (4-column, one column per seat) with colored bid chips and pass labels.
+- **Bridge score strip**: vulnerability shown via "VUL" detail on `scoreChip` with orange bagWarning styling.
+- **Euchre tricks bar**: shows ⚡ALONE badge, N/3 fraction. Score strip shows 🔥N streak from `teamRoundStreak`.
+- **Spades tricks bar**: shows projected bag delta (+N🎒) and ✓/N/contract progress during playing.
 
 ## Adding a New Game
 

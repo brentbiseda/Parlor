@@ -114,23 +114,29 @@ struct UnoView: View {
                     handSizeStrip(game, perspective: perspective)
 
                     HStack(spacing: 24) {
-                        // Draw pile
+                        // Draw pile — red pulse when ≤5 cards remaining
+                        let drawLow = game.drawPile.count <= 5
                         Button {
                             guard acting else { return }
                             session.submit(.uno(game.drewThisTurn ? .pass : .draw))
                         } label: {
                             ZStack {
                                 RoundedRectangle(cornerRadius: 9)
-                                    .fill(Color(white: 0.18))
+                                    .fill(drawLow ? Color(red: 0.5, green: 0.05, blue: 0.05) : Color(white: 0.18))
                                     .frame(width: 56, height: 84)
                                     .overlay(RoundedRectangle(cornerRadius: 9)
-                                        .strokeBorder(.white.opacity(0.5), lineWidth: 1.5))
+                                        .strokeBorder(drawLow ? Color.red.opacity(0.8) : .white.opacity(0.5), lineWidth: drawLow ? 2 : 1.5))
                                 VStack(spacing: 2) {
                                     Text(game.drewThisTurn ? "PASS" : "DRAW")
                                         .font(.caption.weight(.black))
                                     Text("\(game.drawPile.count)")
                                         .font(.caption2)
                                         .opacity(0.7)
+                                    if drawLow {
+                                        Text("LOW!")
+                                            .font(.system(size: 7, weight: .black))
+                                            .foregroundStyle(.red.opacity(0.9))
+                                    }
                                 }
                                 .foregroundStyle(.white)
                             }
@@ -220,6 +226,22 @@ struct UnoView: View {
                     Text(isMe ? "you" : "S\(seat+1)")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(isCurrent ? Color.yellow : .white.opacity(0.5))
+                    // Color distribution pips for local player's hand
+                    if isMe {
+                        let colorCounts = Dictionary(grouping: game.hands[seat].compactMap(\.color), by: { $0 })
+                        HStack(spacing: 2) {
+                            ForEach([UnoColor.red, .yellow, .green, .blue], id: \.self) { c in
+                                let n = colorCounts[c]?.count ?? 0
+                                if n > 0 {
+                                    Text("\(n)")
+                                        .font(.system(size: 6, weight: .bold))
+                                        .foregroundStyle(.white)
+                                        .frame(width: 10, height: 10)
+                                        .background(UnoCardView.color(c), in: Circle())
+                                }
+                            }
+                        }
+                    }
                 }
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) {
