@@ -32,6 +32,10 @@ struct ProfilesView: View {
     @AppStorage(FeltTheme.storageKey) private var feltRaw = FeltTheme.classic.rawValue
     @AppStorage(CardBack.storageKey) private var cardBack = CardBack.classic.rawValue
     @State private var selectedCategory: String = "All"
+    // 13. Win-rate bar animation: tracks whether bars have appeared.
+    @State private var winRateBarsAppeared = false
+    // 16. Avatar bounce animation state.
+    @State private var avatarTapped = false
 
     var body: some View {
         NavigationStack {
@@ -91,6 +95,27 @@ struct ProfilesView: View {
 
                 if let active = profiles.humanProfiles.first(where: { $0.id == profiles.activeProfileID }),
                    !active.ratings.isEmpty {
+                    let totalPlayed = active.ratings.values.reduce(0) { $0 + $1.played }
+                    let totalWins = active.ratings.values.reduce(0) { $0 + $1.wins }
+                    let totalLosses = active.ratings.values.reduce(0) { $0 + $1.losses }
+                    let avgElo = active.ratings.values.isEmpty ? 1200.0
+                        : active.ratings.values.reduce(0.0) { $0 + $1.elo } / Double(active.ratings.count)
+                    let winPct = totalPlayed > 0 ? Int(Double(totalWins) / Double(totalPlayed) * 100) : 0
+                    Section {
+                        HStack(spacing: 0) {
+                            statSummaryCell(label: "Games", value: "\(totalPlayed)", color: .white)
+                            Divider().frame(height: 36)
+                            statSummaryCell(label: "Wins", value: "\(totalWins)", color: .green)
+                            Divider().frame(height: 36)
+                            statSummaryCell(label: "Win%", value: "\(winPct)%",
+                                           color: winPct >= 56 ? .green : winPct >= 35 ? .yellow : .red)
+                            Divider().frame(height: 36)
+                            statSummaryCell(label: "Avg ELO", value: "\(Int(avgElo))", color: eloColor(avgElo))
+                        }
+                        .padding(.vertical, 4)
+                    } header: {
+                        Text("Career summary")
+                    }
                     Section("Your stats") {
                         // Category filter chips
                         let categories = ["All", "Cards", "Board", "Puzzle", "Arcade", "Sports"]
@@ -131,7 +156,9 @@ struct ProfilesView: View {
                             default: return true
                             }
                         }
-                        ForEach(filtered, id: \.key) { key, rating in
+                        ForEach(Array(filtered.enumerated()), id: \.element.key) { index, pair in
+                            let key = pair.key
+                            let rating = pair.value
                             let kind = GameKind(rawValue: key)
                             let total = rating.wins + rating.losses + rating.draws
                             let winRate = total > 0 ? Double(rating.wins) / Double(total) : 0
@@ -142,8 +169,20 @@ struct ProfilesView: View {
                                         .foregroundStyle(.secondary)
                                         .frame(width: 22)
                                     VStack(alignment: .leading, spacing: 1) {
-                                        Text(kind?.title ?? key)
-                                            .font(.subheadline)
+                                        HStack(spacing: 6) {
+                                            Text(kind?.title ?? key)
+                                                .font(.subheadline)
+                                            // 15. Softer games-played badge with secondary foreground
+                                            //     and a subtle RoundedRectangle background.
+                                            Text("\(total)")
+                                                .font(.caption2.weight(.semibold))
+                                                .foregroundStyle(.secondary)
+                                                .padding(.horizontal, 6).padding(.vertical, 2)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 6)
+                                                        .fill(Color.secondary.opacity(0.15))
+                                                )
+                                        }
                                         Text("\(rating.wins)W · \(rating.losses)L" + (rating.draws > 0 ? " · \(rating.draws)D" : ""))
                                             .font(.caption)
                                             .foregroundStyle(.secondary)
@@ -155,15 +194,15 @@ struct ProfilesView: View {
                                                 .font(.subheadline.weight(.bold))
                                                 .monospacedDigit()
                                                 .foregroundStyle(eloColor(rating.elo))
-                                            // Trend indicator vs starting ELO (1200)
+                                            // 14. ELO delta: green/positive, red/negative, semibold.
                                             let delta = Int(rating.elo) - 1200
                                             if delta > 0 {
                                                 Text("+\(delta)")
-                                                    .font(.caption2.weight(.bold))
+                                                    .font(.caption2.weight(.semibold))
                                                     .foregroundStyle(Color(red: 0.3, green: 0.85, blue: 0.45))
                                             } else if delta < 0 {
                                                 Text("\(delta)")
-                                                    .font(.caption2.weight(.bold))
+                                                    .font(.caption2.weight(.semibold))
                                                     .foregroundStyle(Color(red: 0.9, green: 0.4, blue: 0.35))
                                             } else {
                                                 Text("—")
@@ -176,12 +215,16 @@ struct ProfilesView: View {
                                             .foregroundStyle(.tertiary)
                                     }
                                 }
-                                // Win-rate bar.
+                                // 13. Win-rate bar animates on appear with staggered cascade.
                                 GeometryReader { geo in
                                     ZStack(alignment: .leading) {
                                         Capsule().fill(Color.secondary.opacity(0.18))
                                         Capsule().fill(eloColor(rating.elo).opacity(0.75))
-                                            .frame(width: geo.size.width * winRate)
+                                            .frame(width: geo.size.width * (winRateBarsAppeared ? winRate : 0))
+                                            .animation(
+                                                .easeInOut(duration: 0.8).delay(Double(index) * 0.05),
+                                                value: winRateBarsAppeared
+                                            )
                                     }
                                 }
                                 .frame(height: 4)
@@ -189,6 +232,8 @@ struct ProfilesView: View {
                             }
                             .padding(.vertical, 2)
                         }
+                        .onAppear { winRateBarsAppeared = true }
+                        .onDisappear { winRateBarsAppeared = false }
                     }
                 }
 
@@ -258,6 +303,20 @@ struct ProfilesView: View {
         .presentationDetents([.medium, .large])
     }
 
+    @ViewBuilder
+    private func statSummaryCell(label: String, value: String, color: Color) -> some View {
+        VStack(spacing: 2) {
+            Text(value)
+                .font(.title3.weight(.bold))
+                .monospacedDigit()
+                .foregroundStyle(color)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     /// Tiers the ELO badge color: green for strong, yellow mid, red below starting rating.
     private func eloColor(_ elo: Double) -> Color {
         switch elo {
@@ -272,6 +331,8 @@ struct ProfileEditor: View {
     @EnvironmentObject var profiles: ProfileStore
     @Environment(\.dismiss) private var dismiss
     @State var profile: PlayerProfile
+    // 16. Avatar bounce animation state.
+    @State private var avatarTapped = false
 
     var body: some View {
         NavigationStack {
@@ -279,7 +340,16 @@ struct ProfileEditor: View {
                 Section {
                     HStack {
                         Spacer()
+                        // 16. Playful scale bounce when the avatar is tapped.
                         AvatarView(profile: profile, size: 72)
+                            .scaleEffect(avatarTapped ? 1.15 : 1.0)
+                            .animation(.spring(response: 0.3, dampingFraction: 0.5), value: avatarTapped)
+                            .onTapGesture {
+                                avatarTapped = true
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                                    avatarTapped = false
+                                }
+                            }
                         Spacer()
                     }
                     .listRowBackground(Color.clear)

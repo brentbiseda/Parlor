@@ -43,6 +43,12 @@ struct UnoGame: GameEngine {
     /// Consecutive wildDrawFour plays (streak tracker).
     var drawFourStreak: Int = 0
     var bestDrawFourStreak: Int = 0
+    /// Total voluntary draw-one actions taken by each seat.
+    var drawsBySeat: [Int] = [0, 0, 0, 0]
+    /// Total Wild Draw Four cards played this deal.
+    var wildDrawFoursPlayed: Int = 0
+    /// Color declarations made via wild plays (separate from wildColorCalls for clarity).
+    var colorsCalled: [UnoColor: Int] = [:]
 
     init() {
         var id = 0
@@ -81,6 +87,19 @@ struct UnoGame: GameEngine {
     var currentPlayerSeat: Int { currentPlayer }
     var isOver: Bool { winner != nil }
     var topCard: UnoCard? { discard.last }
+
+    /// Emoji swatch for the active color.
+    var currentColorEmoji: String {
+        switch activeColor {
+        case .red: return "🔴"
+        case .yellow: return "🟡"
+        case .green: return "🟢"
+        case .blue: return "🔵"
+        }
+    }
+
+    /// Points remaining in each hand (for standings display).
+    var handPoints: [Int] { hands.map { $0.reduce(0) { $0 + $1.points } } }
 
     func canPlay(_ card: UnoCard) -> Bool {
         guard let top = topCard else { return true }
@@ -127,8 +146,12 @@ struct UnoGame: GameEngine {
             switch card.value {
             case .wild, .wildDrawFour:
                 wildsPlayed += 1
-                if let color = declared { wildColorCalls[color, default: 0] += 1 }
+                if let color = declared {
+                    wildColorCalls[color, default: 0] += 1
+                    colorsCalled[color, default: 0] += 1
+                }
                 if case .wildDrawFour = card.value {
+                    wildDrawFoursPlayed += 1
                     drawFourStreak += 1
                     if drawFourStreak > bestDrawFourStreak { bestDrawFourStreak = drawFourStreak }
                 } else {
@@ -157,6 +180,7 @@ struct UnoGame: GameEngine {
             resolveAction(card)
         case .draw:
             guard !drewThisTurn else { throw GameError.illegalMove }
+            drawsBySeat[currentPlayer] += 1
             guard let card = drawCard() else {
                 // Nothing left anywhere: pass — and if the whole table is
                 // stuck, end the deal in favor of the lightest hand.
@@ -266,21 +290,23 @@ struct UnoGame: GameEngine {
 
     var statusText: String {
         if let winner { return "Seat \(winner + 1) goes out!" }
-        var text = "\(activeColor.rawValue.capitalized) in play"
+        let dirArrow = clockwise ? "→" : "←"
+        var text = "\(currentColorEmoji) \(activeColor.rawValue.capitalized) · \(dirArrow)"
         if let lastAction { text += " · \(lastAction)" }
         let counts = hands.enumerated().map { "\($0.element.count)" }.joined(separator: "/")
-        text += " · hands: \(counts)"
-        let unoCalls = calledUno.sorted().map { "Seat \($0 + 1)" }
-        if !unoCalls.isEmpty { text += " · UNO: \(unoCalls.joined(separator: ", "))" }
+        text += " · \(counts)"
+        if drawPile.count <= 5 { text += " · ⚠️ pile \(drawPile.count)" }
+        let unoCalls = calledUno.sorted().map { "S\($0 + 1)" }
+        if !unoCalls.isEmpty { text += " · UNO: \(unoCalls.joined(separator: " "))" }
         // Flag any seat at exactly 1 card that has NOT called UNO (catchable).
         let exposed = (0..<4).filter { hands[$0].count == 1 && !calledUno.contains($0) }
         if !exposed.isEmpty {
-            text += " · 🚨 " + exposed.map { "Seat \($0 + 1) didn't call!" }.joined(separator: ", ")
+            text += " · 🚨 " + exposed.map { "S\($0 + 1) no UNO!" }.joined(separator: " ")
         }
         // Highlight the closest threat to going out.
         if let threat = (0..<4).min(by: { hands[$0].count < hands[$1].count }),
            hands[threat].count <= 2, threat != currentPlayer {
-            text += " · ⚠️ Seat \(threat + 1) close (\(hands[threat].count))"
+            text += " · ⚠️ S\(threat + 1) has \(hands[threat].count)"
         }
         return text
     }
@@ -306,6 +332,14 @@ struct UnoGame: GameEngine {
         if let biggest = maxHandSize.indices.max(by: { maxHandSize[$0] < maxHandSize[$1] }), maxHandSize[biggest] > 7 {
             text += " · Seat \(biggest + 1) held \(maxHandSize[biggest]) at peak 😬"
         }
+        // Wild Draw Four count
+        if wildDrawFoursPlayed >= 2 { text += " · ⚡ WD4×\(wildDrawFoursPlayed)" }
+        // Most-declared color via wilds
+        if !colorsCalled.isEmpty {
+            if let topColor = colorsCalled.max(by: { $0.value < $1.value }) {
+                text += " · 🎨 \(topColor.key.rawValue.capitalized) called most (\(topColor.value)×)"
+            }
+        }
         // Wild color preference distribution
         if wildsPlayed >= 3, !wildColorCalls.isEmpty {
             if let favColor = wildColorCalls.max(by: { $0.value < $1.value }) {
@@ -324,6 +358,14 @@ struct UnoGame: GameEngine {
         if let biggest = maxHandSize.indices.max(by: { maxHandSize[$0] < maxHandSize[$1] }),
            biggest == winner, maxHandSize[winner] >= 9 {
             text += " · 🔄 comeback from \(maxHandSize[winner]) cards!"
+        }
+        // Per-seat draw tally (only if anyone drew ≥2 total)
+        let totalDraws = drawsBySeat.reduce(0, +)
+        if totalDraws >= 4 {
+            let drawSummary = drawsBySeat.enumerated()
+                .map { i, d in "S\(i + 1):\(d)" }
+                .joined(separator: " ")
+            text += " · 🃏 draws: \(drawSummary)"
         }
         return text
     }

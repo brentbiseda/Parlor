@@ -10,6 +10,8 @@ final class AppModel: ObservableObject {
     @Published var activeMatch: ActiveMatch?
     /// Most recently played games, newest first, for the home quick-launch row.
     @Published private(set) var recentKinds: [GameKind] = []
+    /// Set true when the most recently completed solo game beat the previous personal best score.
+    @Published private(set) var lastResultWasPersonalBest = false
 
     let competitions = CompetitionStore()
     let stats = StatsStore()
@@ -200,13 +202,17 @@ final class AppModel: ObservableObject {
             case let g as HopperGame: won = false; score = g.score
             case let g as CentipedeGame: won = false; score = g.score
             case let g as SnakeGame: won = false; score = g.score
+            case let g as BombermanGame: won = g.levelsCleared > 0; score = g.score
             case let g as FootballGame: won = false; score = g.score
             case let g as BaseballGame: won = false; score = g.score
             case let g as SoccerGame: won = g.won
             case let g as HockeyGame: won = g.won
             default: break
             }
+            let prevBest = stats.stats(for: game.kind).bestScore
             stats.recordGame(kind: game.kind, won: won, score: score)
+            let newBest = stats.stats(for: game.kind).bestScore
+            lastResultWasPersonalBest = score != nil && newBest != prevBest && newBest != nil
             recordLeaderboard(game: game, won: won, playerName: session.playerName(seat: seat))
         }
 
@@ -266,6 +272,9 @@ final class AppModel: ObservableObject {
         case let g as SnakeGame where g.score > 0:
             leaderboards.record(kind: .snake, playerName: playerName, value: g.score,
                                 detail: "\(g.body.count) segments")
+        case let g as BombermanGame where g.score > 0:
+            leaderboards.record(kind: .bomberman, playerName: playerName, value: g.score,
+                                detail: g.levelsCleared > 0 ? "\(g.levelsCleared) lvl\(g.levelsCleared == 1 ? "" : "s")" : "Lv\(g.level)")
         case let g as FootballGame where g.score > 0:
             leaderboards.record(kind: .football, playerName: playerName, value: g.score,
                                 detail: "\(g.made) of \(FootballGame.kicksPerGame)")

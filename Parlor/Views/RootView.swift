@@ -504,6 +504,7 @@ extension GameKind {
         case .hopper: return Color(red: 0.2, green: 0.6, blue: 0.3)
         case .centipede: return Color(red: 0.4, green: 0.65, blue: 0.2)
         case .snake: return Color(red: 0.2, green: 0.7, blue: 0.45)
+        case .bomberman: return Color(red: 0.8, green: 0.35, blue: 0.1)
         case .football: return Color(red: 0.45, green: 0.3, blue: 0.2)
         case .baseball: return Color(red: 0.7, green: 0.25, blue: 0.2)
         case .soccer: return Color(red: 0.15, green: 0.55, blue: 0.4)

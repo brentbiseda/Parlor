@@ -73,6 +73,15 @@ struct MuncherView: View {
                             .padding(.vertical, 2)
                             .background(.purple.opacity(0.15), in: Capsule())
                     }
+                    // Best ghost combo badge during game
+                    if game.maxGhostCombo >= 3 {
+                        Text("💀×\(game.maxGhostCombo)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.yellow)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(.yellow.opacity(0.15), in: Capsule())
+                    }
                 }
             }
             .padding(.bottom, 4)
@@ -111,6 +120,8 @@ struct MuncherView: View {
         let maxTicks = max(60 - game.level * 6, 24)
         let fraction = Double(game.frightenedTicks) / Double(maxTicks)
         let warning = fraction < 0.35
+        let eaten = game.ghostsEatenThisPower
+        let multiplier = eaten > 0 ? (200 * (1 << eaten)) : 0
         return HStack(spacing: 6) {
             Image(systemName: "bolt.fill")
                 .font(.caption2.weight(.bold))
@@ -121,12 +132,20 @@ struct MuncherView: View {
                     RoundedRectangle(cornerRadius: 3)
                         .fill(warning ? Color.red : Color.yellow)
                         .frame(width: geo.size.width * fraction)
+                        .animation(.linear(duration: 0.12), value: fraction)
                 }
             }
             .frame(height: 6)
-            Text("POWER")
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.white.opacity(0.7))
+            if eaten > 0 {
+                Text("×\(multiplier)")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.yellow)
+                    .monospacedDigit()
+            } else {
+                Text("POWER")
+                    .font(.caption2.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.7))
+            }
         }
     }
 

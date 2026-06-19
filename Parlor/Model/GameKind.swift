@@ -8,7 +8,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     // Solitaire & puzzles
     case solitaire, freecell, mahjong, tetris, capsules, minesweeper
     // Arcade
-    case pinball, breakout, muncher, hopper, centipede, snake
+    case pinball, breakout, muncher, hopper, centipede, snake, bomberman
     // Sports
     case football, baseball, soccer, hockey
 
@@ -38,6 +38,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .hopper: return "Hopper"
         case .centipede: return "Centipede"
         case .snake: return "Nibbles"
+        case .bomberman: return "Bomberman"
         case .football: return "Field Goal"
         case .baseball: return "Home Run Derby"
         case .soccer: return "Penalty Shootout"
@@ -48,7 +49,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     var playerCount: Int {
         switch self {
         case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper,
-             .pinball, .breakout, .muncher, .hopper, .centipede, .snake,
+             .pinball, .breakout, .muncher, .hopper, .centipede, .snake, .bomberman,
              .football, .baseball, .soccer, .hockey:
             return 1
         case .chess, .checkers, .go:
@@ -103,6 +104,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .hopper: return "tortoise.fill"
         case .centipede: return "ant.fill"
         case .snake: return "scribble.variable"
+        case .bomberman: return "burst.fill"
         case .football: return "football.fill"
         case .baseball: return "baseball.fill"
         case .soccer: return "soccerball"
@@ -134,6 +136,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .hopper: return "Solo · road & river"
         case .centipede: return "Solo · garden shooter"
         case .snake: return "Solo · don't bite yourself"
+        case .bomberman: return "Solo · bombs & enemies"
         case .football: return "Solo · 10 kicks, add wind"
         case .baseball: return "Solo · 10 pitches"
         case .soccer: return "Solo · shoot 5, save 5"
@@ -159,7 +162,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish: return .cards
         case .chess, .checkers, .go: return .boards
         case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper: return .puzzles
-        case .pinball, .breakout, .muncher, .hopper, .centipede, .snake: return .arcade
+        case .pinball, .breakout, .muncher, .hopper, .centipede, .snake, .bomberman: return .arcade
         case .football, .baseball, .soccer, .hockey: return .sports
         }
     }

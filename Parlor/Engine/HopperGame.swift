@@ -229,12 +229,20 @@ struct HopperGame: GameEngine {
         invincibleTicks = Self.respawnInvincibilityTicks
     }
 
+    var zoneLabel: String {
+        if frogY == 0 { return "🏁 home" }
+        if (1...5).contains(frogY) { return "🌊 river" }
+        if frogY == 6 { return "🟩 safe" }
+        if (7...11).contains(frogY) { return "🚗 road" }
+        return "🟩 start"
+    }
+
     var statusText: String {
         let timeLeft = max(0, Self.timeBonusBudget - crossingTicks)
         let timerStr = timeLeft > 0 ? " · ⏱\(timeLeft)" : ""
         let padsLeft = Self.padXs.count - homePads.count
         let streakStr = crossingStreak >= 3 ? " · 🔥\(crossingStreak)" : ""
-        return "Score \(score) · Pads \(padsLeft) left · Lv\(level)\(timerStr)\(streakStr) · " +
+        return "Score \(score) · \(zoneLabel) · Pads \(padsLeft) left · Lv\(level)\(timerStr)\(streakStr) · " +
                String(repeating: "●", count: max(lives, 0))
     }
 

@@ -7,6 +7,11 @@ struct GoFishView: View {
     @State private var selectedRank: Rank? = nil
     @State private var bookFlash: String? = nil
     @State private var hotStreakVisible = false
+    // Improvement 9: ask-result event banner
+    @State private var eventBanner: String? = nil
+    @State private var showEventBanner = false
+    // Improvement 8: tracks which book ranks have been animated in
+    @State private var animatedBooks: Set<Rank> = []
 
     var game: GoFishGame? { session.game?.engine as? GoFishGame }
 
@@ -77,6 +82,16 @@ struct GoFishView: View {
                                             .padding(.vertical, 2)
                                             .background(.cyan.opacity(0.15), in: Capsule())
                                     }
+                                    // Most-fished opponent chip (who we've drawn from most)
+                                    let pondDraws = game.pondDrawsBySeat[perspective]
+                                    if pondDraws >= 3 {
+                                        Text("🎣 \(pondDraws) pond")
+                                            .font(.caption2.weight(.semibold))
+                                            .foregroundStyle(.teal)
+                                            .padding(.horizontal, 5)
+                                            .padding(.vertical, 2)
+                                            .background(.teal.opacity(0.15), in: Capsule())
+                                    }
                                 }
                                 if let event = game.lastEvent {
                                     Text(event)
@@ -87,11 +102,23 @@ struct GoFishView: View {
                             .foregroundStyle(.white)
                         }
                         if acting {
-                            Text(selectedRank == nil
-                                 ? "Tap a rank below, then a player above"
-                                 : "Asking for \(selectedRank!.label)s — tap a player")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.yellow)
+                            let myGroups = Dictionary(grouping: game.hands[perspective], by: \.rank)
+                            let bestRank = myGroups.max { a, b in a.value.count < b.value.count }
+                            HStack(spacing: 6) {
+                                Text(selectedRank == nil
+                                     ? "Tap a rank, then a player"
+                                     : "Asking for \(selectedRank!.label)s — tap a player")
+                                    .font(.caption.weight(.semibold))
+                                    .foregroundStyle(.yellow)
+                                if selectedRank == nil, let best = bestRank, best.value.count >= 2 {
+                                    Text("Best: \(best.key.label) (\(best.value.count)/4)")
+                                        .font(.caption2.weight(.semibold))
+                                        .foregroundStyle(.green)
+                                        .padding(.horizontal, 5)
+                                        .padding(.vertical, 2)
+                                        .background(.green.opacity(0.15), in: Capsule())
+                                }
+                            }
                         }
                     }
 
@@ -141,8 +168,33 @@ struct GoFishView: View {
                         .allowsHitTesting(false)
                 }
             }
+            // Improvement 9: top-slide ask-result banner
+            .overlay(alignment: .top) {
+                if showEventBanner, let banner = eventBanner {
+                    Text(banner)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 6)
+                        .background(.black.opacity(0.7), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.75))
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
+                }
+            }
             .animation(.spring(response: 0.35), value: bookFlash)
+            .animation(.easeInOut(duration: 0.3), value: showEventBanner)
             .onChange(of: game.currentPlayer) { _, _ in selectedRank = nil }
+            .onChange(of: game.lastEvent) { _, event in
+                guard let event else { return }
+                eventBanner = event
+                withAnimation { showEventBanner = true }
+                Task {
+                    do { try await Task.sleep(nanoseconds: 2_000_000_000) } catch { return }
+                    withAnimation { showEventBanner = false }
+                }
+            }
             .onChange(of: game.bestAskStreak) { oldVal, newVal in
                 guard newVal > 3 && newVal > oldVal else { return }
                 withAnimation(.spring(response: 0.35)) { hotStreakVisible = true }
@@ -170,10 +222,31 @@ struct GoFishView: View {
             && game.books.filter({ $0.count == topBooks }).count == 1
         let bookCount = game.books[seat].count
         let handCount = game.hands[seat].count
+        // Near-book: count of ranks where this opponent has 3 of 4 cards (close to book).
+        let nearBookRanks: [Rank] = Rank.allCases.filter { rank in
+            let count = game.hands[seat].filter { $0.rank == rank }.count
+            return count == 3
+        }
+        let asksLanded = game.asksLandedBySeat[seat]
+        let asksLandedStr = asksLanded >= 2 ? " · 🎣×\(asksLanded)" : ""
         return VStack(spacing: 4) {
             SeatBadge(name: (isLeader ? "👑 " : "") + session.playerName(seat: seat),
                       isCurrent: !game.isOver && game.currentPlayer == seat,
-                      detail: "\(handCount) card\(handCount == 1 ? "" : "s") · \(bookCount) book\(bookCount == 1 ? "" : "s")")
+                      detail: "\(handCount) card\(handCount == 1 ? "" : "s") · \(bookCount) book\(bookCount == 1 ? "" : "s")\(asksLandedStr)")
+            if !nearBookRanks.isEmpty {
+                HStack(spacing: 3) {
+                    Text("⚠️")
+                        .font(.system(size: 8))
+                    ForEach(nearBookRanks, id: \.self) { rank in
+                        Text(rank.label)
+                            .font(.system(size: 8, weight: .black))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .padding(.horizontal, 5)
+                .padding(.vertical, 2)
+                .background(.orange.opacity(0.15), in: Capsule())
+            }
             OpponentHandView(count: min(handCount, 8), width: 16)
             // Mini book progress bar (filled = books / 13)
             if bookCount > 0 {
@@ -210,6 +283,7 @@ struct GoFishView: View {
     func bookRow(_ books: [Rank]) -> some View {
         HStack(spacing: 2) {
             ForEach(books, id: \.self) { rank in
+                let isNew = !animatedBooks.contains(rank)
                 VStack(spacing: 0) {
                     Text(rank.label)
                         .font(.system(size: 9, weight: .black))
@@ -226,6 +300,17 @@ struct GoFishView: View {
                     in: RoundedRectangle(cornerRadius: 3))
                 .overlay(RoundedRectangle(cornerRadius: 3)
                     .strokeBorder(.black.opacity(0.2), lineWidth: 0.5))
+                // Improvement 7: drop shadow for depth
+                .shadow(color: .black.opacity(0.28), radius: 3, x: 1, y: 2)
+                // Improvement 8: spring pop-in for newly completed books
+                .scaleEffect(isNew ? 0.5 : 1.0)
+                .opacity(isNew ? 0 : 1.0)
+                .onAppear {
+                    guard !animatedBooks.contains(rank) else { return }
+                    withAnimation(.spring(response: 0.35, dampingFraction: 0.6)) {
+                        animatedBooks.insert(rank)
+                    }
+                }
             }
         }
     }

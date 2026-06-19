@@ -35,7 +35,24 @@ extension HeartsGame: TrickGameAdapter {
         return "round \(roundPoints[seat]) · total \(scores[seat])"
     }
     var scoreLines: [String] {
-        (0..<4).map { "Seat \($0 + 1): \(scores[$0]) (this round: \(roundPoints[$0]))" }
+        var lines = (0..<4).map { s in
+            let total = scores[s]
+            let thisRound = roundPoints[s]
+            let moonCount = roundHistory.filter { $0[s] == 26 }.count
+            let moonStr = moonCount > 0 ? " 🌙×\(moonCount)" : ""
+            return "S\(s+1): \(total)\(thisRound > 0 ? " (+\(thisRound) this round)" : "")\(moonStr)"
+        }
+        if !roundHistory.isEmpty {
+            lines.append("")
+            lines.append("Round history (newest first):")
+            for (i, deltas) in roundHistory.prefix(8).enumerated() {
+                let parts = (0..<4).map { s in
+                    deltas[s] == 26 ? "🌙" : deltas[s] == 0 ? "–" : "+\(deltas[s])"
+                }
+                lines.append("R\(roundHistory.count - i): " + parts.joined(separator: "  "))
+            }
+        }
+        return lines
     }
     var legalCardSet: Set<Card> { phase == .playing ? Set(legalCards()) : [] }
 }
@@ -48,7 +65,19 @@ extension SpadesGame: TrickGameAdapter {
         return "bid \(bid == 0 ? "nil" : String(bid)) · took \(tricksWon[seat])"
     }
     var scoreLines: [String] {
-        [0, 1].map { "\(teamLabel($0)): \(teamScores[$0]) pts, \(teamBags[$0]) bags" }
+        var lines = [0, 1].map { t in
+            let nilRecord: String = {
+                let m = nilsMade[t]; let b = nilsBusted[t]
+                guard m + b > 0 else { return "" }
+                return m > 0 && b > 0 ? " · nil \(m)✓\(b)✗" : m > 0 ? " · nil \(m)✓" : " · nil \(b)✗"
+            }()
+            return "\(teamLabel(t)): \(teamScores[t]) pts · \(teamBags[t]) bags\(nilRecord)"
+        }
+        if let summary = lastRoundSummary {
+            lines.append("")
+            lines.append("Last round: \(summary)")
+        }
+        return lines
     }
     var legalCardSet: Set<Card> { phase == .playing ? Set(legalCards()) : [] }
 }
@@ -77,7 +106,13 @@ extension EuchreGame: TrickGameAdapter {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
     var scoreLines: [String] {
-        [0, 1].map { "\(teamLabel($0)): \(teamScores[$0]) of 10" }
+        [0, 1].map { t in
+            var line = "\(teamLabel(t)): \(teamScores[t]) of 10"
+            if teamEuchres[t] > 0 { line += " · \(teamEuchres[t]) euchre\(teamEuchres[t] == 1 ? "" : "s")" }
+            if lonersAttempted[t] > 0 { line += " · ⚡\(teamLoneMarches[t])/\(lonersAttempted[t]) loner" }
+            if teamBestStreak[t] >= 3 { line += " · 🔥\(teamBestStreak[t]) streak" }
+            return line
+        }
     }
     var legalCardSet: Set<Card> {
         switch phase {
@@ -114,6 +149,9 @@ struct TrickTableView: View {
     @State private var passSelection: Set<Card> = []
     @State private var showScores = false
     @State private var bagPulse = false
+    @State private var moonPulse = false
+    // Improvement 14: round-summary pop scale
+    @State private var summaryScale: CGFloat = 1.0
 
     var adapter: TrickGameAdapter? { session.game?.engine as? TrickGameAdapter }
 
@@ -134,18 +172,81 @@ struct TrickTableView: View {
                     .padding(.horizontal, 6)
 
                     Spacer(minLength: 0)
+                    // Improvement 13: trick count progress bar beneath the trick pile
+                    if let hearts = game.engine as? HeartsGame, hearts.phase == .playing {
+                        let taken = hearts.tricksPlayed
+                        let total = 13
+                        GeometryReader { barGeo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.10))
+                                    .frame(height: 4)
+                                Capsule()
+                                    .fill(Color.green.opacity(0.75))
+                                    .frame(width: total > 0 ? barGeo.size.width * CGFloat(taken) / CGFloat(total) : 0, height: 4)
+                                    .animation(.easeOut(duration: 0.3), value: taken)
+                            }
+                        }
+                        .frame(height: 4)
+                        .padding(.horizontal, 12)
+                        .overlay(alignment: .trailing) {
+                            Text("\(taken)/\(total)")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .padding(.trailing, 4)
+                        }
+                    } else if let spades = game.engine as? SpadesGame, spades.phase == .playing {
+                        let taken = (0..<4).reduce(0) { $0 + spades.tricksWon[$1] }
+                        GeometryReader { barGeo in
+                            ZStack(alignment: .leading) {
+                                Capsule()
+                                    .fill(Color.white.opacity(0.10))
+                                    .frame(height: 4)
+                                Capsule()
+                                    .fill(Color.blue.opacity(0.7))
+                                    .frame(width: barGeo.size.width * CGFloat(taken) / 13.0, height: 4)
+                                    .animation(.easeOut(duration: 0.3), value: taken)
+                            }
+                        }
+                        .frame(height: 4)
+                        .padding(.horizontal, 12)
+                        .overlay(alignment: .trailing) {
+                            Text("\(taken)/13")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.45))
+                                .padding(.trailing, 4)
+                        }
+                    }
                     ZStack(alignment: .topLeading) {
                         trickArea(adapter: adapter, perspective: perspective)
                         // Trump suit badge shown during playing phase
                         if let trump = activeTrump(game: game) {
-                            Text(trump.symbol)
-                                .font(.title2.weight(.bold))
-                                .foregroundStyle(trump.isRed ? .red : .primary)
-                                .padding(6)
-                                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
-                                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.2), lineWidth: 1))
-                                .padding(.leading, 4)
-                                .padding(.top, 4)
+                            VStack(spacing: 2) {
+                                Text(trump.symbol)
+                                    .font(.title2.weight(.bold))
+                                    .foregroundStyle(trump.isRed ? .red : .primary)
+                                // For Euchre: show maker team and streak
+                                if let euchre = game.engine as? EuchreGame,
+                                   let makerTeam = euchre.makerTeam {
+                                    let streakTeam = makerTeam
+                                    let streak = euchre.teamRoundStreak[streakTeam]
+                                    let makerLabel = "T\(makerTeam + 1) made"
+                                    HStack(spacing: 2) {
+                                        Text(makerLabel)
+                                            .font(.system(size: 8, weight: .semibold))
+                                            .foregroundStyle(.white.opacity(0.7))
+                                        if streak >= 2 {
+                                            Text("🔥\(streak)")
+                                                .font(.system(size: 8, weight: .bold))
+                                        }
+                                    }
+                                }
+                            }
+                            .padding(6)
+                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder((trump.isRed ? Color.red : Color.white).opacity(0.35), lineWidth: 1))
+                            .padding(.leading, 4)
+                            .padding(.top, 4)
                         }
                     }
                     Spacer(minLength: 0)
@@ -169,6 +270,34 @@ struct TrickTableView: View {
                         heartsRoundChips(hearts: hearts, perspective: perspective)
                             .padding(.bottom, 2)
                     }
+                    // Hearts received-cards strip (shown at start of play after passing).
+                    if let hearts = game.engine as? HeartsGame, hearts.phase == .playing,
+                       hearts.tricksPlayed == 0, !hearts.receivedCards[perspective].isEmpty {
+                        let received = hearts.receivedCards[perspective]
+                        let hasDanger = received.contains {
+                            ($0.suit == .spades && $0.rank == .queen) ||
+                            ($0.suit == .hearts && $0.rank >= .king)
+                        }
+                        HStack(spacing: 4) {
+                            Text("Received:")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.55))
+                            ForEach(received, id: \.self) { card in
+                                let isQueen = card.suit == .spades && card.rank == .queen
+                                Text(card.label)
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(isQueen ? .red : card.suit.isRed ? .pink : .white.opacity(0.85))
+                                    .padding(.horizontal, 4)
+                                    .padding(.vertical, 2)
+                                    .background(isQueen ? Color.red.opacity(0.18) : .white.opacity(0.07), in: Capsule())
+                            }
+                            if hasDanger {
+                                Text("⚠️")
+                                    .font(.system(size: 9))
+                            }
+                        }
+                        .padding(.bottom, 2)
+                    }
 
                     // Bridge: contract progress bar during playing phase.
                     if let bridge = game.engine as? BridgeGame, bridge.phase == .playing {
@@ -189,8 +318,41 @@ struct TrickTableView: View {
                         .padding(.vertical, 5)
                         .background(.white.opacity(0.08), in: Capsule())
                         .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
+                        // Improvement 14: spring pop scale on round summary capsule
+                        .scaleEffect(summaryScale)
                         .transition(.opacity.combined(with: .scale(scale: 0.92)))
                         .animation(.easeInOut(duration: 0.25), value: summary)
+                        .onChange(of: summary) { _, _ in
+                            summaryScale = 1.0
+                            withAnimation(.spring(response: 0.3, dampingFraction: 0.5)) {
+                                summaryScale = 1.1
+                            }
+                            Task { @MainActor in
+                                do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
+                                withAnimation(.spring(response: 0.2)) { summaryScale = 1.0 }
+                            }
+                        }
+                    }
+
+                    // Spades last-round summary pill (shown during bidding after a round ends).
+                    if let spades = game.engine as? SpadesGame, spades.phase == .bidding,
+                       let summary = spades.lastRoundSummary {
+                        HStack(spacing: 5) {
+                            Image(systemName: "checkmark.seal.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.cyan.opacity(0.85))
+                            Text(summary)
+                                .font(.caption.weight(.medium))
+                                .foregroundStyle(.white.opacity(0.9))
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.75)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 5)
+                        .background(.cyan.opacity(0.10), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.cyan.opacity(0.25), lineWidth: 0.75))
+                        .transition(.opacity.combined(with: .scale(scale: 0.92)))
+                        .padding(.bottom, 2)
                     }
 
                     if acting {
@@ -243,14 +405,17 @@ struct TrickTableView: View {
                     .overlay(Circle().strokeBorder(played ? .white.opacity(0.5) : .white.opacity(0.25), lineWidth: 1))
                     .frame(width: 10, height: 10)
             }
-            // Alone indicator
+            // Alone indicator with march progress
             if euchre.aloneSeat != nil {
-                Text("⚡ALONE")
+                let marchLeft = max(0, 5 - makerTricks)
+                let aloneText = marchLeft == 0 ? "⚡MARCH!" : "⚡ALONE \(makerTricks)/5"
+                let aloneColor: Color = marchLeft == 0 ? .green : .yellow
+                Text(aloneText)
                     .font(.system(size: 9, weight: .black))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(aloneColor)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 2)
-                    .background(.yellow.opacity(0.2), in: Capsule())
+                    .background(aloneColor.opacity(0.2), in: Capsule())
             }
             Spacer(minLength: 4)
             Text("\(makerIsUs ? makerTricks : defenderTricks)/3")
@@ -299,10 +464,45 @@ struct TrickTableView: View {
                     }
             }
             Spacer(minLength: 4)
-            Text("\(ourTricks)/\(ourContract) · \(theirTricks)/\(theirContract)")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.7))
-                .monospacedDigit()
+            VStack(alignment: .trailing, spacing: 1) {
+                Text("\(ourTricks)/\(ourContract) · \(theirTricks)/\(theirContract)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                    .monospacedDigit()
+                // Bag penalty imminent: bags >= 8 this round will trigger the -100 penalty
+                let usBagNow = spades.teamBags[us]
+                let usOverTricks = ourTricks > ourContract ? ourTricks - ourContract : 0
+                let projBags = usBagNow + usOverTricks
+                if projBags >= 8 && usBagNow < 10 {
+                    Text("🎒 PENALTY!")
+                        .font(.system(size: 7, weight: .black))
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 3).padding(.vertical, 1)
+                        .background(Color.red.opacity(0.15), in: Capsule())
+                }
+                // Nil bid status chips: show for any seat with a nil bid
+                let nilSeats = (0..<4).filter { spades.bids[$0] == 0 }
+                if !nilSeats.isEmpty {
+                    HStack(spacing: 4) {
+                        ForEach(nilSeats, id: \.self) { seat in
+                            let tricks = spades.tricksWon[seat]
+                            let busted = tricks > 0
+                            let atRisk = !busted && spades.phase == .playing
+                            HStack(spacing: 2) {
+                                Image(systemName: busted ? "xmark.circle.fill" : "shield.fill")
+                                    .font(.system(size: 7))
+                                    .foregroundStyle(busted ? .red : .green)
+                                Text("S\(seat+1) NIL\(busted ? " ✗(\(tricks))" : " ✓")")
+                                    .font(.system(size: 7, weight: .bold))
+                                    .foregroundStyle(busted ? .red : atRisk ? .green : .green)
+                            }
+                            .padding(.horizontal, 4).padding(.vertical, 2)
+                            .background(busted ? Color.red.opacity(0.18) : Color.green.opacity(0.15), in: Capsule())
+                            .overlay(Capsule().strokeBorder(busted ? Color.red.opacity(0.4) : Color.green.opacity(0.3), lineWidth: 0.5))
+                        }
+                    }
+                }
+            }
         }
         .padding(.horizontal, 8)
     }
@@ -312,29 +512,63 @@ struct TrickTableView: View {
     @ViewBuilder
     func heartsRoundChips(hearts: HeartsGame, perspective: Int) -> some View {
         let moonAttempt = (0..<4).first { seat in hearts.roundPoints[seat] >= 12 && (1..<4).allSatisfy({ i in i == seat || hearts.roundPoints[i] == 0 }) }
+        // Identify who holds the Queen of Spades point (13 pts in this round, among those with pts ≥ 13)
+        let queenHolder: Int? = hearts.queenPlayed ? (0..<4).first(where: { hearts.roundPoints[$0] >= 13 }) : nil
         HStack(spacing: 5) {
             ForEach(0..<4, id: \.self) { seat in
                 let pts = hearts.roundPoints[seat]
                 let isMoonCandidate = moonAttempt == seat
                 let isMe = seat == perspective
+                let hasQueen = queenHolder == seat
+                let _ = { if isMoonCandidate && !moonPulse { DispatchQueue.main.async { moonPulse = true } } }()
                 HStack(spacing: 2) {
+                    if hasQueen {
+                        Text("♛")
+                            .font(.system(size: 8))
+                            .foregroundStyle(.red)
+                    }
                     Text(String(session.playerName(seat: seat).prefix(4)))
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(.white.opacity(0.7))
-                    Text("+\(pts)")
-                        .font(.system(size: 10, weight: .black))
-                        .foregroundStyle(isMoonCandidate ? .yellow : pts >= 13 ? .red : pts > 0 ? .orange : .white.opacity(0.5))
+                    let heartOnly = hearts.roundHeartsTaken[seat]
+                    if pts > 0 {
+                        Text("+\(pts)")
+                            .font(.system(size: 10, weight: .black))
+                            .foregroundStyle(isMoonCandidate ? .yellow : pts >= 13 ? .red : pts > 0 ? .orange : .white.opacity(0.5))
+                        // Show breakdown: ♥N if hearts>0 and queen was also taken
+                        if hasQueen && heartOnly > 0 {
+                            Text("♥\(heartOnly)")
+                                .font(.system(size: 7))
+                                .foregroundStyle(.pink.opacity(0.85))
+                        }
+                    } else {
+                        Text("–")
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
                 }
                 .padding(.horizontal, 6)
                 .padding(.vertical, 3)
-                .background(isMoonCandidate ? Color.yellow.opacity(0.15) : isMe ? .white.opacity(0.1) : .clear,
+                .background(isMoonCandidate ? Color.yellow.opacity(moonPulse ? 0.25 : 0.12) : hasQueen ? Color.red.opacity(0.12) : isMe ? .white.opacity(0.1) : .clear,
                             in: Capsule())
-                .overlay(isMoonCandidate ? Capsule().strokeBorder(.yellow.opacity(0.5), lineWidth: 1) : nil)
+                .overlay(isMoonCandidate ? Capsule().strokeBorder(.yellow.opacity(moonPulse ? 0.8 : 0.4), lineWidth: 1.5)
+                         : hasQueen ? Capsule().strokeBorder(.red.opacity(0.4), lineWidth: 1) : nil)
+                .animation(.easeInOut(duration: 0.7).repeatForever(autoreverses: true), value: moonPulse)
             }
             if let moon = moonAttempt {
-                Text("🌙 S\(moon+1) going for moon!")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.yellow)
+                let moonPts = hearts.roundPoints[moon]
+                let queenIn = hearts.queenPlayed && (hearts.roundPoints[moon] >= 13)
+                let needed = 26 - moonPts
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("🌙 \(moonPts)/26")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.yellow)
+                    if needed > 0 && !queenIn {
+                        Text("♛ not yet")
+                            .font(.system(size: 7))
+                            .foregroundStyle(.orange.opacity(0.8))
+                    }
+                }
             }
         }
     }
@@ -403,13 +637,40 @@ struct TrickTableView: View {
             let themBags = g.teamBags[1 - us]
             // Projected round delta: tricks won vs contract so far
             let ourTricks = g.tricksWon[us] + g.tricksWon[us + 2]
+            let theirTricks = g.tricksWon[1 - us] + g.tricksWon[(1 - us) + 2]
             let ourContract = g.teamContract(us)
+            let theirContract = g.teamContract(1 - us)
             let projBag = g.phase == .playing && ourContract > 0 && ourTricks > ourContract
                 ? " +\(ourTricks - ourContract)🎒" : ""
             let projNote = g.phase == .playing && ourContract > 0
                 ? (ourTricks >= ourContract ? "✓" : "\(ourTricks)/\(ourContract)") : nil
+            // Projected round score for each team if current state persists
+            let ourProjScore: Int? = g.phase == .playing && ourContract > 0 ? {
+                if ourTricks >= ourContract { return 10 * ourContract + (ourTricks - ourContract) }
+                return -10 * ourContract
+            }() : nil
+            let theirProjScore: Int? = g.phase == .playing && theirContract > 0 ? {
+                if theirTricks >= theirContract { return 10 * theirContract + (theirTricks - theirContract) }
+                return -10 * theirContract
+            }() : nil
             HStack(spacing: 8) {
-                scoreChip("Us", "\(g.teamScores[us])", detail: "\(usBags)🎒\(projBag)",
+                let usNilDetail: String? = {
+                    let m = g.nilsMade[us]; let b = g.nilsBusted[us]
+                    guard m + b > 0 else { return nil }
+                    return m > 0 && b > 0 ? "nil \(m)✓\(b)✗" : m > 0 ? "nil \(m)✓" : "nil \(b)✗"
+                }()
+                let themNilDetail: String? = {
+                    let m = g.nilsMade[1 - us]; let b = g.nilsBusted[1 - us]
+                    guard m + b > 0 else { return nil }
+                    return m > 0 && b > 0 ? "nil \(m)✓\(b)✗" : m > 0 ? "nil \(m)✓" : "nil \(b)✗"
+                }()
+                let usPerfect = g.perfectBids[us]
+                let themPerfect = g.perfectBids[1 - us]
+                let usPerfectStr = usPerfect >= 2 ? " · 🎯×\(usPerfect)" : ""
+                let themPerfectStr = themPerfect >= 2 ? " · 🎯×\(themPerfect)" : ""
+                let usDetail = (usNilDetail.map { "\(usBags)🎒\(projBag) · \($0)" } ?? "\(usBags)🎒\(projBag)") + usPerfectStr
+                let themDetail = (themNilDetail.map { "\(themBags)🎒 · \($0)" } ?? "\(themBags)🎒") + themPerfectStr
+                scoreChip("Us", "\(g.teamScores[us])", detail: usDetail,
                           highlight: true, bagWarning: usBags >= 7)
                     .scaleEffect(usBags >= 7 && bagPulse ? 1.06 : 1.0)
                 VStack(spacing: 1) {
@@ -419,8 +680,15 @@ struct TrickTableView: View {
                             .font(.caption2.weight(.bold))
                             .foregroundStyle(note == "✓" ? .green : .white.opacity(0.6))
                     }
+                    if let us = ourProjScore, let them = theirProjScore {
+                        let usPlusMinus = us >= 0 ? "+\(us)" : "\(us)"
+                        let themPlusMinus = them >= 0 ? "+\(them)" : "\(them)"
+                        Text("\(usPlusMinus)/\(themPlusMinus)")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(us < 0 ? .red : them < 0 ? .green : .white.opacity(0.5))
+                    }
                 }
-                scoreChip("Them", "\(g.teamScores[1 - us])", detail: "\(themBags)🎒",
+                scoreChip("Them", "\(g.teamScores[1 - us])", detail: themDetail,
                           highlight: false, bagWarning: themBags >= 7)
                     .scaleEffect(themBags >= 7 && bagPulse ? 1.06 : 1.0)
             }
@@ -440,12 +708,26 @@ struct TrickTableView: View {
             let us = perspective % 2
             let usStreak = g.teamRoundStreak[us]
             let themStreak = g.teamRoundStreak[1 - us]
+            let usLonerDetail: String? = {
+                let att = g.lonersAttempted[us]; let won = g.teamLoneMarches[us]
+                guard att > 0 else { return nil }
+                return "⚡\(won)/\(att)"
+            }()
+            let themLonerDetail: String? = {
+                let att = g.lonersAttempted[1 - us]; let won = g.teamLoneMarches[1 - us]
+                guard att > 0 else { return nil }
+                return "⚡\(won)/\(att)"
+            }()
+            let usChipDetail = [usStreak >= 2 ? "🔥\(usStreak)" : nil, usLonerDetail]
+                .compactMap { $0 }.joined(separator: " ")
+            let themChipDetail = [themStreak >= 2 ? "🔥\(themStreak)" : nil, themLonerDetail]
+                .compactMap { $0 }.joined(separator: " ")
             HStack(spacing: 8) {
                 scoreChip("Us", "\(g.teamScores[us])",
-                          detail: usStreak >= 2 ? "🔥\(usStreak)" : nil, highlight: true)
+                          detail: usChipDetail.isEmpty ? nil : usChipDetail, highlight: true)
                 Text("to 10").font(.caption2).foregroundStyle(.white.opacity(0.5))
                 scoreChip("Them", "\(g.teamScores[1 - us])",
-                          detail: themStreak >= 2 ? "🔥\(themStreak)" : nil, highlight: false)
+                          detail: themChipDetail.isEmpty ? nil : themChipDetail, highlight: false)
             }
         case let g as BridgeGame:
             let us = perspective % 2
@@ -459,21 +741,71 @@ struct TrickTableView: View {
                           bagWarning: themVul)
             }
         case let g as HeartsGame:
-            HStack(spacing: 6) {
-                ForEach(0..<4, id: \.self) { seat in
-                    scoreChip(String(seatName(seat).prefix(6)), "\(g.scores[seat])",
-                              detail: nil, highlight: seat == perspective)
+            VStack(spacing: 4) {
+                HStack(spacing: 6) {
+                    ForEach(0..<4, id: \.self) { seat in
+                        let isLeading = g.scores[seat] == g.scores.min()!
+                        let isDanger = g.scores[seat] >= 85
+                        scoreChip(String(seatName(seat).prefix(4)),
+                                  "\(g.scores[seat])",
+                                  detail: isLeading && g.scores.min()! > 0 ? "★" : (isDanger ? "⚠️" : nil),
+                                  highlight: seat == perspective,
+                                  bagWarning: isDanger)
+                    }
+                    if g.heartsBroken && g.phase == .playing {
+                        Image(systemName: "heart.slash.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                            .padding(5)
+                            .background(.black.opacity(0.3), in: Circle())
+                    }
                 }
-                if g.heartsBroken && g.phase == .playing {
-                    Image(systemName: "heart.slash.fill")
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .padding(5)
-                        .background(.black.opacity(0.3), in: Circle())
+                // Show spread and round history
+                if g.phase == .playing {
+                    let spread = (g.scores.max() ?? 0) - (g.scores.min() ?? 0)
+                    HStack(spacing: 6) {
+                        if spread > 0 {
+                            Text("spread \(spread)")
+                                .font(.system(size: 8))
+                                .foregroundStyle(.white.opacity(0.4))
+                        }
+                        // Last 3 rounds mini history for the perspective seat
+                        let recent = g.roundHistory.prefix(3)
+                        if !recent.isEmpty {
+                            HStack(spacing: 3) {
+                                ForEach(Array(recent.reversed().enumerated()), id: \.offset) { _, deltas in
+                                    let pts = deltas[perspective]
+                                    Text(pts == 0 ? "–" : "+\(pts)")
+                                        .font(.system(size: 7, weight: .semibold))
+                                        .foregroundStyle(pts == 0 ? .green.opacity(0.7) : pts >= 13 ? .red : .white.opacity(0.5))
+                                        .padding(.horizontal, 3)
+                                        .padding(.vertical, 1)
+                                        .background(pts >= 13 ? Color.red.opacity(0.15) : .white.opacity(0.04), in: Capsule())
+                                }
+                            }
+                        }
+                    }
                 }
             }
         default:
             EmptyView()
+        }
+    }
+
+    /// Cards from `hand` that are risky to keep in Hearts: Q♠, high hearts (A/K/Q), high spades (A/K).
+    func heartsDangerCards(_ hand: [Card]) -> [Card] {
+        hand.filter { card in
+            let isQueenSpades = card.suit == .spades && card.rank == .queen
+            let isHighHeart = card.suit == .hearts && card.rank >= .queen
+            let isHighSpade = card.suit == .spades && card.rank >= .king && card.rank != .queen
+            return isQueenSpades || isHighHeart || isHighSpade
+        }.sorted { lhs, rhs in
+            let score: (Card) -> Int = { c in
+                if c.suit == .spades && c.rank == .queen { return 100 }
+                if c.suit == .hearts { return c.rank.rawValue + 20 }
+                return c.rank.rawValue
+            }
+            return score(lhs) > score(rhs)
         }
     }
 
@@ -597,10 +929,18 @@ struct TrickTableView: View {
         let cards = adapter.hands[handSeat]
         let isPassing: Bool
         if case .heartsPassing = adapter.panel { isPassing = true } else { isPassing = false }
-        // During Hearts passing every card is selectable, so legal = [] avoids
-        // painting all 13 with a yellow border.  Only the selected cards are highlighted.
+        // During passing: highlight cards the player can still pick (not yet in selection,
+        // slot still open). Once 3 are chosen, no more yellow borders. Selected cards get
+        // the green checkmark via the `selected:` parameter.
         let legalCards = adapter.legalCardSet
-        let legal: Set<Card> = isPassing ? [] : legalCards
+        let legal: Set<Card>
+        if isPassing {
+            legal = passSelection.count < 3
+                ? Set(adapter.hands[handSeat]).subtracting(passSelection)
+                : []
+        } else {
+            legal = legalCards
+        }
 
         return HandView(cards: cards,
                         legal: legal,
@@ -649,13 +989,65 @@ struct TrickTableView: View {
                         }
                     }
                 }
+                // Suit distribution + risk indicator during passing
+                if let hearts = game.engine as? HeartsGame, direction != "hold" {
+                    let hand = hearts.hands[session.perspectiveSeat]
+                    let bySuit = Dictionary(grouping: hand, by: \.suit)
+                    let keeping = hand.filter { !passSelection.contains($0) }
+                    let dangerous = heartsDangerCards(keeping)
+                    // Suit count pips: show how many cards per suit remain after selection
+                    let keepBySuit = Dictionary(grouping: keeping, by: \.suit)
+                    HStack(spacing: 6) {
+                        ForEach(Suit.allCases, id: \.self) { suit in
+                            let total = (bySuit[suit] ?? []).count
+                            let kept = (keepBySuit[suit] ?? []).count
+                            let isDanger = suit == .hearts || suit == .spades
+                            HStack(spacing: 2) {
+                                Text(suit.symbol)
+                                    .font(.system(size: 9))
+                                    .foregroundStyle(suit.isRed ? .red : .white.opacity(0.8))
+                                Text("\(kept)")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(isDanger && kept >= 4 ? .orange : .white.opacity(0.7))
+                            }
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 2)
+                            .background(total != kept ? Color.yellow.opacity(0.08) : Color.white.opacity(0.05),
+                                        in: Capsule())
+                        }
+                    }
+                    if !dangerous.isEmpty {
+                        HStack(spacing: 4) {
+                            Text("Keep risk:")
+                                .font(.system(size: 9, weight: .medium))
+                                .foregroundStyle(.white.opacity(0.55))
+                            ForEach(dangerous, id: \.self) { card in
+                                let isQueen = card.suit == .spades && card.rank == .queen
+                                Text(card.label)
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(isQueen ? .red : card.suit.isRed ? .pink : .orange)
+                                    .padding(.horizontal, 5)
+                                    .padding(.vertical, 2)
+                                    .background(isQueen ? Color.red.opacity(0.2) : Color.pink.opacity(0.15),
+                                                in: Capsule())
+                            }
+                        }
+                    }
+                }
                 Button {
                     session.submit(.passCards(Array(passSelection).displaySorted()))
                     passSelection = []
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "paperplane.fill")
-                        Text("Pass \(passSelection.count)/3")
+                        // Improvement 15: show pass direction arrow in the button label
+                        let dirArrow: String = switch direction {
+                        case "left": "←"
+                        case "right": "→"
+                        case "across": "↕"
+                        default: "⟳"
+                        }
+                        Text("\(dirArrow) Pass \(passSelection.count)/3")
                     }
                 }
                 .buttonStyle(.borderedProminent)
@@ -736,6 +1128,30 @@ struct TrickTableView: View {
                     CardView(card: upcard, width: 34)
                     Text("?").foregroundStyle(.white)
                 }
+                // Show trump strength if player orders up this suit
+                if let euchre = game.engine as? EuchreGame {
+                    let seat = euchre.currentPlayer
+                    let hand = euchre.hands[seat]
+                    let partner = euchre.sittingOut == nil ? (seat + 2) % 4 : -1
+                    // Count trump cards including the upcard (right/left bower + regular trump)
+                    let trumpSuit = upcard.suit
+                    let partnerSuit = trumpSuit.sameColorPartner
+                    let trumpCards = hand.filter { card in
+                        card.suit == trumpSuit || (card.rank == .jack && card.suit == partnerSuit)
+                    }
+                    let hasRightBower = hand.contains { $0.rank == .jack && $0.suit == trumpSuit }
+                    let hasLeftBower = hand.contains { $0.rank == .jack && $0.suit == partnerSuit }
+                    let trumpCount = trumpCards.count + (euchre.dealer == seat ? 1 : 0)
+                    let strength = trumpCount >= 4 ? "Strong" : trumpCount >= 3 ? "Good" : "Weak"
+                    let strengthColor: Color = trumpCount >= 4 ? .green : trumpCount >= 3 ? .yellow : .orange
+                    HStack(spacing: 6) {
+                        Text("\(trumpSuit.symbol) strength: \(strength) (\(trumpCount) trump)")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(strengthColor)
+                        if hasRightBower { Text("R♖").font(.system(size: 9, weight: .black)).foregroundStyle(.yellow) }
+                        if hasLeftBower  { Text("L♖").font(.system(size: 9, weight: .black)).foregroundStyle(.yellow.opacity(0.8)) }
+                    }
+                }
                 HStack {
                     Button("Pass") { session.submit(.euchreCall(.pass)) }
                         .buttonStyle(.bordered).tint(.white)
@@ -749,6 +1165,25 @@ struct TrickTableView: View {
             VStack(spacing: 6) {
                 Text(mustCall ? "Dealer must name trump" : "Name trump?")
                     .font(.callout).foregroundStyle(.white)
+                // Show suit strength for each option
+                if let euchre = game.engine as? EuchreGame {
+                    let seat = euchre.currentPlayer
+                    let hand = euchre.hands[seat]
+                    HStack(spacing: 8) {
+                        ForEach(Suit.allCases.filter { $0 != excluded }, id: \.self) { suit in
+                            let partnerSuit = suit.sameColorPartner
+                            let trumpCount = hand.filter { $0.suit == suit || ($0.rank == .jack && $0.suit == partnerSuit) }.count
+                            VStack(spacing: 1) {
+                                Text(suit.symbol)
+                                    .font(.system(size: 11, weight: .bold))
+                                    .foregroundStyle(suit.isRed ? .red : .white)
+                                Text("\(trumpCount)")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundStyle(trumpCount >= 3 ? .yellow : .white.opacity(0.6))
+                            }
+                        }
+                    }
+                }
                 HStack {
                     if !mustCall {
                         Button("Pass") { session.submit(.euchreCall(.pass)) }
@@ -806,6 +1241,51 @@ struct BridgeAuctionPanel: View {
     var body: some View {
         let legal = bridge?.legalCalls() ?? []
         VStack(spacing: 6) {
+            // HCP display for the local player during auction
+            if let bridge, !bridge.isOver, bridge.contract == nil {
+                let seat = session.perspectiveSeat
+                let hand = bridge.hands[seat]
+                let hcp = TrickTaking.highCardPoints(hand: hand)
+                let bySuit = Dictionary(grouping: hand, by: \.suit)
+                let suitLengths = Suit.allCases.map { (bySuit[$0] ?? []).count }.sorted(by: >)
+                let hasVoid = suitLengths.contains(0)
+                let hasSingleton = suitLengths.contains(1)
+                let handShape: String = {
+                    if suitLengths[0] >= 6 { return "Long (\(suitLengths[0]))" }
+                    if suitLengths[0] >= 5 { return "Semi-Bal" }
+                    if hasVoid || hasSingleton { return "Unbal" }
+                    return "Balanced"
+                }()
+                let shapeColor: Color = hasVoid || suitLengths[0] >= 6 ? .yellow : hasSingleton ? .orange : .green
+                HStack(spacing: 8) {
+                    HStack(spacing: 3) {
+                        Text("HCP:")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.6))
+                        Text("\(hcp)")
+                            .font(.system(size: 13, weight: .black))
+                            .foregroundStyle(hcp >= 15 ? .yellow : hcp >= 12 ? .white : .white.opacity(0.7))
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(hcp >= 12 ? Color.white.opacity(0.12) : Color.white.opacity(0.06),
+                                in: Capsule())
+                    Text(handShape)
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(shapeColor)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(shapeColor.opacity(0.12), in: Capsule())
+                    ForEach(Suit.allCases, id: \.self) { suit in
+                        let cards = (bySuit[suit] ?? []).sorted { $0.rank.rawValue > $1.rank.rawValue }
+                        if !cards.isEmpty {
+                            Text("\(suit.symbol)\(cards.count)" + (cards.first.map { $0.rank >= .ace ? "A" : $0.rank >= .king ? "K" : "" } ?? ""))
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(suit.isRed ? .red : .white.opacity(0.85))
+                        }
+                    }
+                }
+            }
             if let bridge, !bridge.calls.isEmpty {
                 // Auction grid: 4 columns (seats), rows fill from dealer onward
                 let dealer = bridge.dealer

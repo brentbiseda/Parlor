@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Container for an active session: lobby, the game itself, the pass-and-play
 /// curtain, results, and errors.
@@ -6,6 +7,18 @@ struct TableView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var session: GameSession
     @State private var trophyPulse = false
+    // 2. Turn indicator glow state.
+    @State private var turnPulse = false
+    // 3. Medal chip appear animation state.
+    @State private var medalsAppeared = false
+    // 5. Game-over confetti dot positions (static colored dots near result banner).
+    private let confettiDots: [(CGFloat, CGFloat, Color)] = [
+        (-55, -18, Color(red: 1.0, green: 0.84, blue: 0.0)),
+        (50, -12, Color(red: 0.3, green: 0.9, blue: 0.45)),
+        (-30, 14, Color(red: 0.2, green: 0.7, blue: 1.0)),
+        (65, 20, Color(red: 1.0, green: 0.35, blue: 0.7)),
+        (-70, 5, Color(red: 0.65, green: 0.3, blue: 1.0)),
+    ]
 
     var body: some View {
         NavigationStack {
@@ -43,7 +56,10 @@ struct TableView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // 4. Haptic feedback on leave — consequential action deserves tactile confirmation.
                     Button {
+                        let generator = UIImpactFeedbackGenerator(style: .light)
+                        generator.impactOccurred()
                         model.endSession()
                     } label: {
                         HStack(spacing: 4) {
@@ -122,6 +138,8 @@ struct TableView: View {
                                     .frame(width: 6, height: 6)
                                     .accessibilityHidden(true)
                             }
+                            // 1. Capsule background wrapping status text for better readability.
+                            // 6. lineLimit(2) + minimumScaleFactor(0.78) for long Chess/Go strings.
                             Text(statusLine(game))
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.white)
@@ -129,6 +147,8 @@ struct TableView: View {
                                 .minimumScaleFactor(0.78)
                                 .multilineTextAlignment(.center)
                                 .accessibilityLabel(statusLine(game))
+                                .padding(.horizontal, 10)
+                                .background(Capsule().fill(Color.primary.opacity(0.06)))
                         }
                         .accessibilityElement(children: .combine)
                         .padding(.horizontal, 16)
@@ -142,7 +162,16 @@ struct TableView: View {
                             .clipShape(Capsule())
                         }
                         .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
-                        .shadow(color: .black.opacity(0.3), radius: 6, y: 2)
+                        // 2. Animated green glow when it's the local human's turn.
+                        .shadow(color: session.actionableSeat != nil
+                                    ? .green.opacity(turnPulse ? 0.4 : 0.15)
+                                    : .black.opacity(0.3),
+                                radius: session.actionableSeat != nil ? 8 : 6, y: 2)
+                        .onAppear {
+                            withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+                                turnPulse = true
+                            }
+                        }
                         .frame(maxWidth: .infinity)
                         .padding(.bottom, 5)
                     }
@@ -230,6 +259,9 @@ struct TableView: View {
                 .id(ObjectIdentifier(session))
         case .snake:
             SnakeView(session: session)
+                .id(ObjectIdentifier(session))
+        case .bomberman:
+            BombermanView(session: session)
                 .id(ObjectIdentifier(session))
         case .football:
             FootballView(session: session)
@@ -367,6 +399,16 @@ struct TableView: View {
                 }
 
                 VStack(spacing: 5) {
+                    if model.lastResultWasPersonalBest {
+                        Label("New Personal Best!", systemImage: "star.fill")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.yellow)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 4)
+                            .background(.yellow.opacity(0.18), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.yellow.opacity(0.4), lineWidth: 1))
+                            .transition(.scale.combined(with: .opacity))
+                    }
                     Text(isLoss ? "Better luck next time" : "Well played!")
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(accentColor)
@@ -375,7 +417,7 @@ struct TableView: View {
                     resultTextView(result)
                 }
 
-                // Per-player finish table for multiplayer games.
+                // 3. Per-player finish table with spring-animated medal chips.
                 if isMultiplayer && !ranking.isEmpty {
                     let medals = ["🥇", "🥈", "🥉"]
                     VStack(spacing: 4) {
@@ -383,9 +425,16 @@ struct TableView: View {
                             let group = ranking[groupIdx]
                             ForEach(group, id: \.self) { seat in
                                 HStack(spacing: 10) {
+                                    // Medal chip with scale animation on appear.
                                     Text(groupIdx < medals.count ? medals[groupIdx] : "·")
                                         .font(.body)
                                         .frame(width: 24)
+                                        .scaleEffect(medalsAppeared ? 1.0 : 0.5)
+                                        .animation(
+                                            .spring(response: 0.45, dampingFraction: 0.55)
+                                            .delay(Double(groupIdx) * 0.12 + Double(group.firstIndex(of: seat) ?? 0) * 0.06),
+                                            value: medalsAppeared
+                                        )
                                     Text(session.playerName(seat: seat))
                                         .font(.subheadline.weight(groupIdx == 0 ? .semibold : .regular))
                                         .foregroundStyle(groupIdx == 0 ? accentColor : .white.opacity(0.75))
@@ -406,6 +455,8 @@ struct TableView: View {
                         }
                     }
                     .padding(.horizontal, 4)
+                    .onAppear { medalsAppeared = true }
+                    .onDisappear { medalsAppeared = false }
                 }
 
                 if model.activeMatch != nil {
@@ -450,6 +501,17 @@ struct TableView: View {
                         startPoint: .top, endPoint: .bottom
                     )
                 )
+                // 5. Small static colored dots near the banner for a festive look (win only).
+                if !isLoss {
+                    ForEach(confettiDots.indices, id: \.self) { idx in
+                        let dot = confettiDots[idx]
+                        Circle()
+                            .fill(dot.2)
+                            .frame(width: 6 + CGFloat(idx % 2) * 3, height: 6 + CGFloat(idx % 2) * 3)
+                            .offset(x: dot.0, y: dot.1)
+                            .opacity(0.72)
+                    }
+                }
             }
         }
         .overlay(

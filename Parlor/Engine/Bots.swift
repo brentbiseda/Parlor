@@ -120,12 +120,31 @@ enum Bot {
         guard !legal.isEmpty else {
             return g.drewThisTurn ? .uno(.pass) : .uno(.draw)
         }
-        func colorCount(_ color: UnoColor) -> Int {
-            g.hands[seat].filter { $0.color == color }.count
+        // Weight each color by card count + bonus for action cards (they shed faster).
+        func colorScore(_ color: UnoColor) -> Double {
+            g.hands[seat].filter { $0.color == color }.reduce(0.0) { acc, c in
+                switch c.value { case .skip, .reverse, .drawTwo: return acc + 1.5; default: return acc + 1.0 }
+            }
         }
-        let bestColor = UnoColor.allCases.max { colorCount($0) < colorCount($1) } ?? .red
-        let opponentsEarly = (0..<4).filter { $0 != seat }
-        let nearWin = opponentsEarly.map { g.hands[$0].count }.min() ?? 10 <= 2
+        // Avoid calling the color the nearest-to-winning opponent appears to favor (their most common color).
+        let opponents = (0..<4).filter { $0 != seat }
+        let opponentMinHand = opponents.map { g.hands[$0].count }.min() ?? 10
+        let nearWinSeat = opponents.min { g.hands[$0].count < g.hands[$1].count }
+        var bestColor: UnoColor
+        if let threat = nearWinSeat, g.hands[threat].count <= 3 {
+            // Call a color the threat is least likely to have
+            let threatColors = Dictionary(grouping: g.hands[threat].compactMap(\.color), by: { $0 })
+                .mapValues(\.count)
+            bestColor = UnoColor.allCases.max { a, b in
+                let aScore = colorScore(a) - Double(threatColors[a] ?? 0) * 1.5
+                let bScore = colorScore(b) - Double(threatColors[b] ?? 0) * 1.5
+                return aScore < bScore
+            } ?? .red
+        } else {
+            bestColor = UnoColor.allCases.max { colorScore($0) < colorScore($1) } ?? .red
+        }
+        let nearWin = (opponents.map { g.hands[$0].count }.min() ?? 10) <= 2
+        let selfNearWin = g.hands[seat].count <= 2
         let colored = legal.filter { $0.color != nil }
         func isAction(_ c: UnoCard) -> Bool {
             switch c.value { case .skip, .reverse, .drawTwo: return true; default: return false }
@@ -133,8 +152,12 @@ enum Bot {
         func isDrawTwo(_ c: UnoCard) -> Bool { if case .drawTwo = c.value { return true }; return false }
         let wild = legal.first { $0.color == nil }
         let wildDrawFour = legal.first { if case .wildDrawFour = $0.value { return true }; return false }
-        let opponents = (0..<4).filter { $0 != seat }
-        let opponentMinHand = opponents.map { g.hands[$0].count }.min() ?? 10
+        // When we're about to win (1-2 cards), always play the highest-point card to go out fastest.
+        if selfNearWin {
+            if let best = colored.max(by: { $0.points < $1.points }) {
+                return .uno(.play(best, declared: nil))
+            }
+        }
         // With a large hand (5+ cards), prefer punishing draw cards early.
         if g.hands[seat].count >= 5 {
             if let drawTwo = colored.first(where: isDrawTwo) {
@@ -206,19 +229,39 @@ enum Bot {
         return .eights(.draw)
     }
 
-    /// Ask for a rank we're closest to booking, from a random live hand.
-    /// (Random target/rank choice matters: a deterministic asker can chase
-    /// the wrong player forever once the stock runs dry.)
+    /// Ask for a rank we're closest to booking. Skips ranks already completed
+    /// in someone's books. Prefers targets with larger hands (more likely to match).
     static func hardGoFishMove(_ g: GoFishGame) -> Move? {
         let seat = g.currentPlayer
-        let counts = Dictionary(grouping: g.hands[seat], by: \.rank)
+        let bookedRanks = Set(g.books.flatMap { $0 })
+        let counts = Dictionary(grouping: g.hands[seat].filter { !bookedRanks.contains($0.rank) },
+                                by: \.rank)
         guard let bestCount = counts.values.map(\.count).max() else {
             return g.legalMoves().randomElement()
         }
-        let candidates = counts.filter { $0.value.count >= max(bestCount - 1, 1) }.keys
-        guard let rank = candidates.randomElement(),
-              let target = (0..<4).filter({ $0 != seat && !g.hands[$0].isEmpty }).randomElement()
-        else { return g.legalMoves().randomElement() }
+        // Prefer ranks we hold the most of (closest to book).
+        let candidates = counts.filter { $0.value.count >= max(bestCount - 1, 1) }.keys.sorted()
+        // Choose rank: prefer a 3-card set (one from book) over a 2-card set
+        let rank = candidates.max(by: { counts[$0]!.count < counts[$1]!.count }) ?? candidates.first!
+        // Ask the opponent most likely to have a match:
+        // If our last event was a successful ask from a specific seat, prioritize them.
+        let liveSeat = (0..<4).filter { $0 != seat && !g.hands[$0].isEmpty }
+        guard !liveSeat.isEmpty else { return g.legalMoves().randomElement() }
+        // Parse lastEvent to find who gave us the last batch of cards.
+        let preferredTarget: Int?
+        if let event = g.lastEvent, event.contains("got") {
+            // event format: "S1 asked S2 for Ks — got N cards"
+            let parts = event.components(separatedBy: " ")
+            if let askIdx = parts.firstIndex(of: "asked"), askIdx + 1 < parts.count {
+                let targetLabel = parts[askIdx + 1]
+                if targetLabel.hasPrefix("S"), let seatNum = Int(targetLabel.dropFirst()) {
+                    let targetSeat = seatNum - 1
+                    // Only prefer this seat if they still have cards
+                    preferredTarget = liveSeat.contains(targetSeat) ? targetSeat : nil
+                } else { preferredTarget = nil }
+            } else { preferredTarget = nil }
+        } else { preferredTarget = nil }
+        let target = preferredTarget ?? liveSeat.max(by: { g.hands[$0].count < g.hands[$1].count })!
         return .fish(.ask(seat: target, rank: rank))
     }
 
@@ -262,11 +305,31 @@ enum Bot {
                 if c.suit == .hearts { return 500 + c.rank.rawValue }
                 return c.rank.rawValue
             case .hold:
-                return 0   // no pass; this branch is unreachable but satisfies exhaustiveness
+                // No pass: evaluate danger of keeping each card.
+                // Solo suits (singletons in non-hearts) are actually helpful (quick void), not harmful.
+                // Dangerous to keep: Q♠, high spades, high hearts, and bare high cards in short suits.
+                if c == queenOfSpades { return 1000 }
+                if c.suit == .spades && c.rank >= .king { return 850 + c.rank.rawValue }
+                if c.suit == .hearts && c.rank >= .queen { return 700 + c.rank.rawValue }
+                if c.suit == .hearts { return 400 + c.rank.rawValue }
+                // Solo suit (singleton): actually a safe discard opportunity — low danger.
+                // Handled by adjusted() below; base score is low here.
+                return c.rank.rawValue
             }
         }
 
         let dir = g.passDirection
+        let hearts = hand.filter { $0.suit == .hearts }
+        let hasQueen = hand.contains(queenOfSpades)
+
+        // Moon-shoot setup: with 7+ hearts and Q♠, keep them and pass non-point cards.
+        if hearts.count >= 7 && hasQueen && dir != .hold {
+            let keepers = Set(hearts + [queenOfSpades])
+            let tossable = hand.filter { !keepers.contains($0) }
+                .sorted { $0.rank.rawValue > $1.rank.rawValue }  // pass highest non-hearts first
+            if tossable.count >= 3 { return Array(tossable.prefix(3)).displaySorted() }
+        }
+
         // Void-creation bonus: cards in a short (2-card) side suit are worth
         // shedding to set up future discards of hearts/Q♠.
         let bySuit = Dictionary(grouping: hand, by: \.suit)
@@ -309,6 +372,26 @@ enum Bot {
         let legal = g.legalCards()
         guard !legal.isEmpty else { return nil }
         let seat = g.currentPlayer
+
+        // Moon-defense mode: if an opponent appears to be shooting the moon, steal a point trick.
+        let moonThreat = (0..<4).filter { $0 != seat }.first { attemptingMoonShoot(g, seat: $0) }
+        if moonThreat != nil && !attemptingMoonShot(g, seat: seat) {
+            if g.trick.isEmpty {
+                // Lead a high heart to draw out the shooter's stock; or safeLead if no hearts.
+                let highHeart = legal.filter { $0.suit == .hearts }.max { $0.rank.rawValue < $1.rank.rawValue }
+                if let h = highHeart, g.heartsBroken { return h }
+            } else {
+                let led = g.trick[0].card.suit
+                let following = legal.filter { $0.suit == led }
+                let winningRank = g.trick.filter { $0.card.suit == led }.map(\.card.rank.rawValue).max() ?? 0
+                let trickHasPoints = g.trick.contains { heartsPoints($0.card) > 0 || $0.card == queenOfSpades }
+                if trickHasPoints && !following.isEmpty {
+                    // Try to steal the trick by playing the minimum winning card.
+                    let winners = following.filter { $0.rank.rawValue > winningRank }
+                    if !winners.isEmpty { return winners.min { $0.rank.rawValue < $1.rank.rawValue } }
+                }
+            }
+        }
 
         // Moon-shoot mode: if we're attempting it, always take the trick aggressively.
         if attemptingMoonShot(g, seat: seat) {
@@ -470,16 +553,18 @@ enum Bot {
             }
         }
 
-        // Bag avoidance: if our team has already made its bid and is one bag
-        // away from the −100 overflow penalty, duck this trick to stay clean.
+        // Bag avoidance: if our team has already made its bid, duck to avoid padding bags.
+        // At 7+ bags: try to duck when following suit. At 9+ bags: aggressively duck.
         let team = seat % 2
         let teamTricks = g.tricksWon[team] + g.tricksWon[team + 2]
         let contract = g.teamContract(team)
-        if contract > 0, teamTricks >= contract, g.teamBags[team] % 10 >= 9, !g.trick.isEmpty {
+        let currentBags = g.teamBags[team] % 10
+        if contract > 0, teamTricks >= contract, currentBags >= 7, !g.trick.isEmpty {
             let led = g.trick[0].card.suit
             let winningValue = g.trick.filter { $0.card.suit == led || value($0.card) >= 1000 }.map { value($0.card) }.max() ?? 0
             let following = legal.filter { $0.suit == led }
-            let pool = following.isEmpty ? legal.filter { $0.suit != .spades } : following
+            // At 9+ bags, also shed from off-suit; at 7-8 bags only when following.
+            let pool = following.isEmpty ? (currentBags >= 9 ? legal.filter { $0.suit != .spades } : []) : following
             let ducks = pool.filter { value($0) < winningValue }
             if let duck = ducks.max(by: { value($0) < value($1) }) { return duck }
         }
@@ -564,6 +649,15 @@ enum Bot {
             bid -= 1
         }
 
+        // Spade-length aggression: with ≥2 spades, the bot has trump control.
+        // Bid 1 extra to leverage spade length when trump is likely still distributed widely.
+        // Only apply when holding ≥2 spades and bid is not already high (≤6) to stay safe.
+        let bySuit = Dictionary(grouping: hand, by: \.suit)
+        let spadeCount = bySuit[.spades]?.count ?? 0
+        if spadeCount >= 2 && bid <= 6 {
+            bid += 1
+        }
+
         return max(1, min(8, bid))
     }
 
@@ -574,40 +668,72 @@ enum Bot {
     }
 
     static func bridgeBotCall(game: BridgeGame) -> BridgeCall {
-        // Only open; pass when someone has already bid (simple bot keeps auction clean).
-        guard game.lastBid == nil else { return .pass }
-        let hand = game.hands[game.currentPlayer]
+        let seat = game.currentPlayer
+        let hand = game.hands[seat]
         let hcp = highCardPoints(hand)
-        guard hcp >= 13 else { return .pass }
         let bySuit = Dictionary(grouping: hand, by: \.suit)
-        // Balanced hand (no void, no singleton).
         let suitCounts = Suit.allCases.map { bySuit[$0]?.count ?? 0 }
         let isBalanced = suitCounts.min()! >= 2 && suitCounts.max()! <= 5
-        // Strong balanced openings: 2NT (20-21), then 1NT (15-17).
-        if isBalanced && (20...21).contains(hcp) { return .bid(level: 2, strain: .notrump) }
-        if isBalanced && (15...17).contains(hcp) { return .bid(level: 1, strain: .notrump) }
-        // Choose the longest suit; break ties by preferring majors, then quality.
+        let legal = game.legalCalls()
+        func canBid(_ level: Int, _ strain: BridgeStrain) -> Bool {
+            legal.contains(.bid(level: level, strain: strain))
+        }
         func suitQuality(_ s: Suit) -> Int {
             (bySuit[s] ?? []).reduce(0) { $0 + max(0, $1.rank.rawValue - 10) }
         }
         func suitRank(_ s: Suit) -> Int { [Suit.clubs, .diamonds, .hearts, .spades].firstIndex(of: s)! }
-        let longest = Suit.allCases.max { a, b in
-            let la = bySuit[a]?.count ?? 0, lb = bySuit[b]?.count ?? 0
-            if la != lb { return la < lb }
-            let majorA = a == .hearts || a == .spades
-            let majorB = b == .hearts || b == .spades
-            if majorA != majorB { return !majorA && majorB }
-            if suitQuality(a) != suitQuality(b) { return suitQuality(a) < suitQuality(b) }
-            return suitRank(a) < suitRank(b)
-        } ?? .clubs
-        let strain: BridgeStrain
-        switch longest {
-        case .clubs: strain = .clubs
-        case .diamonds: strain = .diamonds
-        case .hearts: strain = .hearts
-        case .spades: strain = .spades
+        func bridgeStrain(_ s: Suit) -> BridgeStrain {
+            switch s { case .clubs: return .clubs; case .diamonds: return .diamonds
+            case .hearts: return .hearts; case .spades: return .spades }
         }
-        return .bid(level: 1, strain: strain)
+        func longestSuit() -> Suit {
+            Suit.allCases.max { a, b in
+                let la = bySuit[a]?.count ?? 0, lb = bySuit[b]?.count ?? 0
+                if la != lb { return la < lb }
+                let majorA = a == .hearts || a == .spades, majorB = b == .hearts || b == .spades
+                if majorA != majorB { return !majorA && majorB }
+                if suitQuality(a) != suitQuality(b) { return suitQuality(a) < suitQuality(b) }
+                return suitRank(a) < suitRank(b)
+            } ?? .clubs
+        }
+
+        // Opening: first bid in the auction.
+        if game.lastBid == nil {
+            guard hcp >= 13 else { return .pass }
+            if isBalanced && (20...21).contains(hcp), canBid(2, .notrump) { return .bid(level: 2, strain: .notrump) }
+            if isBalanced && (15...17).contains(hcp), canBid(1, .notrump) { return .bid(level: 1, strain: .notrump) }
+            let suit = longestSuit()
+            let strain = bridgeStrain(suit)
+            if canBid(1, strain) { return .bid(level: 1, strain: strain) }
+            return .pass
+        }
+
+        // Response: partner opened (no opponent has bid).
+        let partner = (seat + 2) % 4
+        let partnerBid = game.lastBid.flatMap { b -> (BridgeCall, Int)? in
+            game.side(of: b.seat) == game.side(of: seat) ? (b.call, b.seat) : nil
+        }
+        if let (call, _) = partnerBid, game.lastBid?.seat == partner, case .bid(let pLevel, let pStrain) = call {
+            // Raise partner's major suit with 3+ card support and 6-9 HCP.
+            if (pStrain == .hearts || pStrain == .spades),
+               let partnerSuit = Suit.allCases.first(where: { bridgeStrain($0) == pStrain }),
+               (bySuit[partnerSuit]?.count ?? 0) >= 3, hcp >= 6 {
+                if canBid(pLevel + 1, pStrain) { return .bid(level: pLevel + 1, strain: pStrain) }
+            }
+            // Respond with a new suit at the 1-level (5+ cards, 8+ HCP).
+            if hcp >= 8 {
+                let candidate = [Suit.spades, .hearts, .diamonds, .clubs].first { s in
+                    (bySuit[s]?.count ?? 0) >= 5 && canBid(1, bridgeStrain(s))
+                }
+                if let suit = candidate { return .bid(level: 1, strain: bridgeStrain(suit)) }
+            }
+            // 1NT response with 6-9 HCP and no major fit.
+            if hcp >= 6, hcp <= 9, canBid(1, .notrump) { return .bid(level: 1, strain: .notrump) }
+            _ = pLevel  // suppress unused warning
+        }
+
+        // Otherwise pass — don't bid unsafely.
+        return .pass
     }
 
     /// Minimum trump-strength score to order up or call trump.
@@ -706,6 +832,10 @@ enum Bot {
                     bonus += piece.color == 0 ? (7 - cy) * 0.04 : cy * 0.04
                     // Doubled pawn penalty: another own pawn on same file
                     if pawnRowByCol[piece.color][x] != y { bonus -= 0.2 }
+                    // Isolated pawn penalty: no friendly pawn on adjacent files
+                    let leftFile = x > 0 ? pawnCols[piece.color][x - 1] : false
+                    let rightFile = x < 7 ? pawnCols[piece.color][x + 1] : false
+                    if !leftFile && !rightFile { bonus -= 0.15 }
                     // Passed pawn bonus: no opposing pawn on same or adjacent files ahead
                     let opp = 1 - piece.color
                     let adjacentFiles = [max(0, x-1), x, min(7, x+1)]
@@ -714,6 +844,11 @@ enum Bot {
                         adjacentFiles.contains { col in g[Point(x: col, y: row)]?.kind == .pawn && g[Point(x: col, y: row)]?.color == opp }
                     }
                     if !blocked { bonus += 0.35 }
+                case .knight:
+                    // Knights on the rim are dim: penalise a- and h-files, 1st and 8th ranks
+                    let edgeX = x == 0 || x == 7
+                    let edgeY = y == 0 || y == 7
+                    if edgeX || edgeY { bonus -= 0.12 }
                 case .rook:
                     // Rook on open file (no own pawn blocking)
                     if !pawnCols[piece.color][x] { bonus += pawnCols[1 - piece.color][x] ? 0.15 : 0.25 }
@@ -721,6 +856,36 @@ enum Bot {
                     // Bishop pair bonus applied when evaluating second bishop
                     let bishops = g.board.compactMap { $0 }.filter { $0.color == piece.color && $0.kind == .bishop }
                     if bishops.count >= 2 { bonus += 0.1 }
+                case .king:
+                    // King safety: reward having own pawns directly in front.
+                    let pawnShieldRow = piece.color == 0 ? y - 1 : y + 1
+                    var shieldCount = 0
+                    if pawnShieldRow >= 0 && pawnShieldRow < 8 {
+                        for dx in -1...1 {
+                            let px = x + dx
+                            if px >= 0 && px < 8,
+                               let p = g[Point(x: px, y: pawnShieldRow)],
+                               p.kind == .pawn, p.color == piece.color {
+                                bonus += 0.10
+                                shieldCount += 1
+                            }
+                        }
+                    }
+                    // King on open file is dangerous
+                    if !pawnCols[piece.color][x] { bonus -= 0.15 }
+                    // Prefer corner/flank during midgame (avoid center)
+                    let totalPieces = g.board.compactMap { $0 }.count
+                    let midgame = totalPieces > 14
+                    if midgame {
+                        let edgeDist = min(x, 7 - x)
+                        if edgeDist <= 1 { bonus += 0.15 }
+                        // Castled position (king on g or c file with pawn shield) is ideal
+                        let castledKingside = (x == 6 && shieldCount >= 2)
+                        let castledQueenside = (x == 2 && shieldCount >= 2)
+                        if castledKingside || castledQueenside { bonus += 0.3 }
+                        // Uncastled king in center during midgame — penalise heavily
+                        if x >= 3 && x <= 5 && totalPieces > 18 { bonus -= 0.4 }
+                    }
                 default: break
                 }
                 score += sign * (val + centrality + bonus)
@@ -736,12 +901,25 @@ enum Bot {
         let moves = g.legalBoardMoves(for: me)
         guard !moves.isEmpty else { return nil }
 
-        // Move ordering: captures and promotions first (improves alpha-beta cutoffs).
-        let ordered = moves.sorted { a, b in
-            let aCapture = g[a.to] != nil || a.promotion != nil
-            let bCapture = g[b.to] != nil || b.promotion != nil
-            return aCapture && !bCapture
+        // Move ordering: captures/promotions > castling > center pawn push > rest.
+        // Better ordering lets alpha-beta prune more branches.
+        let centerSquares: Set<Point> = [Point(x:3,y:3), Point(x:3,y:4), Point(x:4,y:3), Point(x:4,y:4)]
+        let totalPieces = g.board.compactMap { $0 }.count
+        func moveOrder(_ m: BoardMove) -> Int {
+            if g[m.to] != nil || m.promotion != nil { return 0 }   // capture or promo
+            if let piece = g[m.from] {
+                // Castling is highest non-capture priority in midgame
+                if piece.kind == .king && abs(m.to.x - m.from.x) == 2 { return totalPieces > 18 ? 1 : 3 }
+                if piece.kind == .pawn && centerSquares.contains(m.to) { return 2 }  // center pawn
+                if piece.kind == .knight && centerSquares.contains(m.to) { return 2 }  // knight to center
+            }
+            return 4
         }
+        let ordered = moves.sorted { moveOrder($0) < moveOrder($1) }
+
+        // When ahead by > 1.5 material, prefer captures (simplify to a won endgame).
+        let currentEval = evaluateChess(g, for: me)
+        let isAhead = currentEval > 1.5
 
         var best: (score: Double, move: BoardMove)? = nil
         var alpha = -Double.infinity
@@ -751,7 +929,7 @@ enum Bot {
             guard (try? copy.apply(.board(move))) != nil else { continue }
 
             let oppMoves = copy.legalBoardMoves(for: 1 - me)
-            let score: Double
+            var score: Double
             if oppMoves.isEmpty {
                 // Terminal: checkmate = huge win; stalemate = draw (small penalty vs winning).
                 score = copy.inCheck(1 - me) ? 999.0 : -0.5
@@ -767,6 +945,9 @@ enum Bot {
                 }
                 score = minScore
             }
+
+            // When ahead, add a small bonus for captures to prefer piece trades and simplify.
+            if isAhead && g[move.to] != nil { score += 0.1 }
 
             let jitter = Double.random(in: 0..<0.05)
             if best == nil || score + jitter > best!.score {
@@ -789,12 +970,13 @@ enum Bot {
     }
 
     /// Static evaluation of checkers position from `player`'s perspective:
-    /// material balance + advancement + king-safety + back-rank bonus.
+    /// material balance + advancement + king-safety + back-rank bonus + center control + mobility.
     private static func evaluateCheckers(_ g: CheckersGame, for player: Int) -> Double {
         var score = checkersMaterial(g, color: player) - checkersMaterial(g, color: 1 - player)
         for (i, piece) in g.board.enumerated() {
             guard let p = piece else { continue }
             let row = Double(i / 8)
+            let col = Double(i % 8)
             let sign: Double = p.color == player ? 1 : -1
             if !p.king {
                 let advance = p.color == 0 ? row / 7.0 : (7.0 - row) / 7.0
@@ -802,7 +984,15 @@ enum Bot {
             }
             let homeRank = p.color == 0 ? 0.0 : 7.0
             if row == homeRank { score += sign * 0.08 }
+            // Center control: inner 4×4 squares get a bonus.
+            let centerDist = max(abs(col - 3.5), abs(row - 3.5))
+            if centerDist <= 1.5 { score += sign * 0.07 }
+            else if centerDist <= 2.5 { score += sign * 0.03 }
         }
+        // Mobility bonus: more legal moves available is an advantage (+0.02 per extra move vs opponent).
+        let myMobility = g.legalBoardMoves(for: player).count
+        let oppMobility = g.legalBoardMoves(for: 1 - player).count
+        score += Double(myMobility - oppMobility) * 0.02
         return score
     }
 
@@ -839,15 +1029,32 @@ enum Bot {
         }
     }
 
-    /// 3-ply alpha-beta minimax checkers bot. Handles multi-jump chains.
+    /// 4-ply alpha-beta minimax checkers bot. Handles multi-jump chains.
+    /// King-crowning moves get a tie-breaking priority bonus.
     static func hardCheckersMove(_ g: CheckersGame) -> Move? {
         let me = g.currentPlayer
         let moves = g.legalBoardMoves(for: me)
         guard !moves.isEmpty else { return nil }
 
+        // Crown row for each color (row where a regular piece becomes a king).
+        let crownRow = me == 0 ? 7 : 0
+
+        // Returns true if this move crowns a regular piece (not already a king).
+        func willCrown(_ move: BoardMove) -> Bool {
+            guard move.to.y == crownRow, let piece = g[move.from] else { return false }
+            return !piece.king
+        }
+
         // Prioritise jumps (mandatory in checkers, and they produce deeper trees).
         let jumps = moves.filter { abs($0.to.x - $0.from.x) == 2 }
-        let ordered = jumps.isEmpty ? moves : jumps + moves.filter { abs($0.to.x - $0.from.x) != 2 }
+        var ordered = jumps.isEmpty ? moves : jumps + moves.filter { abs($0.to.x - $0.from.x) != 2 }
+        // Within jumps, sort king-crowning jumps to the front.
+        ordered.sort { a, b in
+            let aCrown = willCrown(a)
+            let bCrown = willCrown(b)
+            if aCrown != bCrown { return aCrown }
+            return false
+        }
 
         var best: (score: Double, move: BoardMove)? = nil
         var alpha = -Double.infinity
@@ -857,9 +1064,11 @@ enum Bot {
             guard (try? copy.apply(.board(move))) != nil else { continue }
             var a = alpha
             let score = checkersAlphaBeta(copy, depth: 4, alpha: &a, beta: Double.infinity, me: me)
+            // Tiny bonus for king-crowning moves to break ties in favour of crowning.
+            let crownBonus = willCrown(move) ? 0.05 : 0.0
             let jitter = Double.random(in: 0..<0.04)
-            if best == nil || score + jitter > best!.score {
-                best = (score + jitter, move)
+            if best == nil || score + crownBonus + jitter > best!.score {
+                best = (score + crownBonus + jitter, move)
                 alpha = max(alpha, score)
             }
         }
@@ -984,6 +1193,36 @@ enum Bot {
             }
             if let pick = adjacent.randomElement() { return .place(pick) }
             if let pick = nonSelfAtari.randomElement() { return .place(pick) }
+
+            // 6. In the early game, prefer star points / fourth-line openings.
+            let earlyMoves = game.size == 9 ? 30 : (game.size == 13 ? 50 : 80)
+            if game.moveCount < earlyMoves {
+                let starPoints: [Point]
+                if game.size == 9 {
+                    starPoints = [Point(x: 2, y: 2), Point(x: 6, y: 2), Point(x: 2, y: 6),
+                                  Point(x: 6, y: 6), Point(x: 4, y: 4),
+                                  Point(x: 4, y: 2), Point(x: 2, y: 4), Point(x: 6, y: 4), Point(x: 4, y: 6)]
+                } else if game.size == 13 {
+                    starPoints = [Point(x: 3, y: 3), Point(x: 9, y: 3), Point(x: 3, y: 9),
+                                  Point(x: 9, y: 9), Point(x: 6, y: 6),
+                                  Point(x: 3, y: 6), Point(x: 9, y: 6), Point(x: 6, y: 3), Point(x: 6, y: 9)]
+                } else {
+                    // 19×19 standard star points (hoshi)
+                    starPoints = [Point(x: 3, y: 3), Point(x: 9, y: 3), Point(x: 15, y: 3),
+                                  Point(x: 3, y: 9), Point(x: 9, y: 9), Point(x: 15, y: 9),
+                                  Point(x: 3, y: 15), Point(x: 9, y: 15), Point(x: 15, y: 15)]
+                }
+                let openStars = starPoints.filter { candidates.contains($0) }
+                if let star = openStars.randomElement() { return .place(star) }
+            }
+            // 7. Prefer fourth-line and center cells over edges.
+            let center = game.size / 2
+            let boardCenter = safePool.sorted { a, b in
+                let distA = abs(a.x - center) + abs(a.y - center)
+                let distB = abs(b.x - center) + abs(b.y - center)
+                return distA < distB
+            }
+            if let central = boardCenter.prefix(5).randomElement() { return .place(central) }
         }
         return .place(candidates.randomElement()!)
     }

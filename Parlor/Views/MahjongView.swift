@@ -45,7 +45,27 @@ struct MahjongView: View {
                                 .font(.caption2)
                                 .foregroundStyle(available == 1 ? Color.orange : .white.opacity(0.5))
                         }
+                        if game.currentMatchRun >= 3 {
+                            Text("🔥 ×\(game.currentMatchRun)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.orange)
+                                .padding(.horizontal, 5).padding(.vertical, 2)
+                                .background(.orange.opacity(0.15), in: Capsule())
+                                .transition(.scale.combined(with: .opacity))
+                        }
+                        if game.shufflesUsed > 0 {
+                            Text("🔀×\(game.shufflesUsed)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        let pct = Int(progress * 100)
+                        if pct >= 50 {
+                            Text("\(pct)%")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(pct >= 80 ? .green : .yellow)
+                        }
                     }
+                    .animation(.spring(response: 0.3), value: game.currentMatchRun)
                 }
                 .frame(height: 20)
                 .padding(.horizontal, 12)

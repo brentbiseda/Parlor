@@ -256,6 +256,15 @@ struct FaceDownCardView: View {
                 RoundedRectangle(cornerRadius: width * 0.12)
                     .strokeBorder(.black.opacity(0.15), lineWidth: 0.75)
             )
+            // Improvement 11: subtle inner lustre glow
+            .overlay {
+                RadialGradient(
+                    colors: [.white.opacity(0.07), .clear],
+                    center: .topLeading, startRadius: 0, endRadius: width * 1.2
+                )
+                .clipShape(RoundedRectangle(cornerRadius: width * 0.12))
+                .allowsHitTesting(false)
+            }
             .overlay {
                 if shimmer {
                     LinearGradient(
@@ -348,8 +357,10 @@ struct HandView: View {
                             .overlay(alignment: .top) {
                                 if enabled && isLegal && !isSelected {
                                     RoundedRectangle(cornerRadius: cardWidth * 0.12)
-                                        .strokeBorder(Color.yellow.opacity(0.65), lineWidth: 2)
+                                        .strokeBorder(Color.yellow.opacity(0.95), lineWidth: 3)
                                         .frame(width: cardWidth, height: cardWidth * 1.45)
+                                        .shadow(color: .yellow.opacity(0.75), radius: 10)
+                                        .shadow(color: .yellow.opacity(0.35), radius: 20)
                                         .allowsHitTesting(false)
                                 }
                                 if isSelected {
@@ -366,11 +377,15 @@ struct HandView: View {
                                 }
                             }
                             .shadow(
-                                color: isSelected ? .yellow.opacity(0.55) : (enabled && isLegal ? .yellow.opacity(0.22) : .clear),
-                                radius: isSelected ? 10 : 6, y: isSelected ? 3 : 1)
+                                color: isSelected ? .yellow.opacity(0.7) : (enabled && isLegal ? .yellow.opacity(0.55) : .clear),
+                                radius: isSelected ? 14 : 10, y: isSelected ? 3 : 1)
                             .onTapGesture {
                                 if enabled && legal.contains(card) {
+                                    // Improvement 10: light haptic for legal card taps
                                     UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                                } else if enabled && !legal.isEmpty {
+                                    // Improvement 10: rigid haptic for illegal card taps
+                                    UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
                                 }
                                 onTap(card)
                             }
@@ -396,6 +411,13 @@ struct OpponentHandView: View {
     var width: CGFloat = 26
 
     var body: some View {
+        Group { innerBody }
+            // Improvement 12: animate fan layout when count changes
+            .animation(.easeInOut(duration: 0.25), value: count)
+    }
+
+    @ViewBuilder
+    private var innerBody: some View {
         if count == 0 {
             // Empty hand — show a faint slot so the layout doesn't collapse.
             RoundedRectangle(cornerRadius: width * 0.12)

@@ -46,6 +46,10 @@ struct KlondikeGame: GameEngine {
     var stockResets = 0
     /// Times the player used undo.
     var undoCount = 0
+    /// Moves that placed a card directly onto a foundation (waste-to-foundation or tableau-to-foundation).
+    var autoPlayCount: Int = 0
+    /// Computed alias for stockResets (how many times the waste was recycled into the stock).
+    var stockCycles: Int { stockResets }
 
     private var history: [Snapshot] = []
 
@@ -73,7 +77,11 @@ struct KlondikeGame: GameEngine {
 
     func canPlaceOnFoundation(_ card: Card) -> Bool {
         let pile = foundations[foundationIndex(for: card.suit)]
-        if let top = pile.last { return card.rank.rawValue == top.rank.rawValue + 1 }
+        if let top = pile.last {
+            // Ace (rawValue 14) is the foundation starter; the only special transition is Ace→2.
+            if top.rank == .ace { return card.rank == .two }
+            return card.rank.rawValue == top.rank.rawValue + 1
+        }
         return card.rank == .ace
     }
 
@@ -171,6 +179,7 @@ struct KlondikeGame: GameEngine {
         case .wasteToFoundation, .tableauToFoundation:
             foundationStreak += 1
             bestFoundationStreak = max(bestFoundationStreak, foundationStreak)
+            autoPlayCount += 1
         default:
             foundationStreak = 0
         }
@@ -224,23 +233,45 @@ struct KlondikeGame: GameEngine {
 
     // MARK: - Status
 
+    /// Cards placed on foundations (0–52).
+    var foundationProgress: Int { foundations.reduce(0) { $0 + $1.count } }
+    /// 0.0–1.0 fraction of cards placed on foundations.
+    var foundationProgressFraction: Double { Double(foundationProgress) / 52.0 }
+    /// Number of cards currently placeable on a foundation (waste top + tableau tops).
+    var autoFoundationCount: Int {
+        var count = 0
+        if let top = waste.last, canPlaceOnFoundation(top) { count += 1 }
+        for col in 0..<tableau.count {
+            if let top = tableau[col].faceUp.last, canPlaceOnFoundation(top) { count += 1 }
+        }
+        return count
+    }
+
     var statusText: String {
-        let done = foundations.reduce(0) { $0 + $1.count }
+        let done = foundationProgress
         let faceDownCount = tableau.reduce(0) { $0 + $1.faceDown.count }
         let faceDownStr = faceDownCount > 0 ? " · \(faceDownCount) face-down" : ""
-        var text = "Foundations \(done)/52\(faceDownStr) · \(moveCount) moves"
+        let pct = done > 0 ? " (\(Int(foundationProgressFraction * 100))%)" : ""
+        var text = "Found. \(done)/52\(pct)\(faceDownStr) · \(moveCount) moves"
         if stockResets > 0 {
             let passLabel = maxPasses > 0 ? "Pass \(passesUsed)/\(maxPasses)" : "Pass \(passesUsed)"
-            text += " · \(passLabel)"
+            text += " · \(passLabel) · ↺\(stockCycles)"
         } else {
             text += maxPasses > 0 ? " · pass \(passesUsed)/\(maxPasses)" : ""
         }
         if maxPasses > 0 && passesUsed >= maxPasses && !stock.isEmpty {
             text += " ⚠️ last pass"
         }
+        let ready = autoFoundationCount
+        if ready > 0 { text += " · ✨\(ready) ready" }
         if done >= 48 { text += " · 🏁 almost there!" }
         if foundationStreak >= 3 { text += " · 🔥 streak \(foundationStreak)" }
         if stockResets == 0 && passesUsed == 1 && done >= 13 { text += " · ✨ clean so far" }
+        // Live efficiency: useful when player is tracking their move count.
+        if moveCount >= 20 && done > 0 {
+            let eff = Int(Double(done) / Double(moveCount) * 100)
+            if eff >= 70 { text += " · ⚡ \(eff)% eff" }
+        }
         // No productive moves and the stock can't help: warn the player.
         if legalMoves().allSatisfy({ if case .klondike(.draw) = $0 { return true }; if case .klondike(.resetStock) = $0 { return true }; return false }),
            stock.isEmpty && !canResetStock, faceDownCount > 0 {
@@ -253,6 +284,8 @@ struct KlondikeGame: GameEngine {
         guard isOver else { return nil }
         var text = "Solved in \(moveCount) moves!"
         if stockResets == 0 { text += " · ✨ Clean solve — no recycle!" }
+        else { text += " · ↺\(stockCycles) recycle\(stockCycles == 1 ? "" : "s")" }
+        if autoPlayCount > 0 { text += " · ✨\(autoPlayCount) auto" }
         if bestFoundationStreak >= 3 { text += " · 🔥 \(bestFoundationStreak)-card foundation streak" }
         if moveCount > 52 {
             let efficiency = Int(Double(52) / Double(moveCount) * 100)

@@ -24,6 +24,10 @@ struct GoFishGame: GameEngine {
     var successfulAsks = 0
     /// Largest single haul (cards received from one ask).
     var biggestHaul = 0
+    /// Per-seat: how many times each opponent gave cards to the current player (asks that landed).
+    var asksLandedBySeat: [Int] = [0, 0, 0, 0]
+    /// Per-seat: total cards drawn from stock (pond draws).
+    var pondDrawsBySeat: [Int] = [0, 0, 0, 0]
 
     init() {
         var deck = Card.standardDeck().shuffled()
@@ -81,6 +85,7 @@ struct GoFishGame: GameEngine {
         let matches = hands[target].filter { $0.rank == rank }
         if !matches.isEmpty {
             successfulAsks += 1
+            asksLandedBySeat[target] += 1
             if matches.count > biggestHaul { biggestHaul = matches.count }
             hands[target].removeAll { $0.rank == rank }
             hands[currentPlayer].append(contentsOf: matches)
@@ -97,6 +102,7 @@ struct GoFishGame: GameEngine {
             advanceIfStuck(keepTurn: true)
         } else {
             if currentPlayer == 0 { askStreak = 0 }
+            pondDrawsBySeat[currentPlayer] += 1
             if let drawn = stock.popLast() {
                 hands[currentPlayer].append(drawn)
                 hands[currentPlayer] = hands[currentPlayer].displaySorted()
@@ -165,12 +171,17 @@ struct GoFishGame: GameEngine {
     var statusText: String {
         if isOver { return resultText ?? "Game over" }
         let bookStr = books.enumerated().map { "S\($0 + 1):\($1.count)" }.joined(separator: " ")
+        let handStr = hands.enumerated().map { "S\($0 + 1):\($1.count)🃏" }.joined(separator: " ")
         let pondStr = stock.isEmpty ? "pond empty" : "pond \(stock.count)"
-        var text = "Books \(totalBooks)/13 · \(pondStr) · \(bookStr)"
+        var text = "Books \(totalBooks)/13 · \(pondStr) · \(bookStr) · hands \(handStr)"
         let topBooks = books.map(\.count).max() ?? 0
         if topBooks > 0 {
             let leaders = (0..<4).filter { books[$0].count == topBooks }
             if leaders.count == 1 { text += " · 👑 S\(leaders[0] + 1) leads" }
+        }
+        if totalAsks > 0 {
+            let pct = totalAsks > 0 ? Int(Double(successfulAsks) * 100 / Double(totalAsks)) : 0
+            text += " · 🎣 \(pct)%"
         }
         if let ev = lastBookEvent { text += " · \(ev)" }
         else if let ev = lastEvent { text += " · \(ev)" }
@@ -180,6 +191,8 @@ struct GoFishGame: GameEngine {
     /// Count of consecutive "Go fish!" responses (pond dry spells)
     var pondDrySpells = 0
     private var currentPondDrySpell = 0
+    /// Alias for luckyPondBooks — ponds books where the drawn card immediately completes a set.
+    var pondLuck: Int { luckyPondBooks }
 
     var resultText: String? {
         guard isOver else { return nil }
@@ -187,14 +200,19 @@ struct GoFishGame: GameEngine {
         let bookStr = books.enumerated().map { "S\($0 + 1):\($1.count)" }.joined(separator: " ")
         let winners = (0..<4).filter { books[$0].count == best }.map { "Seat \($0 + 1)" }
         var text = "\(winners.joined(separator: " & ")) win with \(best) books [\(bookStr)]"
-        if luckyPondBooks > 0 { text += " · 🍀 \(luckyPondBooks) lucky pond book\(luckyPondBooks == 1 ? "" : "s")" }
+        if luckyPondBooks > 0 { text += " · 🌊×\(luckyPondBooks) lucky pond" }
         if bestAskStreak >= 3 { text += " · 🔥 \(bestAskStreak)-ask streak" }
-        if biggestHaul >= 3 { text += " · 🎣 \(biggestHaul)-card haul" }
+        if biggestHaul >= 2 { text += " · 🎣 Biggest haul: \(biggestHaul)" }
         if totalAsks > 0 {
             let pct = Int((Double(successfulAsks) / Double(totalAsks)) * 100)
-            text += " · asked \(totalAsks)× (\(pct)% success)"
+            text += " · asked \(totalAsks)× (\(pct)% hit)"
         }
         if pondDrySpells >= 3 { text += " · 🌵 \(pondDrySpells) go-fish in a row" }
+        // Show per-seat pond draw counts if any seat drew notably more
+        if let heaviestFisher = pondDrawsBySeat.indices.max(by: { pondDrawsBySeat[$0] < pondDrawsBySeat[$1] }),
+           pondDrawsBySeat[heaviestFisher] >= 5 {
+            text += " · 🎣 S\(heaviestFisher + 1) fished \(pondDrawsBySeat[heaviestFisher])×"
+        }
         return text
     }
 }

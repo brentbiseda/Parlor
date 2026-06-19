@@ -185,8 +185,8 @@ struct CapsulesGame: GameEngine {
         case .right:
             pill.x += 1
             if fits(pill) { current = pill }
-        case .rotate, .rotateLeft:
-            pill.rotation += (m == .rotate ? 1 : -1)
+        case .rotate, .rotateLeft, .rotate180:
+            pill.rotation += (m == .rotateLeft ? -1 : 1)
             for kick in [0, -1, 1] {
                 var kicked = pill
                 kicked.x += kick

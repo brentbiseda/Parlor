@@ -310,15 +310,43 @@ struct ChessGame: GameEngine {
         }
     }
 
+    /// Computed game phase label based on move number and piece count.
+    var gamePhase: String {
+        let pieces = board.compactMap { $0 }.filter { $0.kind != .king }
+        let minPiecesPerSide = min(
+            pieces.filter { $0.color == 0 }.count,
+            pieces.filter { $0.color == 1 }.count
+        )
+        if moveNumber <= 10 { return "Opening" }
+        if moveNumber > 40 || minPiecesPerSide <= 4 { return "Endgame" }
+        return "Middlegame"
+    }
+
     var statusText: String {
         if let text = resultText { return text }
-        let check = inCheck(currentPlayer) ? " — check!" : ""
+        let check = inCheck(currentPlayer) ? " ⚠️ CHECK!" : ""
         let diff = materialDiff()
-        var matStr = diff > 0 ? " · W+\(diff)" : (diff < 0 ? " · B+\(-diff)" : "")
-        if abs(diff) >= 5 { matStr += " 👑" }
+        var matStr = diff > 0 ? " · W+\(diff)" : (diff < 0 ? " · B+\(-diff)" : " · even")
+        if abs(diff) >= 9 { matStr += " 👑" }
+        else if abs(diff) >= 5 { matStr += " ↑↑" }
         else if abs(diff) >= 3 { matStr += " ↑" }
-        let fiftyNote = halfmoveClock >= 80 ? " · ⚠️ 50-move rule \(halfmoveClock / 2)/50" : ""
-        return "Move \(moveNumber): \(colorName(currentPlayer)) to play\(check)\(matStr)\(fiftyNote)"
+        let totalChecks = checksDelivered[0] + checksDelivered[1]
+        let checksStr = totalChecks >= 3 ? " · \(totalChecks) checks" : ""
+        let fiftyNote = halfmoveClock >= 80 ? " · ⚠️ 50-move \(halfmoveClock / 2)/50" : ""
+        let phaseNote = " · \(gamePhase)"
+        return "Move \(moveNumber): \(colorName(currentPlayer))\(check)\(matStr)\(phaseNote)\(checksStr)\(fiftyNote)"
+    }
+
+    /// True during opening phase (fewer than 8 full moves completed).
+    var isOpeningPhase: Bool { moveNumber <= 8 }
+
+    /// Signed material balance from white's perspective: + favors white, − favors black.
+    var materialBalance: Int {
+        let values: [ChessPieceKind: Int] = [.pawn: 1, .knight: 3, .bishop: 3, .rook: 5, .queen: 9, .king: 0]
+        return board.compactMap { $0 }.reduce(0) { acc, piece in
+            let v = values[piece.kind] ?? 0
+            return acc + (piece.color == 0 ? v : -v)
+        }
     }
 
     var resultText: String? {
@@ -328,11 +356,17 @@ struct ChessGame: GameEngine {
             let promos = promotionCount[0] + promotionCount[1]
             let totalChecks = checksDelivered[0] + checksDelivered[1]
             var extras = captures > 0 ? " · \(captures) captures" : ""
+            // Per-side capture balance
+            if captureCount[0] != captureCount[1] {
+                let more = captureCount[0] > captureCount[1] ? 0 : 1
+                extras += " (\(colorName(more)) +\(abs(captureCount[0] - captureCount[1])))"
+            }
             if promos > 0 { extras += " · \(promos) promo\(promos == 1 ? "" : "s")" }
-            if totalChecks > 0 { extras += " · \(totalChecks) check\(totalChecks == 1 ? "" : "s")" }
+            if totalChecks > 0 { extras += " · ♔ checks: W:\(checksDelivered[0]) B:\(checksDelivered[1])" }
             if peakLead >= 5 { extras += " · 👑 \(colorName(peakLeadColor)) peaked +\(peakLead)" }
-            let castleNote = castled.enumerated().compactMap { idx, did in did ? "\(colorName(idx)) O-O" : nil }.joined(separator: " · ")
-            if !castleNote.isEmpty { extras += " · \(castleNote)" }
+            let castleW = castled[0] ? "✓" : "✗"
+            let castleB = castled[1] ? "✓" : "✗"
+            extras += " · Castled: W:\(castleW) B:\(castleB)"
             if inCheck(currentPlayer) {
                 if moveNumber <= 10 { extras += " · ⚡ quick mate!" }
                 return "Checkmate — \(colorName(1 - currentPlayer)) wins (move \(moveNumber))\(extras)"

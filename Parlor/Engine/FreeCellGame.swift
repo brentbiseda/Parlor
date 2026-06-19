@@ -42,7 +42,10 @@ struct FreeCellGame: GameEngine {
 
     func canPlaceOnFoundation(_ card: Card) -> Bool {
         let pile = foundations[foundationIndex(for: card.suit)]
-        if let top = pile.last { return card.rank.rawValue == top.rank.rawValue + 1 }
+        if let top = pile.last {
+            if top.rank == .ace { return card.rank == .two }
+            return card.rank.rawValue == top.rank.rawValue + 1
+        }
         return card.rank == .ace
     }
 

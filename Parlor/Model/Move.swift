@@ -86,17 +86,34 @@ enum PinballEvent: Codable, Hashable {
     case multiplier(Int)   // reports current multiplier level reached
 }
 
+/// Power-up kinds that drop from destroyed bricks in Breakout.
+enum BreakoutPowerUp: String, Codable, Hashable {
+    case widePaddle, multiball, shield, fireball, scoreDouble, extraLife
+}
+
 /// Breakout works like pinball: physics in the scene, score in the engine.
 enum BreakoutEvent: Codable, Hashable {
     case score(Int)
     case ballLost
     case levelCleared
     case wallBounce
+    case powerUp(BreakoutPowerUp)               // capsule caught by paddle
+    case shieldHit                               // shield absorbed a floor drop
+    case brickCount(remaining: Int, total: Int)  // for header progress bar
+}
+
+/// Bomberman: move, plant bomb, kick a bomb, detonate remotes, or advance the clock.
+enum BombermanMove: Codable, Hashable {
+    case move(GridDirection)
+    case placeBomb
+    case kick       // propel the bomb in player's facing direction until it hits a wall
+    case detonate   // trigger all remote-tagged bombs immediately
+    case tick
 }
 
 /// Shared by Blocks (tetrominoes) and Capsules (pill-dropping) — same controls.
 enum TetrisMove: Codable, Hashable {
-    case left, right, rotate, rotateLeft, softDrop, hardDrop, hold
+    case left, right, rotate, rotateLeft, rotate180, softDrop, hardDrop, hold
     case tick            // gravity step, driven by the view's timer
 }
 
@@ -226,4 +243,5 @@ enum Move: Codable, Hashable {
     case uno(UnoMove)
     case eights(EightsMove)
     case fish(GoFishMove)
+    case bomberman(BombermanMove)
 }

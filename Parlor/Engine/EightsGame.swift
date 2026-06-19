@@ -51,6 +51,12 @@ struct EightsGame: GameEngine {
     /// Consecutive 8s played in a row (suit changes run).
     var currentSuitChangeRun: Int = 0
     var bestSuitChangeRun: Int = 0
+    /// Total cards drawn by each seat (voluntary + forced).
+    var cardsDrawnBySeat: [Int] = [0, 0, 0, 0]
+    /// Peak accumulated draw-two debt that was ever pending at one time.
+    var maxPendingDraw: Int = 0
+    /// How many times each seat was skipped by a Queen this game.
+    var skipCount: [Int] = [0, 0, 0, 0]
 
     init() {
         var deck = Card.standardDeck().shuffled()
@@ -137,6 +143,7 @@ struct EightsGame: GameEngine {
             if isQueen { queensPlayed += 1 }
             if isTwo {
                 pendingDraw += 2
+                if pendingDraw > maxPendingDraw { maxPendingDraw = pendingDraw }
                 currentDrawChain += 1
                 if currentDrawChain > maxDrawChain { maxDrawChain = currentDrawChain }
             } else {
@@ -152,6 +159,7 @@ struct EightsGame: GameEngine {
             // Skip: queen skips the next player.
             if isQueen {
                 wasSkipped = true
+                skipCount[currentPlayer] += 1
                 currentPlayer = (currentPlayer + 1) % 4
             } else {
                 wasSkipped = false
@@ -163,6 +171,7 @@ struct EightsGame: GameEngine {
                 cardsForced += pendingDraw
                 biggestDrawHit = max(biggestDrawHit, pendingDraw)
             }
+            cardsDrawnBySeat[currentPlayer] += drawCount
             pendingDraw = 0
             currentDrawChain = 0
             for _ in 0..<drawCount {
@@ -253,6 +262,16 @@ struct EightsGame: GameEngine {
         if suitsSeen.count == 4 { extras += " · 🌈 Rainbow game!" }
         if queensPlayed > 0 { extras += " · 👸 \(queensPlayed) skip\(queensPlayed == 1 ? "" : "s")" }
         if bestSuitChangeRun >= 3 { extras += " · 🔄 best \(bestSuitChangeRun)-change run" }
+        // Max draw chain (peak draw-two debt in one chain)
+        if maxPendingDraw >= 4 { extras += " · Max draw chain: \(maxPendingDraw)" }
+        // Per-seat skip tally (Queens played against each seat)
+        let totalSkips = skipCount.reduce(0, +)
+        if totalSkips >= 2 {
+            if let mostSkipped = skipCount.indices.max(by: { skipCount[$0] < skipCount[$1] }),
+               skipCount[mostSkipped] >= 2 {
+                extras += " · 👸 S\(mostSkipped + 1) skipped \(skipCount[mostSkipped])×"
+            }
+        }
         if let winner { return "Seat \(winner + 1) goes out first!\(extras)" }
         if endedByBlock {
             let best = (0..<4).min { handPoints($0) < handPoints($1) } ?? 0

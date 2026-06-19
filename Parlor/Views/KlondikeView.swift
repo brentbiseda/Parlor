@@ -24,6 +24,8 @@ struct KlondikeView: View {
     @State private var foundationLandFlash: Int? = nil
     @State private var dealAnimated = false
     @State private var elapsedSeconds: Int = 0
+    // Improvement 3: win foundation scale
+    @State private var winScale: CGFloat = 1.0
     private let ticker = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private func timerString(_ seconds: Int) -> String {
@@ -312,7 +314,7 @@ struct KlondikeView: View {
             }
             .frame(height: 5)
 
-            // Move count + efficiency + elapsed timer
+            // Move count + efficiency + face-up ratio + elapsed timer
             HStack(spacing: 5) {
                 if game.moveCount > 0 {
                     let placed = game.foundations.map(\.count).reduce(0, +)
@@ -327,6 +329,20 @@ struct KlondikeView: View {
                             .font(.system(size: 9, weight: .semibold))
                             .foregroundStyle(efficiency >= 75 ? Color.green : efficiency >= 50 ? Color.yellow : Color.white.opacity(0.4))
                     }
+                }
+                // Face-up ratio: shows how much of the tableau is revealed
+                let totalTableau = game.tableau.reduce(0) { $0 + $1.faceDown.count + $1.faceUp.count }
+                let faceUpCount = game.tableau.reduce(0) { $0 + $1.faceUp.count }
+                if totalTableau > 0 {
+                    let faceUpPct = Int(Double(faceUpCount) / Double(totalTableau) * 100)
+                    Text("↑\(faceUpPct)%")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(faceUpPct >= 80 ? Color.green : faceUpPct >= 50 ? Color.yellow : Color.white.opacity(0.4))
+                }
+                if game.bestFoundationStreak >= 3 {
+                    Text("🔗\(game.bestFoundationStreak)")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.yellow.opacity(0.85))
                 }
                 if elapsedSeconds > 0 {
                     Text("⏱\(timerString(elapsedSeconds))")
@@ -382,6 +398,15 @@ struct KlondikeView: View {
                         .offset(y: -14)
                 }
             }
+            // Improvement 2: stock cycle counter "↺N" shown below stock/waste
+            .overlay(alignment: .bottom) {
+                if game.stockResets > 0 {
+                    Text("↺\(game.stockResets)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.gray.opacity(0.75))
+                        .offset(y: 14)
+                }
+            }
 
             // Waste: draw-3 fans the last three, only the top is live.
             Group {
@@ -408,6 +433,13 @@ struct KlondikeView: View {
                     }
                     .frame(width: cardWidth + (game.drawThree ? cardWidth * 0.6 : 0), alignment: .leading)
                     .gesture(dragGesture(source: .waste, game: game))
+                }
+            }
+            .onTapGesture(count: 2) {
+                guard let top = game.waste.last else { return }
+                if game.canPlaceOnFoundation(top) {
+                    submit(.wasteToFoundation)
+                    flashFoundation(suit: top.suit)
                 }
             }
             .onTapGesture {
@@ -439,23 +471,22 @@ struct KlondikeView: View {
                     }
                 }
                 .overlay(selectionHighlight(selection == .foundation(f), width: cardWidth))
-                .overlay(
-                    RoundedRectangle(cornerRadius: cardWidth * 0.12)
-                        .strokeBorder(isDragTarget
-                                      ? Color.yellow.opacity(0.85)
-                                      : isLandFlash
-                                        ? Color.green.opacity(0.95)
-                                        : isAutoHint
-                                          ? Color.green.opacity(0.55 + 0.35 * foundationPulse)
-                                          : .clear,
-                                      lineWidth: isDragTarget || isLandFlash ? 2.5
-                                                 : isAutoHint ? 2.0 : 0)
-                )
+                .overlay(foundationBorder(isDragTarget: isDragTarget, isLandFlash: isLandFlash, isAutoHint: isAutoHint, cardWidth: cardWidth))
+                // Improvement 3: spring scale-up on win
+                .scaleEffect(game.isOver ? winScale : 1.0)
+                .animation(.spring(response: 0.4), value: game.isOver)
                 .recordDropFrame("f\(f)")
                 .onTapGesture { tapFoundation(f, game: game) }
                 .onAppear {
                     withAnimation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true)) {
                         foundationPulse = 1.0
+                    }
+                }
+                .onChange(of: game.isOver) { _, over in
+                    if over {
+                        withAnimation(.spring(response: 0.4)) {
+                            winScale = 1.08
+                        }
                     }
                 }
             }
@@ -529,11 +560,16 @@ struct KlondikeView: View {
                     }
                     ForEach(Array(pile.faceUp.enumerated()), id: \.element) { index, card in
                         CardView(card: card, width: cardWidth)
+                            // Improvement 1: subtle shadow on face-up tableau cards
+                            .shadow(color: .black.opacity(0.18), radius: 3, x: 1, y: 2)
                             .opacity(isBeingDragged(col: col, index: index) ? 0.35 : 1)
                             .overlay(selectionHighlight(isSelected(col: col, index: index), width: cardWidth))
                             .overlay(hintHighlight(.tableau(col: col, index: index), width: cardWidth))
                             .offset(y: CGFloat(pile.faceDown.count) * overlap * 0.5 + CGFloat(index) * overlap)
                             .gesture(dragGesture(source: .tableau(col: col, index: index), game: game))
+                            .onTapGesture(count: 2) {
+                                doubleTapTableau(col: col, index: index, game: game)
+                            }
                             .onTapGesture { tapCard(col: col, index: index, game: game) }
                     }
                 }
@@ -555,6 +591,15 @@ struct KlondikeView: View {
         return false
     }
 
+    func foundationBorder(isDragTarget: Bool, isLandFlash: Bool, isAutoHint: Bool, cardWidth: CGFloat) -> some View {
+        let color: Color = isDragTarget ? Color.yellow.opacity(0.85)
+            : isLandFlash ? Color.green.opacity(0.95)
+            : isAutoHint ? Color.green.opacity(0.55 + 0.35 * foundationPulse)
+            : .clear
+        let lineWidth: CGFloat = (isDragTarget || isLandFlash) ? 2.5 : (isAutoHint ? 2.0 : 0)
+        return RoundedRectangle(cornerRadius: cardWidth * 0.12).strokeBorder(color, lineWidth: lineWidth)
+    }
+
     func selectionHighlight(_ on: Bool, width: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: width * 0.12)
             .strokeBorder(Color.yellow, lineWidth: on ? 2.5 : 0)
@@ -565,6 +610,14 @@ struct KlondikeView: View {
         return RoundedRectangle(cornerRadius: width * 0.12)
             .strokeBorder(Color.mint.opacity(0.9), lineWidth: on ? 3 : 0)
             .shadow(color: .mint.opacity(on ? 0.6 : 0), radius: 6)
+    }
+
+    func doubleTapTableau(col: Int, index: Int, game: KlondikeGame) {
+        let ups = game.tableau[col].faceUp
+        guard index == ups.count - 1, let top = ups.last else { return }
+        guard game.canPlaceOnFoundation(top) else { return }
+        submit(.tableauToFoundation(col))
+        flashFoundation(suit: top.suit)
     }
 
     func tapCard(col: Int, index: Int, game: KlondikeGame) {

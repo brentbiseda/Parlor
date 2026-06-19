@@ -8,12 +8,18 @@ struct HopperView: View {
     @State private var paused = false
     @State private var scorePopup: String? = nil
     @State private var timerBarPulse = false
+    // Zone label chip (#13)
+    @State private var zoneLabelText = ""
+    @State private var zoneLabelVisible = false
 
     var game: HopperGame? { session.game?.engine as? HopperGame }
 
     var body: some View {
         VStack(spacing: 8) {
             if let game {
+                // Life hearts row (#15)
+                lifeHeartsRow(game: game)
+                    .padding(.horizontal, 12)
                 statsStrip(game: game)
                     .padding(.horizontal, 12)
                 timerBar(game: game)
@@ -29,51 +35,160 @@ struct HopperView: View {
                         .shadow(color: .black, radius: 3)
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+                // Zone label chip (#13)
+                if zoneLabelVisible {
+                    VStack {
+                        Spacer()
+                        Text(zoneLabelText)
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .background(.black.opacity(0.7), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .padding(.bottom, 8)
+                    }
+                }
             }
             .animation(.easeOut(duration: 0.4), value: scorePopup)
+            .animation(.spring(response: 0.35), value: zoneLabelVisible)
             controls
                 .padding(.bottom, 6)
         }
         .padding(.top, 6)
         .task(id: session.sessionID) { await clock() }
+        .onChange(of: game?.frogY) { _, _ in
+            guard let game else { return }
+            let label = game.zoneLabel
+            if label != zoneLabelText {
+                zoneLabelText = label
+                withAnimation(.spring(response: 0.35)) { zoneLabelVisible = true }
+                Task { @MainActor in
+                    do {
+                        try await Task.sleep(nanoseconds: 1_800_000_000)
+                        withAnimation(.easeOut(duration: 0.4)) { zoneLabelVisible = false }
+                    } catch { return }
+                }
+            }
+        }
+    }
+
+    /// Life hearts display (#15): filled hearts for lives, empty for lost lives.
+    @ViewBuilder
+    func lifeHeartsRow(game: HopperGame) -> some View {
+        if !game.isOver {
+            HStack(spacing: 6) {
+                ForEach(0..<3, id: \.self) { i in
+                    Text(i < game.lives ? "❤️" : "🤍")
+                        .font(.system(size: 18))
+                        .opacity(i < game.lives ? 1.0 : 0.5)
+                        .animation(.spring(response: 0.3), value: game.lives)
+                }
+                Spacer()
+            }
+        }
+    }
+
+    /// Returns how many road-obstacle cells are within `window` cells of `frogX` on `row`.
+    func laneDanger(game: HopperGame, row: Int, window: Int = 2) -> Int {
+        guard let lane = game.lane(atRow: row) else { return 0 }
+        return lane.cells.filter { abs($0 - game.frogX) <= window || abs($0 - game.frogX - HopperGame.width) <= window || abs($0 - game.frogX + HopperGame.width) <= window }.count
+    }
+
+    /// Danger in the row directly ahead of the frog (in the direction of progress).
+    var nextRowDanger: Int {
+        guard let game else { return 0 }
+        let nextRow = game.frogY - 1   // rows count down toward row 0 (goal)
+        guard (7...11).contains(nextRow) else { return 0 }
+        return laneDanger(game: game, row: nextRow)
     }
 
     func statsStrip(game: HopperGame) -> some View {
-        HStack(spacing: 10) {
-            // Lives as frog hearts
-            HStack(spacing: 3) {
-                ForEach(0..<3, id: \.self) { i in
-                    Text(i < game.lives ? "🐸" : "💀")
-                        .font(.system(size: 14))
-                        .opacity(i < game.lives ? 1.0 : 0.3)
-                }
-            }
-            Spacer()
-            // Level and crossings
-            HStack(spacing: 6) {
-                Text("Lv\(game.level)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.7))
-                if game.perfectCrossings > 0 {
-                    HStack(spacing: 2) {
-                        Image(systemName: "star.fill")
-                            .font(.system(size: 9))
-                            .foregroundStyle(.yellow)
-                        Text("×\(game.perfectCrossings)")
-                            .font(.caption2.weight(.semibold))
-                            .foregroundStyle(.yellow)
+        VStack(spacing: 4) {
+            HStack(spacing: 10) {
+                // Lives as frog hearts
+                HStack(spacing: 3) {
+                    ForEach(0..<3, id: \.self) { i in
+                        Text(i < game.lives ? "🐸" : "💀")
+                            .font(.system(size: 14))
+                            .opacity(i < game.lives ? 1.0 : 0.3)
                     }
+                }
+                // Road danger chip: shown when about to cross into or through a traffic lane
+                let danger = nextRowDanger
+                if danger > 0 {
+                    HStack(spacing: 3) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 9))
+                        Text("CAR!")
+                            .font(.caption2.weight(.black))
+                    }
+                    .foregroundStyle(.red)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
-                    .background(.yellow.opacity(0.12), in: Capsule())
+                    .background(.red.opacity(0.2), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.red.opacity(0.5), lineWidth: 1))
+                }
+                // River zone indicator: show when frog is on a moving platform
+                if (1...5).contains(game.frogY) {
+                    let onLog = game.isSolid(row: game.frogY, x: game.frogX)
+                    HStack(spacing: 3) {
+                        Text(onLog ? "🪵" : "💧")
+                            .font(.system(size: 10))
+                        Text(onLog ? "RIDING" : "DANGER")
+                            .font(.caption2.weight(.black))
+                    }
+                    .foregroundStyle(onLog ? .green : .red)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(onLog ? Color.green.opacity(0.15) : Color.red.opacity(0.2), in: Capsule())
+                }
+                Spacer()
+                // Level and crossings
+                HStack(spacing: 6) {
+                    Text("Lv\(game.level)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.7))
+                    if game.perfectCrossings > 0 {
+                        HStack(spacing: 2) {
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.yellow)
+                            Text("×\(game.perfectCrossings)")
+                                .font(.caption2.weight(.semibold))
+                                .foregroundStyle(.yellow)
+                        }
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(.yellow.opacity(0.12), in: Capsule())
+                    }
+                }
+                Spacer()
+                // Score
+                Text("\(game.score)")
+                    .font(.caption.weight(.bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+            }
+            // Lily pad progress: 5 pads shown as icons
+            HStack(spacing: 8) {
+                Text("Pads:")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                ForEach(HopperGame.padXs, id: \.self) { padX in
+                    let filled = game.homePads.contains(padX)
+                    Text(filled ? "🐸" : "○")
+                        .font(.system(size: 11))
+                        .foregroundStyle(filled ? .green : .white.opacity(0.3))
+                }
+                let remaining = HopperGame.padXs.count - game.homePads.count
+                if remaining > 0 {
+                    Text("\(remaining) left")
+                        .font(.system(size: 8))
+                        .foregroundStyle(.white.opacity(0.4))
                 }
             }
-            Spacer()
-            // Score
-            Text("\(game.score)")
-                .font(.caption.weight(.bold))
-                .monospacedDigit()
-                .foregroundStyle(.white)
         }
     }
 
@@ -81,7 +196,9 @@ struct HopperView: View {
         let budget = HopperGame.timeBonusBudget
         let remaining = max(0, budget - game.crossingTicks)
         let fraction = Double(remaining) / Double(budget)
-        let barColor: Color = fraction > 0.5 ? .green : fraction > 0.25 ? .yellow : .red
+        // Smooth hue blend: green(0.33) → yellow(0.17) → red(0.0) based on fraction (#14)
+        let hue = fraction * 0.33
+        let barColor = Color(hue: hue, saturation: 0.9, brightness: 0.95)
         return VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("TIME BONUS")
@@ -98,7 +215,8 @@ struct HopperView: View {
                         .fill(.white.opacity(0.15))
                     RoundedRectangle(cornerRadius: 3)
                         .fill(barColor)
-                        .frame(width: geo.size.width * fraction)
+                        .frame(width: geo.size.width * CGFloat(fraction))
+                        .animation(.linear(duration: 0.24), value: fraction)
                         .scaleEffect(x: 1, y: fraction < 0.2 && timerBarPulse ? 1.5 : 1.0, anchor: .center)
                         .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: timerBarPulse)
                 }

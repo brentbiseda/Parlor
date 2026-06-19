@@ -12,6 +12,8 @@ struct CapsulesView: View {
     @State private var showLevelClear = false
     @State private var chainBadge: String? = nil
     @State private var chainOpacity: Double = 0
+    // Virus counter shrink animation (#17)
+    @State private var virusCountScale: CGFloat = 1.0
 
     var game: CapsulesGame? { session.game?.engine as? CapsulesGame }
 
@@ -60,6 +62,14 @@ struct CapsulesView: View {
             SoundFX.shared.play(.lose)
         } else if lastViruses >= 0 && after.virusesLeft < lastViruses {
             SoundFX.shared.play(.lineClear)
+            // Virus counter shrink animation (#17)
+            withAnimation(.interpolatingSpring(stiffness: 350, damping: 8)) { virusCountScale = 0.8 }
+            Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 180_000_000)
+                    withAnimation(.spring(response: 0.25)) { virusCountScale = 1.0 }
+                } catch { return }
+            }
         } else if after.pillsUsed > lastPills {
             SoundFX.shared.play(.lock)
         } else if move == .rotate {
@@ -213,14 +223,35 @@ struct CapsulesView: View {
             if let game {
                 stat("SCORE", "\(game.score)")
                 stat("LEVEL", "\(game.level)")
-                // Per-color virus tally
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("VIRUSES")
-                        .font(.caption2.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.6))
-                    let virusCounts = (0..<3).map { color in
-                        game.virusCount(color: color)
+                // Per-color virus tally with progress bar
+                VStack(alignment: .leading, spacing: 4) {
+                    let cleared = game.virusesAtLevelStart - game.virusesLeft
+                    let total = game.virusesAtLevelStart
+                    HStack(spacing: 4) {
+                        Text("VIRUSES")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.white.opacity(0.6))
+                        // Shrinks on each virus clear (#17)
+                        Text("\(cleared)/\(total)")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(game.virusesLeft == 0 ? .green : .white.opacity(0.85))
+                            .scaleEffect(virusCountScale)
+                            .animation(.spring(response: 0.25), value: virusCountScale)
                     }
+                    if total > 0 {
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                Capsule().fill(.white.opacity(0.15)).frame(height: 5)
+                                Capsule()
+                                    .fill(game.virusesLeft == 0 ? Color.green : Color(red: 0.95, green: 0.35, blue: 0.35))
+                                    .frame(width: geo.size.width * CGFloat(cleared) / CGFloat(total), height: 5)
+                                    // Smooth animation as viruses are cleared (#18)
+                                    .animation(.easeOut(duration: 0.4), value: cleared)
+                            }
+                        }
+                        .frame(height: 5)
+                    }
+                    let virusCounts = (0..<3).map { game.virusCount(color: $0) }
                     ForEach(0..<3, id: \.self) { color in
                         if virusCounts[color] > 0 {
                             HStack(spacing: 3) {
@@ -289,12 +320,22 @@ struct CapsulesView: View {
                     Divider().overlay(Color.white.opacity(0.2))
                     VStack(spacing: 4) {
                         let pillsThisLevel = game.pillsUsed - game.pillsAtLevelStart
-                        Text("Viruses cleared: \(game.virusesAtLevelStart)")
+                        let viruses = game.virusesAtLevelStart
+                        Text("Viruses cleared: \(viruses)")
                             .font(.caption.weight(.semibold))
                             .foregroundStyle(.white.opacity(0.85))
-                        Text("Pills used: \(pillsThisLevel)")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(pillsThisLevel < game.virusesAtLevelStart ? .green : .white.opacity(0.85))
+                        HStack(spacing: 6) {
+                            Text("Pills used: \(pillsThisLevel)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(pillsThisLevel < viruses ? .green : .white.opacity(0.85))
+                            if viruses > 0 {
+                                let ratio = Double(pillsThisLevel) / Double(viruses)
+                                let rating = ratio < 1.2 ? "💎 Flawless!" : ratio < 1.5 ? "⭐ Efficient" : ratio < 2.0 ? "👍 Good" : "🔧 Keep grinding"
+                                Text(rating)
+                                    .font(.caption2.weight(.bold))
+                                    .foregroundStyle(ratio < 1.2 ? .mint : ratio < 1.5 ? .yellow : ratio < 2.0 ? .green : .white.opacity(0.6))
+                            }
+                        }
                         if game.lastChain >= 2 {
                             Text("Best chain: ×\(game.maxChain) 🔗")
                                 .font(.caption.weight(.bold))

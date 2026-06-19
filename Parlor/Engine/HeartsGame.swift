@@ -55,8 +55,60 @@ struct HeartsGame: GameEngine {
     var trickLeadWins: [Int] = [0, 0, 0, 0]
     /// Total tricks won by each seat across all rounds.
     var totalTricksWon: [Int] = [0, 0, 0, 0]
+    /// J♦ earned bonus (−10 pts). Only active when jackDiamondBonus is true.
+    var jackDiamondWinner = -1
+    /// Whether the Jack of Diamonds (-10 pts) variant is active.
+    var jackDiamondBonus = false
+    /// Lowest non-zero single-round score earned by any player (best defensive round).
+    var lowestPositiveRoundScore: Int = Int.max
+    var lowestPositiveRoundSeat: Int = 0
+    /// Hearts taken per seat in the current round (for per-suit breakdown).
+    var roundHeartsTaken = [0, 0, 0, 0]
+    /// Total heart cards taken per seat across the whole game.
+    var totalHeartsTaken = [0, 0, 0, 0]
+    /// Cards received from passing this round (indexed by seat); empty until passes complete.
+    var receivedCards: [[Card]] = Array(repeating: [], count: 4)
+    /// Tricks won by each seat in the current round (reset each round).
+    var tricksWonThisRound: [Int] = [0, 0, 0, 0]
+    /// Cumulative tricks won per seat across all completed rounds (not including the in-progress round).
+    var cumulativeTricksWon: [Int] = [0, 0, 0, 0]
 
     var passDirection: PassDirection { PassDirection.allCases[passDirectionIndex % 4] }
+
+    /// Top dangerous cards in seat 0's hand — shown during pass phase to help the player decide.
+    var handStrengthLabel: String {
+        let hand = hands[0]
+        let dangerous = hand.filter { points(for: $0) > 0 || ($0.suit == .spades && $0.rank.rawValue >= 11) }
+        let sorted = dangerous.sorted { TrickTaking.plainValue($0) > TrickTaking.plainValue($1) }
+        let top = sorted.prefix(3).map { "\($0.rank.label)\($0.suit.symbol)" }
+        return top.isEmpty ? "" : top.joined(separator: " ")
+    }
+
+    /// Trick-dominance label for resultText: who won the most tricks overall.
+    var trickDominanceLabel: String {
+        guard let mostTricks = cumulativeTricksWon.max(), mostTricks > 0 else { return "" }
+        let leaders = (0..<4).filter { cumulativeTricksWon[$0] == mostTricks }
+        if leaders.count == 1 {
+            return "S\(leaders[0] + 1) dominated with \(mostTricks) tricks"
+        }
+        return leaders.map { "S\($0 + 1)" }.joined(separator: " & ") + " tied at \(mostTricks) tricks"
+    }
+
+    /// True if any seat has collected all hearts (and possibly Q♠) without others scoring yet this round.
+    var isShootingMoon: Bool {
+        guard phase == .playing, tricksPlayed >= 3 else { return false }
+        return (0..<4).contains { seat in
+            let totalHeartsOut = roundHeartsTaken.reduce(0, +)
+            return roundHeartsTaken[seat] == totalHeartsOut && totalHeartsOut >= 8
+        }
+    }
+
+    /// The seat currently shooting (or -1 if none).
+    var moonShooterSeat: Int {
+        guard isShootingMoon else { return -1 }
+        let totalHeartsOut = roundHeartsTaken.reduce(0, +)
+        return (0..<4).first { roundHeartsTaken[$0] == totalHeartsOut && totalHeartsOut > 0 } ?? -1
+    }
 
     init() {
         startRound()
@@ -66,11 +118,15 @@ struct HeartsGame: GameEngine {
         let (dealt, _) = TrickTaking.deal(deck: Card.standardDeck(), players: 4, count: 13)
         hands = dealt
         passSelections = Array(repeating: nil, count: 4)
+        receivedCards = Array(repeating: [], count: 4)
         trick = []
         tricksPlayed = 0
         heartsBroken = false
         queenPlayed = false
         roundPoints = [0, 0, 0, 0]
+        roundHeartsTaken = [0, 0, 0, 0]
+        tricksWonThisRound = [0, 0, 0, 0]
+        jackDiamondWinner = -1
         roundNumber += 1
         if passDirection == .hold {
             beginPlay()
@@ -183,6 +239,7 @@ struct HeartsGame: GameEngine {
         }
         for seat in 0..<4 {
             hands[seat] = (hands[seat] + incoming[seat]).displaySorted()
+            receivedCards[seat] = incoming[seat].displaySorted()
         }
         beginPlay()
     }
@@ -202,6 +259,15 @@ struct HeartsGame: GameEngine {
             // Track Q♠ hits per seat
             let queenInTrick = trick.contains { $0.card == Card(suit: .spades, rank: .queen) }
             if queenInTrick { queenSpadeHits[winner] += 1 }
+            // Track hearts taken per seat
+            let heartsTaken = trick.filter { $0.card.suit == .hearts }.count
+            roundHeartsTaken[winner] += heartsTaken
+            totalHeartsTaken[winner] += heartsTaken
+            // Track J♦ winner in variant mode
+            let jackDiamonds = Card(suit: .diamonds, rank: .jack)
+            if jackDiamondBonus && trick.contains(where: { $0.card == jackDiamonds }) {
+                jackDiamondWinner = winner
+            }
             let highCard = trick.max(by: { TrickTaking.plainValue($0.card) < TrickTaking.plainValue($1.card) })?.card
             let cardLabel = highCard.map { "\($0.rank.label)\($0.suit.symbol)" } ?? ""
             let pts = trickPoints > 0 ? " +\(trickPoints)♥" : ""
@@ -209,6 +275,7 @@ struct HeartsGame: GameEngine {
             // Track aggression: was this trick won by the seat that led it?
             if winner == trickLeader { trickLeadWins[winner] += 1 }
             totalTricksWon[winner] += 1
+            tricksWonThisRound[winner] += 1
             trick = []
             trickLeader = winner
             tricksPlayed += 1
@@ -217,6 +284,8 @@ struct HeartsGame: GameEngine {
     }
 
     mutating func finishRound() {
+        // Accumulate per-round trick counts before resetting.
+        for seat in 0..<4 { cumulativeTricksWon[seat] += tricksWonThisRound[seat] }
         var delta = [0, 0, 0, 0]
         if let shooter = roundPoints.firstIndex(of: 26) {
             // Shoot the moon: all others +26
@@ -231,6 +300,10 @@ struct HeartsGame: GameEngine {
             scores[seat] += delta[seat]
             if delta[seat] == 0 { cleanRounds[seat] += 1 }
             if delta[seat] > worstRound { worstRound = delta[seat]; worstRoundSeat = seat }
+            if delta[seat] > 0 && delta[seat] < lowestPositiveRoundScore {
+                lowestPositiveRoundScore = delta[seat]
+                lowestPositiveRoundSeat = seat
+            }
         }
         if scores.contains(where: { $0 >= Self.gameEndThreshold }) {
             phase = .gameOver
@@ -240,32 +313,53 @@ struct HeartsGame: GameEngine {
         }
     }
 
+    /// Compact summary of what seat 0 selected to pass.
+    var seat0PassSummary: String {
+        guard let cards = passSelections[0], !cards.isEmpty else { return "" }
+        let pts = cards.reduce(0) { $0 + points(for: $1) }
+        let cardStrs = cards.map { "\($0.rank.label)\($0.suit.symbol)" }.joined(separator: " ")
+        return pts > 0 ? " · passing \(cardStrs) (\(pts)♥)" : " · passing \(cardStrs)"
+    }
+
     var statusText: String {
         switch phase {
         case .passing:
             let waiting = (0..<4).filter { passSelections[$0] == nil }.count
-            let seat0PassPts = passSelections[0].map { $0.reduce(0) { $0 + points(for: $1) } }.map { $0 > 0 ? " · \($0)♥ in your pass" : "" } ?? ""
-            return "Round \(roundNumber): pass \(passDirection.label) · \(waiting) selecting\(seat0PassPts)"
+            let dirSymbol: String
+            switch passDirection {
+            case .left: dirSymbol = "←"
+            case .right: dirSymbol = "→"
+            case .across: dirSymbol = "↕"
+            case .hold: dirSymbol = "⟳"
+            }
+            let strengthHint = handStrengthLabel.isEmpty ? "" : " · danger: \(handStrengthLabel)"
+            return "R\(roundNumber) · Pass \(dirSymbol) \(passDirection.label) · \(waiting) selecting\(seat0PassSummary)\(strengthHint)"
         case .playing:
             let scoreStr = scores.map { "\($0)" }.joined(separator: "/")
             var extras: [String] = []
             if heartsBroken { extras.append("♥ broken") }
-            if queenPlayed && tricksPlayed < 13 { extras.append("Q♠ played") }
-            // Warn if someone is collecting all hearts so far (potential moon shot).
-            if tricksPlayed >= 3 {
+            if queenPlayed && tricksPlayed < 13 { extras.append("Q♠ out") }
+            // Moon-shoot detection: someone has taken ALL hearts and Q♠ so far
+            if tricksPlayed >= 2 {
                 for seat in 0..<4 {
-                    let pts = roundPoints[seat]
-                    let hasAllHearts = pts >= tricksPlayed && !queenPlayed
-                    if pts > 0 && pts == tricksPlayed && hasAllHearts {
-                        extras.append("🌙 Seat \(seat + 1) may shoot!")
+                    let heartsSoFar = roundHeartsTaken[seat]
+                    let totalHeartsPlayed = roundHeartsTaken.reduce(0, +)
+                    let hasAll = heartsSoFar == totalHeartsPlayed && heartsSoFar > 0
+                    let shooterQueenPlayed = !queenPlayed || roundPoints[seat] >= 13
+                    if hasAll && tricksPlayed >= 3 {
+                        if shooterQueenPlayed && roundPoints[seat] >= 8 {
+                            extras.append("🌙🚨 S\(seat + 1) SHOOTING!")
+                        } else {
+                            extras.append("🌙 S\(seat + 1) may shoot")
+                        }
                         break
                     }
                 }
             }
             // Warn anyone nearing the game-ending threshold.
-            if let maxScore = scores.max(), maxScore >= Self.gameEndThreshold - 20 {
+            if let maxScore = scores.max(), maxScore >= Self.gameEndThreshold - 15 {
                 if let danger = (0..<4).first(where: { scores[$0] == maxScore }) {
-                    extras.append("⚠️ Seat \(danger + 1) at \(maxScore)")
+                    extras.append("⚠️ S\(danger + 1) at \(maxScore)!")
                 }
             }
             let extraStr = extras.isEmpty ? "" : " · " + extras.joined(separator: " · ")
@@ -309,6 +403,19 @@ struct HeartsGame: GameEngine {
             let ttw = totalTricksWon[winSeat]
             if ttw > 0 { text += " · S\(winSeat + 1) won \(ttw) tricks total" }
         }
+        // Heart distribution per seat (♥ taken)
+        let heartStr = (0..<4).map { "S\($0 + 1):\(totalHeartsTaken[$0])♥" }.joined(separator: " ")
+        text += " · \(heartStr)"
+        // Best defensive round
+        if lowestPositiveRoundScore < Int.max && lowestPositiveRoundScore <= 3 {
+            text += " · 🛡️ S\(lowestPositiveRoundSeat + 1) min round: \(lowestPositiveRoundScore)pts"
+        }
+        // Trick dominance across the whole game
+        let domLabel = trickDominanceLabel
+        if !domLabel.isEmpty { text += " · 🃏 \(domLabel)" }
+        // Per-seat trick tally
+        let trickTally = (0..<4).map { "S\($0 + 1):\(cumulativeTricksWon[$0])" }.joined(separator: " ")
+        text += " · tricks: \(trickTally)"
         return text
     }
 

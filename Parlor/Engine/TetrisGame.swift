@@ -60,6 +60,8 @@ struct TetrisGame: GameEngine {
     var current: Piece?
     var nextKind: PieceKind
     var bag: [PieceKind]
+    /// Preview of the next 2 pieces after `nextKind` (drawn from the current bag).
+    var nextQueue: [PieceKind] { Array(bag.prefix(2)) }
     var hold: PieceKind? = nil
     var holdUsed = false
     var score = 0
@@ -80,6 +82,8 @@ struct TetrisGame: GameEngine {
     static let lockDelayMax = 3    // ticks before piece locks (view drives ~0.5s window)
     static let lockDelayResetMax = 15  // max resets before forced lock
     var tSpinCount = 0             // lifetime T-spins this game
+    var backToBackTSpins = 0       // consecutive B2B T-spins (B2B score on T-spin after T-spin)
+    var iSpinCount = 0            // I-piece 4-line clears with a wall-kick (I-spin)
     var tetrisCount = 0           // lifetime 4-line clears this game
     var perfectClears = 0         // times the board was emptied by a clear
     var bestDropScore = 0         // highest points earned on a single line clear
@@ -88,6 +92,11 @@ struct TetrisGame: GameEngine {
     var tripleCount = 0           // 3-line clears
     var maxLevel: Int = 1         // highest level reached this game
     var survivalTicks: Int = 0    // total ticks survived (game length indicator)
+    var gameStartDate: Date? = nil  // wall-clock start for pieces-per-minute
+    var lastPieceKind: PieceKind? = nil // piece kind of the most recently locked piece
+    var lastLockUsedKick = false  // whether the last lock used a non-zero kick
+    var softDropDistance: Int = 0  // total cells moved by soft-drop this game
+    var longestCombo: Int = 0      // peak combo achieved (alias for maxCombo, separately named)
 
     var level: Int { lines / 10 + 1 }
 
@@ -114,6 +123,7 @@ struct TetrisGame: GameEngine {
     init() {
         bag = PieceKind.allCases.shuffled()
         nextKind = bag.removeFirst()
+        gameStartDate = Date()
         spawn()
     }
 
@@ -181,6 +191,7 @@ struct TetrisGame: GameEngine {
     private mutating func lock(_ piece: Piece) {
         pendingTSpin = isTSpin(piece)
         if pendingTSpin { tSpinCount += 1 }
+        lastPieceKind = piece.kind
         for (x, y) in piece.cells() where y >= 0 {
             board[y * Self.width + x] = piece.kind.colorIndex
         }
@@ -216,6 +227,8 @@ struct TetrisGame: GameEngine {
         var pts = Self.lineClearScore[cleared] * level
         let isTetris = cleared == 4
         if isTetris { tetrisCount += 1 }
+        let isISpin = isTetris && lastPieceKind == .i && lastWasRotation && lastLockUsedKick
+        if isISpin { iSpinCount += 1 }
         switch cleared {
         case 1: singleCount += 1
         case 2: doubleCount += 1
@@ -239,6 +252,7 @@ struct TetrisGame: GameEngine {
         // Combo bonus.
         combo += 1
         if combo > maxCombo { maxCombo = combo }
+        if combo > longestCombo { longestCombo = combo }
         if combo > 1 { pts += Self.comboBase * (combo - 1) * level }
 
         // Perfect clear: board completely empty after this clear — big bonus.
@@ -286,16 +300,23 @@ struct TetrisGame: GameEngine {
                 }
             }
             lastWasRotation = false
-        case .rotate, .rotateLeft:
-            let delta = m == .rotate ? 1 : -1
-            piece.rotation = ((piece.rotation + delta) & 3 + 4) & 3
+        case .rotate, .rotateLeft, .rotate180:
+            let delta: Int
+            switch m {
+            case .rotate: delta = 1
+            case .rotateLeft: delta = -1
+            case .rotate180: delta = 2
+            default: delta = 1
+            }
+            piece.rotation = ((piece.rotation + delta) % 4 + 4) % 4
             let kicks: [Int] = piece.kind == .i ? [0, -2, 1, -3, 3] : [0, -1, 1, -2, 2]
-            for kick in kicks {
+            for (ki, kick) in kicks.enumerated() {
                 var kicked = piece
                 kicked.x += kick
                 if fits(kicked) {
                     current = kicked
                     lastWasRotation = true
+                    lastLockUsedKick = ki > 0  // non-zero kick index = wall kick used
                     // Reset lock delay on rotation while grounded.
                     if !fits(grounded(kicked)) && lockDelayResets < Self.lockDelayResetMax {
                         lockDelayTicks = 0; lockDelayResets += 1
@@ -310,7 +331,7 @@ struct TetrisGame: GameEngine {
             if fits(piece) {
                 current = piece
                 lockDelayTicks = 0; lockDelayResets = 0  // piece is airborne again
-                if m == .softDrop { score += Self.softDropScore }
+                if m == .softDrop { score += Self.softDropScore; softDropDistance += 1 }
             } else {
                 piece.y -= 1
                 // Lock delay: on tick (gravity), increment counter and only lock after max.
@@ -346,6 +367,14 @@ struct TetrisGame: GameEngine {
         var p = piece; p.y += 1; return p
     }
 
+    /// Pieces per minute (wall-clock, only meaningful once the game ends or after 1+ minute).
+    var piecesPerMinute: Int? {
+        guard let start = gameStartDate, piecesPlaced >= 10 else { return nil }
+        let mins = Date().timeIntervalSince(start) / 60.0
+        guard mins >= 0.25 else { return nil }
+        return Int(Double(piecesPlaced) / mins)
+    }
+
     var statusText: String {
         let nextLevel = level * 10
         let toNext = nextLevel - lines
@@ -354,6 +383,7 @@ struct TetrisGame: GameEngine {
         if combo > 1 { text += " · combo ×\(combo)" }
         if backToBack { text += " · B2B" }
         if level >= 4 { text += " · \(speedLabel)" }
+        if let ppm = piecesPerMinute, level >= 5 { text += " · \(ppm) ppm" }
         if stackHeight >= 16 { text += " · ⚠️ DANGER" }
         return text
     }
@@ -362,6 +392,7 @@ struct TetrisGame: GameEngine {
         guard over else { return nil }
         var text = "Game over — \(score) pts · \(lines) lines · L\(level)"
         if tSpinCount > 0 { text += " · 🌀 \(tSpinCount) T-spin\(tSpinCount == 1 ? "" : "s")" }
+        if iSpinCount > 0 { text += " · 🔵 \(iSpinCount) I-spin" }
         if tetrisCount > 0 { text += " · 🟦 \(tetrisCount) Tetris\(tetrisCount == 1 ? "" : "es")" }
         if perfectClears > 0 { text += " · 💎 \(perfectClears) perfect clear\(perfectClears == 1 ? "" : "s")" }
         if maxCombo >= 3 { text += " · 🔥 \(maxCombo)× combo" }
@@ -373,12 +404,22 @@ struct TetrisGame: GameEngine {
         if tripleCount > 0 { clearTypes.append("3s×\(tripleCount)") }
         if tetrisCount > 0 { clearTypes.append("T×\(tetrisCount)") }
         if !clearTypes.isEmpty { text += " · Lines: \(clearTypes.joined(separator: " "))" }
+        if softDropDistance > 0 { text += " · ↓\(softDropDistance) soft-drop" }
+        if longestCombo > 1 { text += " · 🔥\(longestCombo) max combo" }
         if piecesPlaced > 0 && lines > 0 {
             let ppl = String(format: "%.1f", Double(piecesPlaced) / Double(lines))
             text += " · \(ppl) pieces/line"
         }
+        if let ppm = piecesPerMinute { text += " · \(ppm) ppm" }
         if maxLevel > 1 { text += " · reached level \(maxLevel)" }
-        if survivalTicks > 200 { text += " · survived \(survivalTicks) ticks" }
+        // Wall-clock survival time
+        if let start = gameStartDate {
+            let secs = Int(-start.timeIntervalSinceNow)
+            if secs >= 30 {
+                let timeStr = secs >= 60 ? "\(secs / 60)m\(secs % 60)s" : "\(secs)s"
+                text += " · ⏱ \(timeStr)"
+            }
+        }
         return text
     }
 }

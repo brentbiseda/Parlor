@@ -13,7 +13,9 @@ struct TetrisView: View {
     @State private var dragSteps: CGFloat = 0
     @State private var lastLines = 0
     @State private var lastPieces = 0
+    @State private var lastLevel = 1
     @State private var lineFlash = false
+    @State private var levelFlash = false
     @State private var paused = false
     @State private var clearBadge: String? = nil
 
@@ -90,8 +92,18 @@ struct TetrisView: View {
         } else if move == .rotate {
             SoundFX.shared.play(.rotate)
         }
+        if after.level > lastLevel {
+            levelFlash = true
+            Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                    levelFlash = false
+                } catch { return }
+            }
+        }
         lastLines = after.lines
         lastPieces = after.piecesPlaced
+        lastLevel = after.level
     }
 
     // MARK: - Board
@@ -138,11 +150,20 @@ struct TetrisView: View {
                 }
             }
 
-            // Ghost landing outline.
-            if let ghost = game.ghostPiece(), ghost != game.current {
+            // Ghost landing outline — opacity increases when ghost is close to active piece.
+            // A top-lighter gradient gives depth to ghost cells.
+            if let ghost = game.ghostPiece(), let piece = game.current, ghost != piece {
+                let distance = ghost.y - piece.y
+                let ghostOpacity = distance <= 3 ? 0.55 : distance <= 6 ? 0.40 : distance <= 10 ? 0.28 : 0.18
                 for (x, y) in ghost.cells() where y >= 0 {
-                    context.stroke(Path(roundedRect: rect(x, y), cornerRadius: 2),
-                                   with: .color(.white.opacity(0.3)), lineWidth: 1.5)
+                    let r = rect(x, y)
+                    // Subtle top-half lighter fill for depth.
+                    var topHalf = r
+                    topHalf.size.height *= 0.5
+                    context.fill(Path(roundedRect: topHalf, cornerRadius: 2),
+                                 with: .color(.white.opacity(ghostOpacity * 0.25)))
+                    context.stroke(Path(roundedRect: r, cornerRadius: 2),
+                                   with: .color(.white.opacity(ghostOpacity)), lineWidth: 1.5)
                 }
             }
 
@@ -156,23 +177,26 @@ struct TetrisView: View {
         .aspectRatio(CGFloat(TetrisGame.width) / CGFloat(TetrisGame.height), contentMode: .fit)
         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.25), lineWidth: 1.5))
+        // Line-clear flash: bright horizontal white stripe effect (#1)
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(.white.opacity(lineFlash ? 0.22 : 0))
-                .animation(.easeOut(duration: 0.22), value: lineFlash)
+            Rectangle()
+                .fill(.white.opacity(lineFlash ? 0.60 : 0))
+                .animation(.easeOut(duration: 0.30), value: lineFlash)
+                .allowsHitTesting(false)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Color.red.opacity((game?.stackHeight ?? 0) >= 16 ? 0.85 : 0), lineWidth: 3)
                 .animation(.easeInOut(duration: 0.4).repeatForever(autoreverses: true), value: (game?.stackHeight ?? 0) >= 16)
         )
+        .overlay(alignment: .bottom) { lockDelayBar }
         .overlay(alignment: .topTrailing) { ArcadePauseButton(paused: $paused) }
         .overlay { PausedCurtain(paused: $paused) }
         .gesture(boardGesture)
     }
 
     /// Swipe horizontally to step the piece, swipe down to hard-drop,
-    /// tap to rotate.
+    /// swipe up to hold, tap to rotate.
     var boardGesture: some Gesture {
         DragGesture(minimumDistance: 0)
             .onChanged { value in
@@ -183,42 +207,91 @@ struct TetrisView: View {
             }
             .onEnded { value in
                 defer { dragSteps = 0 }
-                if value.translation.height > 60, abs(value.translation.width) < 50 {
+                let dx = abs(value.translation.width)
+                let dy = value.translation.height
+                if dy > 60, dx < 50 {
                     submit(.hardDrop)
-                } else if abs(value.translation.width) < 12, abs(value.translation.height) < 12 {
+                } else if dy < -40, dx < 50 {
+                    // Swipe up = hold piece
+                    if game?.canHold == true { submit(.hold) }
+                } else if dx < 12, abs(dy) < 12 {
                     submit(.rotate)
                 }
             }
     }
 
+    /// Thin bar at the bottom of the well showing lock-delay countdown.
+    /// Only visible when the current piece is on the ground and about to lock.
+    @ViewBuilder
+    var lockDelayBar: some View {
+        if let game, game.current != nil, !game.isOver {
+            let ticks = game.lockDelayTicks
+            let maxTicks = TetrisGame.lockDelayMax
+            let grounded = ticks > 0
+            if grounded {
+                let frac = CGFloat(ticks) / CGFloat(maxTicks)
+                GeometryReader { geo in
+                    Capsule()
+                        .fill(Color.orange.opacity(0.85))
+                        .frame(width: geo.size.width * frac, height: 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .animation(.linear(duration: 0.12), value: frac)
+                }
+                .frame(height: 4)
+                .padding(.horizontal, 4)
+                .padding(.bottom, 4)
+            }
+        }
+    }
+
     // MARK: - Sidebar & controls
 
     var sidebar: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
+            // Next-piece queue: primary + 2 queued
             VStack(alignment: .leading, spacing: 4) {
                 Text("NEXT")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white.opacity(0.6))
                 nextPreview
+                if let game {
+                    ForEach(Array(game.nextQueue.enumerated()), id: \.offset) { _, kind in
+                        piecePreview(kind: kind, scale: 0.72)
+                    }
+                }
             }
+
+            // Hold piece
             VStack(alignment: .leading, spacing: 4) {
                 Text("HOLD")
                     .font(.caption2.weight(.bold))
                     .foregroundStyle(.white.opacity(0.6))
                 holdPreview
             }
+
             if let game {
                 statBlock("SCORE", "\(game.score)")
                 statBlock("LINES", "\(game.lines)")
-                statBlock("LEVEL", "\(game.level)")
+                // Level chip flashes gold on level-up (#3)
+                statBlock("LEVEL", "\(game.level)", tint: levelFlash ? Color(red: 1.0, green: 0.82, blue: 0.1) : .white)
+                    .animation(.easeOut(duration: 0.4), value: levelFlash)
+                // Lines to next level chip (#5)
                 let toNext = 10 - (game.lines % 10)
-                if !game.isOver && toNext < 10 {
-                    statBlock("→LVL", "\(toNext)")
+                if !game.isOver {
+                    let toNextCapped = toNext == 10 ? 0 : toNext
+                    Text("→LV \(toNextCapped) lines")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.6))
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 3)
+                        .background(Color.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
                 }
                 if let badge = clearBadge {
-                    let isTSpin = badge.contains("T-SPIN")
+                    let isTSpin = badge.contains("T-SPIN") || badge.contains("I-SPIN")
+                    let tSpinColor = Color(red: 0.72, green: 0.38, blue: 0.92)
                     let badgeColor: Color = isTSpin
-                        ? Color(red: 0.72, green: 0.38, blue: 0.92)
+                        ? tSpinColor
                         : badge.contains("PERFECT") ? .mint : .yellow
                     Text(badge)
                         .font(.caption2.weight(.black))
@@ -229,11 +302,24 @@ struct TetrisView: View {
                         .frame(maxWidth: .infinity)
                         .background(badgeColor.opacity(0.15), in: RoundedRectangle(cornerRadius: 6))
                         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(badgeColor.opacity(0.4), lineWidth: 1))
+                        // T-spin gets a pulsing purple glow shadow (#2)
+                        .shadow(color: isTSpin ? tSpinColor.opacity(0.6) : .clear, radius: 8)
                         .transition(.scale(scale: 0.85).combined(with: .opacity))
                         .animation(.spring(response: 0.25), value: badge)
                 }
                 if game.combo > 1 {
                     statBlock("COMBO", "×\(game.combo)")
+                } else if game.maxCombo > 2 {
+                    statBlock("B.CMBO", "×\(game.maxCombo)")
+                }
+                if let ppm = game.piecesPerMinute, !game.isOver {
+                    statBlock("PPM", "\(ppm)")
+                }
+                // Stack height indicator
+                if !game.isOver {
+                    let sh = game.stackHeight
+                    let shColor: Color = sh >= 16 ? .red : sh >= 12 ? .orange : sh >= 8 ? .yellow : .white
+                    statBlock("STACK", "\(sh)", tint: shColor)
                 }
                 // Line-type breakdown
                 let totalClears = game.singleCount + game.doubleCount + game.tripleCount + game.tetrisCount
@@ -258,14 +344,27 @@ struct TetrisView: View {
                                 .foregroundStyle(.mint.opacity(0.9))
                         }
                         if game.tetrisCount > 0 {
-                            Text("T×\(game.tetrisCount)")
+                            let totalClears = game.singleCount + game.doubleCount + game.tripleCount + game.tetrisCount
+                            let tetrisPct = totalClears > 0 ? Int(Double(game.tetrisCount) / Double(totalClears) * 100) : 0
+                            let effColor: Color = tetrisPct >= 50 ? .yellow : tetrisPct >= 25 ? Color(red: 1.0, green: 0.8, blue: 0.0) : .white.opacity(0.7)
+                            Text("T×\(game.tetrisCount)(\(tetrisPct)%)")
                                 .font(.caption2.weight(.bold))
-                                .foregroundStyle(.yellow)
+                                .foregroundStyle(effColor)
                         }
                         if game.tSpinCount > 0 {
                             Text("🌀×\(game.tSpinCount)")
                                 .font(.caption2.weight(.bold))
                                 .foregroundStyle(Color(red: 0.72, green: 0.38, blue: 0.92))
+                        }
+                        if game.iSpinCount > 0 {
+                            Text("🔵×\(game.iSpinCount)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.cyan)
+                        }
+                        if game.perfectClears > 0 {
+                            Text("💎×\(game.perfectClears)")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.mint)
                         }
                     }
                 }
@@ -275,8 +374,9 @@ struct TetrisView: View {
         .frame(width: 86)
     }
 
-    func piecePreview(kind: TetrisGame.PieceKind?, dimmed: Bool = false) -> some View {
-        Canvas { context, size in
+    func piecePreview(kind: TetrisGame.PieceKind?, dimmed: Bool = false, scale: CGFloat = 1.0) -> some View {
+        let h = 48 * scale
+        return Canvas { context, size in
             guard let kind else { return }
             let cell: CGFloat = size.width / 4.5
             let cells = TetrisGame.Piece(kind: kind, rotation: 0, x: 0, y: 0).cells()
@@ -288,9 +388,13 @@ struct TetrisView: View {
                                   width: cell - 1, height: cell - 1)
                 context.fill(Path(roundedRect: rect, cornerRadius: 2),
                              with: .color(pieceColors[kind.colorIndex].opacity(dimmed ? 0.45 : 1.0)))
+                // Highlight cap
+                var cap = rect; cap.size.height *= 0.4
+                context.fill(Path(roundedRect: cap, cornerRadius: 2),
+                             with: .color(.white.opacity(dimmed ? 0.08 : 0.2)))
             }
         }
-        .frame(width: 86, height: 48)
+        .frame(width: 86, height: h)
         .background(.black.opacity(0.3), in: RoundedRectangle(cornerRadius: 6))
         .overlay(RoundedRectangle(cornerRadius: 6).strokeBorder(.white.opacity(0.2), lineWidth: 1))
     }
@@ -310,7 +414,7 @@ struct TetrisView: View {
             }
     }
 
-    func statBlock(_ label: String, _ value: String) -> some View {
+    func statBlock(_ label: String, _ value: String, tint: Color = .white) -> some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(label)
                 .font(.caption2.weight(.bold))
@@ -318,7 +422,8 @@ struct TetrisView: View {
             Text(value)
                 .font(.title3.weight(.bold))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(tint)
+                .animation(.easeInOut(duration: 0.3), value: tint == .red)
         }
     }
 
@@ -327,6 +432,7 @@ struct TetrisView: View {
             HStack(spacing: 10) {
                 controlButton("arrowtriangle.left.fill") { submit(.left) }
                 controlButton("arrow.counterclockwise") { submit(.rotateLeft) }
+                controlButton("arrow.2.squarepath") { submit(.rotate180) }
                 controlButton("arrow.clockwise") { submit(.rotate) }
                 controlButton("arrowtriangle.right.fill") { submit(.right) }
             }

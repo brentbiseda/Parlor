@@ -61,6 +61,60 @@ struct GoGame: GameEngine {
         return (visited, hasLiberty)
     }
 
+    /// Count liberties for the group at `p`. Returns 0 if the point is empty.
+    func libertyCount(at p: Point) -> Int {
+        let color = stone(at: p)
+        guard color != 0 else { return 0 }
+        var visited: Set<Int> = [index(p)]
+        var frontier = [p]
+        var liberties: Set<Int> = []
+        while let current = frontier.popLast() {
+            for n in neighbors(current) {
+                let i = index(n)
+                if board[i] == 0 {
+                    liberties.insert(i)
+                } else if board[i] == color && !visited.contains(i) {
+                    visited.insert(i)
+                    frontier.append(n)
+                }
+            }
+        }
+        return liberties.count
+    }
+
+    /// Points of stones (of either color) whose group is in atari (1 liberty).
+    var atariPoints: Set<Point> {
+        var result: Set<Point> = []
+        var checked: Set<Int> = []
+        for y in 0..<size {
+            for x in 0..<size {
+                let p = Point(x: x, y: y)
+                let i = index(p)
+                guard board[i] != 0, !checked.contains(i) else { continue }
+                if libertyCount(at: p) == 1 {
+                    // Mark all stones in this group
+                    var frontier = [p]
+                    var visited: Set<Int> = [i]
+                    let color = board[i]
+                    while let cur = frontier.popLast() {
+                        result.insert(cur)
+                        checked.insert(index(cur))
+                        for n in neighbors(cur) {
+                            let ni = index(n)
+                            if board[ni] == color && !visited.contains(ni) {
+                                visited.insert(ni)
+                                frontier.append(n)
+                            }
+                        }
+                    }
+                } else {
+                    checked.insert(i)
+                }
+            }
+        }
+        return result
+    }
+
     /// Result of playing `p` for `color`, or nil if illegal (occupied/suicide/ko).
     func tryPlace(_ p: Point, color: Int) -> (board: [Int], captured: Int)? {
         guard stone(at: p) == 0, p != koPoint else { return nil }
@@ -179,20 +233,29 @@ struct GoGame: GameEngine {
 
     func colorName(_ color: Int) -> String { color == 0 ? "Black" : "White" }
 
+    /// Count of black stones currently on the board.
+    var blackStones: Int { board.filter { $0 == 1 }.count }
+    /// Count of white stones currently on the board.
+    var whiteStones: Int { board.filter { $0 == 2 }.count }
+
     var statusText: String {
         if let text = resultText { return text }
-        var text = "\(colorName(currentPlayer)) to play"
-        if consecutivePasses == 1 { text += " · opponent passed" }
-        let blackStones = board.filter { $0 == 1 }.count
-        let whiteStones = board.filter { $0 == 2 }.count
-        if blackStones + whiteStones > 0 { text += " · B\(blackStones) W\(whiteStones)" }
+        let moveLabel = moveCount > 0 ? " #\(moveCount)" : ""
+        var text = "\(colorName(currentPlayer))\(moveLabel) to play"
+        if consecutivePasses == 1 { text += " · 1 pass → scoring soon" }
+        // Ko warning: the ko point is a forbidden position until broken
+        if koPoint != nil { text += " · ⛔ Ko" }
+        let stoneTotal = blackStones + whiteStones
+        if stoneTotal > 0 { text += " · ●\(blackStones) ○\(whiteStones)" }
         if captures[0] + captures[1] > 0 { text += " · cap B\(captures[0])–W\(captures[1])" }
+        let atari = atariPoints
+        if !atari.isEmpty { text += " · ⚠️ atari(\(atari.count))" }
         let (b, w) = areaScores()
         text += " · est. B\(Int(b.rounded()))–W\(String(format: "%.1f", w))"
         let margin = b - w
         if abs(margin) >= 0.5 {
             let leader = margin > 0 ? "B" : "W"
-            text += " (\(leader) +\(String(format: "%.1f", abs(margin))))"
+            text += " (\(leader)+\(String(format: "%.1f", abs(margin))))"
         } else {
             text += " (even)"
         }
@@ -201,7 +264,7 @@ struct GoGame: GameEngine {
 
     var resultText: String? {
         var captureNote = captures[0] + captures[1] > 0 ? " · B cap \(captures[0]) W cap \(captures[1])" : ""
-        if biggestCapture >= 3 { captureNote += " · 💥 \(biggestCapture)-stone capture" }
+        if biggestCapture > 1 { captureNote += " · Max capture: \(biggestCapture) stones" }
         if longestCaptureRun >= 3 { captureNote += " · 🔗 \(longestCaptureRun)-turn capture run" }
         let moveNote = " · \(moveCount) moves"
         let totalPasses = passCount[0] + passCount[1]

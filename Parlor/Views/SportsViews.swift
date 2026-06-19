@@ -121,14 +121,23 @@ struct FootballView: View {
                 .animation(.spring(response: 0.25), value: active)
             }
             Spacer()
-            Text("\(game.made)/\(FootballGame.kicksPerGame)")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-                .monospacedDigit()
-            if game.currentStreak >= 2 {
-                Text("🔥\(game.currentStreak)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.orange)
+            VStack(alignment: .trailing, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text("\(game.made)/\(FootballGame.kicksPerGame)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white)
+                        .monospacedDigit()
+                    if game.currentStreak >= 2 {
+                        Text("🔥\(game.currentStreak)")
+                            .font(.caption.weight(.bold))
+                            .foregroundStyle(.orange)
+                    }
+                }
+                if game.bestStreak > game.currentStreak && game.bestStreak >= 3 {
+                    Text("best 🔥\(game.bestStreak)")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.orange.opacity(0.7))
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -541,9 +550,14 @@ struct SoccerView: View {
                         .foregroundStyle(.white)
                         .monospacedDigit()
                     if game.saves > 0 {
-                        Text("🧤 \(game.saves) save\(game.saves == 1 ? "" : "s")")
+                        let savePct = game.botShots > 0 ? Int(Double(game.saves) / Double(game.botShots) * 100) : 0
+                        Text("🧤 \(game.saves) save\(game.saves == 1 ? "" : "s") (\(savePct)%)")
                             .font(.system(size: 9))
-                            .foregroundStyle(.cyan.opacity(0.8))
+                            .foregroundStyle(savePct >= 50 ? .green : .cyan.opacity(0.8))
+                    } else if game.phase == .keeping && game.botShots > 0 {
+                        Text("🎯 No saves yet")
+                            .font(.system(size: 9))
+                            .foregroundStyle(.red.opacity(0.7))
                     }
                 }
                 Spacer()
@@ -810,15 +824,26 @@ struct HockeyView: View {
                     .foregroundStyle(.white.opacity(0.85))
                     .monospacedDigit()
             }
-            // Comeback indicator
-            if game.maxDeficit >= 2 {
-                Spacer()
-                Text("↩ -\(game.maxDeficit)")
-                    .font(.caption2.weight(.bold))
-                    .foregroundStyle(.orange)
-                    .padding(.horizontal, 5)
-                    .padding(.vertical, 2)
-                    .background(.orange.opacity(0.12), in: Capsule())
+            Spacer()
+            VStack(spacing: 3) {
+                // Shutout progress chip
+                if game.botGoals == 0 && game.yourGoals > 0 && !game.isOver {
+                    Text("🥅 Shutout?")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.cyan)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.cyan.opacity(0.12), in: Capsule())
+                }
+                // Comeback indicator
+                if game.maxDeficit >= 2 {
+                    Text("↩ -\(game.maxDeficit)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.orange)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 2)
+                        .background(.orange.opacity(0.12), in: Capsule())
+                }
             }
         }
         .padding(.horizontal, 8)

@@ -59,6 +59,14 @@ struct UnoColorPicker: View {
     var session: GameSession
     @State private var appeared = false
 
+    var bestColor: UnoColor? {
+        guard let game = session.game?.engine as? UnoGame else { return nil }
+        let seat = session.perspectiveSeat
+        let hand = game.hands[seat]
+        let counts = Dictionary(grouping: hand.compactMap(\.color), by: { $0 })
+        return UnoColor.allCases.max { (counts[$0]?.count ?? 0) < (counts[$1]?.count ?? 0) }
+    }
+
     var body: some View {
         VStack(spacing: 14) {
             Text("Pick a Color")
@@ -66,6 +74,7 @@ struct UnoColorPicker: View {
                 .foregroundStyle(.white)
             HStack(spacing: 14) {
                 ForEach(Array(UnoColor.allCases.enumerated()), id: \.element) { index, color in
+                    let isBest = color == bestColor
                     Button {
                         if let card = pendingWild {
                             session.submit(.uno(.play(card, declared: color)))
@@ -76,14 +85,23 @@ struct UnoColorPicker: View {
                             Circle()
                                 .fill(UnoCardView.color(color))
                                 .frame(width: 44, height: 44)
-                                .overlay(Circle().strokeBorder(.white.opacity(0.6), lineWidth: 2))
-                            Text(color.rawValue.capitalized)
-                                .font(.caption.weight(.bold))
-                                .foregroundStyle(.white)
+                                .overlay(Circle().strokeBorder(isBest ? Color.white : Color.white.opacity(0.6),
+                                                               lineWidth: isBest ? 3 : 2))
+                                .shadow(color: isBest ? UnoCardView.color(color).opacity(0.7) : .clear, radius: 10)
+                            VStack(spacing: 1) {
+                                Text(color.rawValue.capitalized)
+                                    .font(.caption.weight(.bold))
+                                    .foregroundStyle(.white)
+                                if isBest {
+                                    Text("Best")
+                                        .font(.system(size: 8, weight: .black))
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
                         }
                     }
                     .buttonStyle(PressableTileStyle())
-                    .scaleEffect(appeared ? 1.0 : 0.5)
+                    .scaleEffect(appeared ? (isBest ? 1.1 : 1.0) : 0.5)
                     .animation(.spring(response: 0.35, dampingFraction: 0.6).delay(Double(index) * 0.06),
                                value: appeared)
                 }
@@ -98,6 +116,8 @@ struct UnoColorPicker: View {
 struct UnoView: View {
     @ObservedObject var session: GameSession
     @State private var pendingWild: UnoCard? = nil
+    // Improvement 18: Wild Draw Four background flash
+    @State private var wildDrawFourFlash = false
 
     var game: UnoGame? { session.game?.engine as? UnoGame }
 
@@ -120,7 +140,22 @@ struct UnoView: View {
                             guard acting else { return }
                             session.submit(.uno(game.drewThisTurn ? .pass : .draw))
                         } label: {
-                            ZStack {
+                            // Improvement 16: stacked phantom card-backs showing depth
+                            ZStack(alignment: .center) {
+                                // phantom cards offset behind
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(white: 0.12))
+                                    .frame(width: 56, height: 84)
+                                    .overlay(RoundedRectangle(cornerRadius: 8)
+                                        .strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                                    .offset(x: -2, y: -2)
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(white: 0.15))
+                                    .frame(width: 56, height: 84)
+                                    .overlay(RoundedRectangle(cornerRadius: 8)
+                                        .strokeBorder(.white.opacity(0.3), lineWidth: 1))
+                                    .offset(x: -1, y: -1)
+                                // main card face
                                 RoundedRectangle(cornerRadius: 9)
                                     .fill(drawLow ? Color(red: 0.5, green: 0.05, blue: 0.05) : Color(white: 0.18))
                                     .frame(width: 56, height: 84)
@@ -137,6 +172,18 @@ struct UnoView: View {
                                             .font(.system(size: 7, weight: .black))
                                             .foregroundStyle(.red.opacity(0.9))
                                     }
+                                    // Thin burndown bar: full deck starts at 108 cards
+                                    let fraction = min(1.0, Double(game.drawPile.count) / 108.0)
+                                    GeometryReader { geo in
+                                        RoundedRectangle(cornerRadius: 1)
+                                            .fill(.white.opacity(0.1))
+                                            .overlay(alignment: .bottom) {
+                                                RoundedRectangle(cornerRadius: 1)
+                                                    .fill(drawLow ? Color.red.opacity(0.8) : Color.white.opacity(0.5))
+                                                    .frame(height: geo.size.height * fraction)
+                                            }
+                                    }
+                                    .frame(width: 4, height: 18)
                                 }
                                 .foregroundStyle(.white)
                             }
@@ -147,13 +194,18 @@ struct UnoView: View {
                         if let top = game.topCard {
                             UnoCardView(card: top, width: 60)
                                 .overlay(alignment: .bottom) {
-                                    Text(game.activeColor.rawValue.capitalized)
-                                        .font(.caption2.weight(.bold))
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 2)
-                                        .background(UnoCardView.color(game.activeColor), in: Capsule())
-                                        .foregroundStyle(.white)
-                                        .offset(y: 14)
+                                    HStack(spacing: 3) {
+                                        Text(game.currentColorEmoji)
+                                            .font(.system(size: 10))
+                                        Text(game.activeColor.rawValue.capitalized)
+                                            .font(.caption2.weight(.bold))
+                                    }
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 2)
+                                    .background(UnoCardView.color(game.activeColor).opacity(0.9), in: Capsule())
+                                    .overlay(Capsule().strokeBorder(.white.opacity(0.4), lineWidth: 0.5))
+                                    .foregroundStyle(.white)
+                                    .offset(y: 14)
                                 }
                         }
 
@@ -194,6 +246,24 @@ struct UnoView: View {
                         .transition(.scale(scale: 0.88).combined(with: .opacity))
                 }
             }
+            // Improvement 18: Wild Draw Four deep purple background flash
+            .overlay {
+                if wildDrawFourFlash {
+                    Color(red: 0.28, green: 0.0, blue: 0.45)
+                        .opacity(0.3)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+            }
+            .onChange(of: game.topCard) { _, top in
+                guard let top, case .wildDrawFour = top.value else { return }
+                withAnimation(.easeIn(duration: 0.1)) { wildDrawFourFlash = true }
+                Task { @MainActor in
+                    do { try await Task.sleep(nanoseconds: 500_000_000) } catch { return }
+                    withAnimation(.easeOut(duration: 0.4)) { wildDrawFourFlash = false }
+                }
+            }
             .animation(.spring(response: 0.3), value: pendingWild != nil)
         }
     }
@@ -227,19 +297,28 @@ struct UnoView: View {
                     Text(isMe ? "you" : "S\(seat+1)")
                         .font(.system(size: 8, weight: .semibold))
                         .foregroundStyle(isCurrent ? Color.yellow : .white.opacity(0.5))
-                    // Color distribution pips for local player's hand
+                    // Color distribution pips for local player's hand (sorted by count, descending)
                     if isMe {
                         let colorCounts = Dictionary(grouping: game.hands[seat].compactMap(\.color), by: { $0 })
+                        let wildCount = game.hands[seat].filter { $0.color == nil }.count
+                        let sorted = UnoColor.allCases.sorted { (colorCounts[$0]?.count ?? 0) > (colorCounts[$1]?.count ?? 0) }
                         HStack(spacing: 2) {
-                            ForEach([UnoColor.red, .yellow, .green, .blue], id: \.self) { c in
+                            ForEach(sorted, id: \.self) { c in
                                 let n = colorCounts[c]?.count ?? 0
                                 if n > 0 {
                                     Text("\(n)")
-                                        .font(.system(size: 6, weight: .bold))
+                                        .font(.system(size: 7, weight: .bold))
                                         .foregroundStyle(.white)
-                                        .frame(width: 10, height: 10)
+                                        .frame(width: 11, height: 11)
                                         .background(UnoCardView.color(c), in: Circle())
                                 }
+                            }
+                            if wildCount > 0 {
+                                Text("W")
+                                    .font(.system(size: 6, weight: .black))
+                                    .foregroundStyle(.black)
+                                    .frame(width: 11, height: 11)
+                                    .background(Color.white, in: Circle())
                             }
                         }
                     }
@@ -266,9 +345,10 @@ struct UnoView: View {
                 let hasUno = game.calledUno.contains(seat) && game.hands[seat].count == 1
                 let exposed = game.hands[seat].count == 1 && !game.calledUno.contains(seat)
                 VStack(spacing: 4) {
+                    let seatDraws = game.drawsBySeat[seat]
                     SeatBadge(name: session.playerName(seat: seat),
                               isCurrent: !game.isOver && game.currentPlayer == seat,
-                              detail: "\(game.hands[seat].count) card\(game.hands[seat].count == 1 ? "" : "s")")
+                              detail: "\(game.hands[seat].count) card\(game.hands[seat].count == 1 ? "" : "s")\(seatDraws >= 2 ? " · ↓\(seatDraws)" : "")")
                     ZStack(alignment: .topTrailing) {
                         HStack(spacing: -14) {
                             ForEach(0..<min(game.hands[seat].count, 7), id: \.self) { _ in
@@ -367,13 +447,23 @@ struct SuitOverlayPicker: View {
     var session: GameSession
     @State private var appeared = false
 
+    var bestSuit: Suit? {
+        guard let game = session.game?.engine as? EightsGame else { return nil }
+        let seat = session.perspectiveSeat
+        let hand = game.hands[seat]
+        let counts = Dictionary(grouping: hand, by: \.suit).mapValues(\.count)
+        return Suit.allCases.max { (counts[$0] ?? 0) < (counts[$1] ?? 0) }
+    }
+
     var body: some View {
+        let best = bestSuit
         VStack(spacing: 14) {
             Text("Name a Suit")
                 .font(.title3.weight(.bold))
                 .foregroundStyle(.white)
             HStack(spacing: 16) {
                 ForEach(Array(Suit.allCases.enumerated()), id: \.element) { index, suit in
+                    let isBest = suit == best
                     Button {
                         if let card = pendingEight {
                             session.submit(.eights(.play(card, nominated: suit)))
@@ -383,20 +473,27 @@ struct SuitOverlayPicker: View {
                         VStack(spacing: 6) {
                             Text(suit.symbol)
                                 .font(.system(size: 44))
-                            Text(String(describing: suit).capitalized)
-                                .font(.caption.weight(.bold))
+                            VStack(spacing: 1) {
+                                Text(String(describing: suit).capitalized)
+                                    .font(.caption.weight(.bold))
+                                if isBest {
+                                    Text("Best")
+                                        .font(.system(size: 8, weight: .black))
+                                        .foregroundStyle(.yellow)
+                                }
+                            }
                         }
                         .foregroundStyle(suit.isRed ? Color(red: 0.85, green: 0.15, blue: 0.15) : .black)
-                        .frame(width: 68, height: 78)
+                        .frame(width: 68, height: isBest ? 86 : 78)
                         .background(.white, in: RoundedRectangle(cornerRadius: 14))
                         .overlay(RoundedRectangle(cornerRadius: 14)
-                            .strokeBorder(suit.isRed
+                            .strokeBorder(isBest ? Color.yellow : (suit.isRed
                                           ? Color(red: 0.85, green: 0.15, blue: 0.15).opacity(0.5)
-                                          : .black.opacity(0.25), lineWidth: 1.5))
-                        .shadow(color: .black.opacity(0.3), radius: 8, y: 4)
+                                          : .black.opacity(0.25)), lineWidth: isBest ? 2.5 : 1.5))
+                        .shadow(color: isBest ? Color.yellow.opacity(0.4) : .black.opacity(0.3), radius: isBest ? 12 : 8, y: 4)
                     }
                     .buttonStyle(PressableTileStyle())
-                    .scaleEffect(appeared ? 1.0 : 0.5)
+                    .scaleEffect(appeared ? (isBest ? 1.08 : 1.0) : 0.5)
                     .animation(.spring(response: 0.35, dampingFraction: 0.6).delay(Double(index) * 0.06),
                                value: appeared)
                 }
@@ -427,10 +524,11 @@ struct EightsView: View {
                     HStack(spacing: 12) {
                         ForEach(1..<4, id: \.self) { offset in
                             let seat = (perspective + offset) % 4
+                            let drawn = game.cardsDrawnBySeat[seat]
                             VStack(spacing: 4) {
                                 SeatBadge(name: session.playerName(seat: seat),
                                           isCurrent: !game.isOver && game.currentPlayer == seat,
-                                          detail: "\(game.hands[seat].count) cards")
+                                          detail: "\(game.hands[seat].count) cards\(drawn > 0 ? " · ↑\(drawn)drawn" : "")")
                                 OpponentHandView(count: min(game.hands[seat].count, 8), width: 18)
                             }
                             .frame(maxWidth: .infinity)
@@ -442,17 +540,22 @@ struct EightsView: View {
 
                     // Eights stats + draw chain indicator
                     HStack(spacing: 8) {
-                        if game.eightPlays > 0 || game.suitChanges > 0 {
+                        if game.eightPlays > 0 || game.queensPlayed > 0 || game.biggestDrawHit >= 4 {
                             HStack(spacing: 6) {
                                 if game.eightPlays > 0 {
                                     Label("\(game.eightPlays)", systemImage: "8.circle.fill")
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(.white.opacity(0.85))
                                 }
-                                if game.suitChanges > 0 {
-                                    Text("\(game.suitChanges) suit\(game.suitChanges == 1 ? "" : "s")")
+                                if game.queensPlayed > 0 {
+                                    Text("Q×\(game.queensPlayed)")
                                         .font(.caption2.weight(.semibold))
                                         .foregroundStyle(.white.opacity(0.7))
+                                }
+                                if game.biggestDrawHit >= 4 {
+                                    Text("💣\(game.biggestDrawHit)")
+                                        .font(.caption2.weight(.bold))
+                                        .foregroundStyle(.orange.opacity(0.9))
                                 }
                             }
                             .padding(.horizontal, 10)
@@ -488,7 +591,16 @@ struct EightsView: View {
                                 session.submit(.eights(.draw))
                             }
                         } label: {
+                            // Improvement 17: stacked phantom card-backs showing depth
                             ZStack {
+                                if !game.stock.isEmpty {
+                                    FaceDownCardView(width: 56)
+                                        .offset(x: -2, y: -2)
+                                        .opacity(0.55)
+                                    FaceDownCardView(width: 56)
+                                        .offset(x: -1, y: -1)
+                                        .opacity(0.75)
+                                }
                                 if game.stock.isEmpty {
                                     CardSlotView(width: 56, label: "—")
                                 } else {
@@ -520,19 +632,24 @@ struct EightsView: View {
 
                     // Draw-two warning banner when penalty is pending.
                     if myTurn && game.pendingDraw > 0 {
+                        let drawIsBig = game.pendingDraw >= 8
+                        let drawIsLarge = game.pendingDraw >= 4
+                        let bannerColors: [Color] = drawIsBig
+                            ? [Color(red: 1.0, green: 0.18, blue: 0.18), Color(red: 0.85, green: 0.05, blue: 0.05)]
+                            : drawIsLarge
+                            ? [Color(red: 1.0, green: 0.45, blue: 0.1), Color(red: 0.95, green: 0.25, blue: 0.05)]
+                            : [Color(red: 1.0, green: 0.75, blue: 0.15), Color(red: 1.0, green: 0.55, blue: 0.1)]
                         HStack(spacing: 6) {
-                            Image(systemName: "exclamationmark.triangle.fill")
+                            Image(systemName: drawIsBig ? "flame.fill" : "exclamationmark.triangle.fill")
                                 .font(.caption.weight(.bold))
                             Text("DRAW \(game.pendingDraw) — play a 2 to stack or draw now")
                                 .font(.caption.weight(.semibold))
                         }
-                        .foregroundStyle(.black)
+                        .foregroundStyle(drawIsBig ? .white : .black)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 6)
                         .background(
-                            LinearGradient(colors: [Color(red: 1.0, green: 0.75, blue: 0.15),
-                                                    Color(red: 1.0, green: 0.55, blue: 0.1)],
-                                           startPoint: .leading, endPoint: .trailing),
+                            LinearGradient(colors: bannerColors, startPoint: .leading, endPoint: .trailing),
                             in: Capsule())
                         .scaleEffect(drawBannerPulse ? 1.04 : 1.0)
                         .onAppear { withAnimation(.easeInOut(duration: 0.6).repeatForever(autoreverses: true)) { drawBannerPulse = true } }

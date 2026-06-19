@@ -48,6 +48,8 @@ struct SpadesGame: GameEngine {
     var biggestSwingTeam = 0
     /// Successful nil bids per team across the game.
     var nilsMade = [0, 0]
+    /// Nil bids that failed (busted) per team.
+    var nilsBusted = [0, 0]
     /// Cumulative bags accumulated per seat across the game (individual, never reset).
     var seatBags = [0, 0, 0, 0]
     /// Count of "nil slams" — a nil made while partner sweeps the rest (≥12 tricks).
@@ -56,8 +58,25 @@ struct SpadesGame: GameEngine {
     var perfectBids = [0, 0]
     /// Track when either team reaches 7+ bags — penalty risk warning.
     var sandbagsWarned: Bool = false
+    /// True when any team is 7+ bags (within 3 of the 10-bag penalty).
+    var sandbagsWarning: Bool { teamBags[0] % 10 >= 7 || teamBags[1] % 10 >= 7 }
+
+    /// Warning level string based on bag count (empty when safe, ⚠️ at 7+, 🚨 at 9+).
+    var sandbagsWarningLevel: String {
+        let max0 = teamBags[0] % 10; let max1 = teamBags[1] % 10
+        let worst = Swift.max(max0, max1)
+        if worst >= 9 { return "🚨" }
+        if worst >= 7 { return "⚠️" }
+        return ""
+    }
     /// Tricks won per round per team (inner array = rounds, outer = teams).
     var teamTricksWonPerRound: [[Int]] = [[], []]
+    /// Nil bids attempted (indexed by seat 0-3, maps to nil bid count).
+    var nilBidsAttempted: Int = 0
+    /// Nil bids successfully made (tricks taken == 0 while bidding nil).
+    var nilBidsMade: Int = 0
+    /// Per-round overtricks (bags) accumulated by each team; outer = team, inner = rounds.
+    var overtricksPerRound: [[Int]] = [[], []]
 
     init() { startRound() }
 
@@ -170,7 +189,7 @@ struct SpadesGame: GameEngine {
                 if bid == 0 {
                     let made = tricksWon[seat] == 0
                     roundScore += made ? Self.nilBonus : -Self.nilBonus
-                    if made { nilsMade[team] += 1 }
+                    if made { nilsMade[team] += 1 } else { nilsBusted[team] += 1 }
                     let partner = (seat + 2) % 4
                     var slamNote = ""
                     if made && tricksWon[partner] >= 12 { nilSlams[team] += 1; slamNote = " 💎slam" }
@@ -211,7 +230,24 @@ struct SpadesGame: GameEngine {
                 biggestSwingTeam = team
             }
         }
-        lastRoundSummary = summaryParts.joined(separator: " · ")
+        let scoreStr = "T1 \(teamScores[0]) vs T2 \(teamScores[1])"
+        lastRoundSummary = (summaryParts + [scoreStr]).joined(separator: " · ")
+
+        // Track aggregate nil bid stats
+        for seat in 0..<4 {
+            if let bid = bids[seat], bid == 0 {
+                nilBidsAttempted += 1
+                if tricksWon[seat] == 0 { nilBidsMade += 1 }
+            }
+        }
+        // Record per-round overtricks per team
+        for team in 0...1 {
+            let seats = [team, team + 2]
+            let teamContract = seats.compactMap { bids[$0] }.filter { $0 > 0 }.reduce(0, +)
+            let teamTricks = tricksWon[seats[0]] + tricksWon[seats[1]]
+            let bags = teamContract > 0 && teamTricks > teamContract ? teamTricks - teamContract : 0
+            overtricksPerRound[team].append(bags)
+        }
 
         // Record tricks won this round per team
         for team in 0...1 {
@@ -255,15 +291,24 @@ struct SpadesGame: GameEngine {
                 let b = seatBags[s]; return b >= 2 ? "S\(s+1):\(b)bg" : nil
             }.joined(separator: " ")
             let bagExtra = seatBagDetail.isEmpty ? "" : " [\(seatBagDetail)]"
-            let bag0Critical = teamBags[0] >= 7 ? "⚠️ BAGS:\(teamBags[0]) · " : ""
-            let bag1Critical = teamBags[1] >= 7 ? "⚠️ BAGS:\(teamBags[1]) · " : ""
+            let warnLevel = sandbagsWarningLevel
+            let bag0Critical = teamBags[0] >= 7 ? "\(warnLevel) BAGS:\(teamBags[0]) · " : ""
+            let bag1Critical = teamBags[1] >= 7 ? "\(warnLevel) BAGS:\(teamBags[1]) · " : ""
             let criticalWarn = bag0Critical + bag1Critical
             let bagBar = "\(criticalWarn)bags \(teamBags[0])\(bag0Warn)/\(teamBags[1])\(bag1Warn)\(bagExtra)"
             let nilWarn = (0..<4).compactMap { seat -> String? in
                 guard bids[seat] == 0 && tricksWon[seat] > 0 else { return nil }
                 return "S\(seat + 1) nil busted!"
             }.first.map { " · 💀 \($0)" } ?? ""
-            return "R\(roundNumber) bids \(bidStr) · \(trickBar) · \(scoreBar) · \(bagBar)\(nilWarn)"
+            // Show "N to game" for the leading team when close to winning.
+            let toGame: String
+            let maxScore = teamScores.max() ?? 0
+            if maxScore >= 400 {
+                let leading = teamScores[0] >= teamScores[1] ? 0 : 1
+                let needed = Self.targetScore - teamScores[leading]
+                toGame = " · \(teamLabel(leading)) needs \(needed)"
+            } else { toGame = "" }
+            return "R\(roundNumber) bids \(bidStr) · \(trickBar) · \(scoreBar)\(toGame) · \(bagBar)\(nilWarn)"
         case .gameOver:
             return resultText ?? "Game over"
         }
@@ -273,29 +318,48 @@ struct SpadesGame: GameEngine {
         guard isOver else { return nil }
         let winner = teamScores[0] > teamScores[1] ? 0 : (teamScores[1] > teamScores[0] ? 1 : -1)
         if winner == -1 { return "Draw — \(teamScores[0]) each" }
+        let margin = abs(teamScores[winner] - teamScores[1 - winner])
         var text = "\(teamLabel(winner)) win \(teamScores[winner])–\(teamScores[1 - winner]) in \(roundNumber) round\(roundNumber == 1 ? "" : "s")"
+        if margin <= 30 { text += " (squeaker!)" }
         let totalBostons = bostonCount[0] + bostonCount[1]
         if totalBostons > 0 {
             let detail = (0...1).compactMap { bostonCount[$0] > 0 ? "\(teamLabel($0))×\(bostonCount[$0])" : nil }
             text += " · 🏆 Boston \(detail.joined(separator: " "))"
         }
+        // Nil bid summary: "3 nil made (N/S×2 E/W×1) · 1 busted"
         let totalNils = nilsMade[0] + nilsMade[1]
-        if totalNils > 0 { text += " · 🎯 \(totalNils) nil made" }
+        let totalBusted = nilsBusted[0] + nilsBusted[1]
+        if totalNils > 0 || totalBusted > 0 {
+            let nilDetail = (0...1).compactMap { nilsMade[$0] > 0 ? "\(teamLabel($0))×\(nilsMade[$0])" : nil }.joined(separator: " ")
+            var nilStr = totalNils > 0 ? "🎯 \(totalNils) nil (\(nilDetail))" : ""
+            if totalBusted > 0 { nilStr += (nilStr.isEmpty ? "" : " · ") + "💀 \(totalBusted) busted" }
+            text += " · \(nilStr)"
+        }
         if biggestSwing >= 100 { text += " · ⚡ \(teamLabel(biggestSwingTeam)) \(biggestSwing)pt swing" }
         let totalSlams = nilSlams[0] + nilSlams[1]
         if totalSlams > 0 { text += " · 💎 \(totalSlams) nil slam\(totalSlams == 1 ? "" : "s")" }
         let totalPerfect = perfectBids[0] + perfectBids[1]
-        if totalPerfect > 0 { text += " · 🎯 \(totalPerfect) exact bid\(totalPerfect == 1 ? "" : "s")" }
-        if let baggiest = (0..<4).max(by: { seatBags[$0] < seatBags[$1] }), seatBags[baggiest] >= 5 {
+        if totalPerfect >= 2 { text += " · 🎯 \(totalPerfect) exact bids" }
+        // Bag summary: highlight the worst offender
+        let maxSeatBags = seatBags.max() ?? 0
+        if let baggiest = seatBags.indices.max(by: { seatBags[$0] < seatBags[$1] }), maxSeatBags >= 4 {
             text += " · 🛍️ S\(baggiest + 1) \(seatBags[baggiest]) bags"
         }
-        if sandbagsWarned { text += " · ⚠️ Bag crisis!" }
-        // Average tricks per round per team
+        if sandbagsWarned { text += " · ⚠️ Bag penalties hit!" }
+        // Average tricks per round per team (only when ≥ 3 rounds played)
+        let winnerRounds = teamTricksWonPerRound[winner]
+        if winnerRounds.count >= 3 {
+            let avg = Double(winnerRounds.reduce(0, +)) / Double(winnerRounds.count)
+            text += " · \(teamLabel(winner)) avg \(String(format: "%.1f", avg)) tricks/rd"
+        }
+        // Aggregate nil bid accuracy
+        if nilBidsAttempted > 0 {
+            text += " · 🤫 Nil: \(nilBidsMade)/\(nilBidsAttempted)"
+        }
+        // Worst bag round (peak overtricks in a single round, per team)
         for team in 0...1 {
-            let rounds = teamTricksWonPerRound[team]
-            if rounds.count >= 3 {
-                let avg = Double(rounds.reduce(0, +)) / Double(rounds.count)
-                text += " · \(teamLabel(team)) avg \(String(format: "%.1f", avg)) tricks/rd"
+            if let worstBagRound = overtricksPerRound[team].max(), worstBagRound >= 3 {
+                text += " · 🛍️ \(teamLabel(team)) worst bag round: +\(worstBagRound)"
             }
         }
         return text

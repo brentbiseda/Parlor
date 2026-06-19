@@ -20,6 +20,8 @@ struct CheckersGame: GameEngine {
     var lastMoveDesc: String? = nil   // human-readable summary of the last move
     var jumpChainDepth = 0
     var longestMultiJump = 0
+    /// Count of moves that involved ≥2 captures (multi-jumps).
+    var multiJumpCount: Int = 0
     /// Total kings crowned per color this game.
     var kingsCreated = [0, 0]
     /// Tracks largest piece deficit for red (for comeback detection; negative means red was ahead).
@@ -30,6 +32,8 @@ struct CheckersGame: GameEngine {
     var kingToKingCaptures: Int = 0
     /// Pieces lost per color (0 = red, 1 = black).
     var piecesLost: [Int] = [0, 0]
+    /// Position hash frequency map for 3-fold repetition draw detection.
+    var positionHashes: [Int: Int] = [:]
 
     init() {
         for y in 0..<3 {
@@ -97,7 +101,7 @@ struct CheckersGame: GameEngine {
     }
 
     var isOver: Bool {
-        resigned != nil || legalBoardMoves(for: currentPlayer).isEmpty || movesWithoutCapture >= 80
+        resigned != nil || legalBoardMoves(for: currentPlayer).isEmpty || movesWithoutCapture >= 80 || isThreefoldRepetition
     }
 
     func legalMoves() -> [Move] {
@@ -149,7 +153,10 @@ struct CheckersGame: GameEngine {
             if isJump && !crowned && !jumps(from: m.to).isEmpty {
                 mustContinueFrom = m.to
             } else {
-                if jumpChainDepth > 1 { longestMultiJump = max(longestMultiJump, jumpChainDepth) }
+                if jumpChainDepth > 1 {
+                    longestMultiJump = max(longestMultiJump, jumpChainDepth)
+                    multiJumpCount += 1
+                }
                 mustContinueFrom = nil
                 currentPlayer = 1 - currentPlayer
                 // Track piece deficits for comeback detection (both colors)
@@ -159,6 +166,9 @@ struct CheckersGame: GameEngine {
                 if deficit > maxDeficit { maxDeficit = deficit }
                 let blackDeficit = redPieces - blackPieces
                 if blackDeficit > maxBlackDeficit { maxBlackDeficit = blackDeficit }
+                // Track position for 3-fold repetition
+                let hash = boardHash()
+                positionHashes[hash, default: 0] += 1
             }
         default:
             throw GameError.illegalMove
@@ -170,25 +180,49 @@ struct CheckersGame: GameEngine {
     func pieceCount(color: Int) -> Int { board.compactMap { $0 }.filter { $0.color == color }.count }
     func kingCount(color: Int) -> Int  { board.compactMap { $0 }.filter { $0.color == color && $0.king }.count }
 
+    /// Lightweight board state hash for 3-fold repetition detection.
+    func boardHash() -> Int {
+        var h = currentPlayer
+        for (i, piece) in board.enumerated() {
+            if let p = piece {
+                h ^= (i + 1) &* (p.color == 0 ? 0x9e3779b9 : 0x6b4c2a1f) &* (p.king ? 0xf0e4d3c2 : 0xa1b2c3d4)
+            }
+        }
+        return h
+    }
+
+    var isThreefoldRepetition: Bool {
+        positionHashes.values.contains { $0 >= 3 }
+    }
+
     var statusText: String {
         if let text = resultText { return text }
         let r = pieceCount(color: 0); let rk = kingCount(color: 0)
         let b = pieceCount(color: 1); let bk = kingCount(color: 1)
         let pieceInfo = "R:\(r)(K:\(rk)) B:\(b)(K:\(bk))"
-        if mustContinueFrom != nil { return "\(colorName(currentPlayer)) multi-jump · \(pieceInfo)" }
-        let mustJump = legalBoardMoves(for: currentPlayer).contains { abs($0.to.x - $0.from.x) == 2 }
-        let moveInfo = mustJump ? " — must capture" : " to move"
-        let drawWarn = movesWithoutCapture > 60 ? " · draw in \((80 - movesWithoutCapture) / 2)m" : ""
+        if mustContinueFrom != nil { return "⚡ \(colorName(currentPlayer)) multi-jump · \(pieceInfo)" }
+        let moves = legalBoardMoves(for: currentPlayer)
+        let captureCount = moves.filter { abs($0.to.x - $0.from.x) == 2 }.count
+        let moveInfo: String
+        if captureCount > 0 {
+            moveInfo = captureCount == 1 ? " — must capture!" : " — must capture (\(captureCount) options)"
+        } else {
+            moveInfo = " to move"
+        }
+        let repeatWarn = positionHashes.values.contains { $0 >= 2 } ? " · ⚠️ repeat×2" : ""
+        let drawWarn = movesWithoutCapture > 60 ? " · draw in \((80 - movesWithoutCapture) / 2)m\(repeatWarn)" : repeatWarn
         // Material edge (kings count double).
         let rMat = r + rk; let bMat = b + bk
         var edge = ""
         if rMat != bMat { edge = rMat > bMat ? " · R+\(rMat - bMat)" : " · B+\(bMat - rMat)" }
+        // Crown warning: pieces on back row that could be captured before crowning
         let lastStr = lastMoveDesc.map { " · \($0)" } ?? ""
-        return "\(colorName(currentPlayer))\(moveInfo) · \(pieceInfo)\(edge)\(drawWarn)\(lastStr)"
+        return "\(colorName(currentPlayer))\(moveInfo) · \(pieceInfo)\(edge)\(drawWarn.isEmpty ? "" : drawWarn)\(lastStr)"
     }
 
     var resultText: String? {
         if let resigned { return "\(colorName(resigned)) resigned — \(colorName(1 - resigned)) wins" }
+        if isThreefoldRepetition { return "Draw — position repeated 3 times" }
         if movesWithoutCapture >= 80 { return "Draw — no captures in 40 moves" }
         if legalBoardMoves(for: currentPlayer).isEmpty {
             let winner = colorName(1 - currentPlayer)
@@ -200,9 +234,10 @@ struct CheckersGame: GameEngine {
             var text = "\(winner) wins \(max(r, b))–\(min(r, b)) · \(loser) has no moves"
             if min(r, b) == 0 { text += " · 💪 total wipeout!" }
             else if max(r, b) - min(r, b) >= 6 { text += " · 👑 dominant win" }
-            if longestMultiJump > 1 { text += " · 🔗 \(longestMultiJump)-jump chain" }
+            if multiJumpCount > 0 { text += " · ⚡\(multiJumpCount) multi-jump\(multiJumpCount == 1 ? "" : "s")" }
+            if longestMultiJump > 1 { text += " · Max chain: \(longestMultiJump)" }
             let totalKings = kingsCreated[0] + kingsCreated[1]
-            if totalKings > 0 { text += " · ♛ \(totalKings) king\(totalKings == 1 ? "" : "s") crowned" }
+            if totalKings > 0 { text += " · Kings: R:\(kingsCreated[0]) B:\(kingsCreated[1])" }
             if kingToKingCaptures > 0 { text += " · 👑×\(kingToKingCaptures) king capture\(kingToKingCaptures == 1 ? "" : "s")" }
             if isComeback { text += " · 🔄 comeback from −\(maxDeficit)!" }
             let totalLost = piecesLost[0] + piecesLost[1]
@@ -215,7 +250,7 @@ struct CheckersGame: GameEngine {
     func ranking() -> [[Int]] {
         guard isOver else { return [] }
         if let resigned { return [[1 - resigned], [resigned]] }
-        if movesWithoutCapture >= 80 { return [[0, 1]] }
+        if movesWithoutCapture >= 80 || isThreefoldRepetition { return [[0, 1]] }
         return [[1 - currentPlayer], [currentPlayer]]
     }
 }

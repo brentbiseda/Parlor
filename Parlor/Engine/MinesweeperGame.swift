@@ -53,6 +53,21 @@ struct MinesweeperGame: GameEngine {
     var firstClearCascade: Int = 0
     /// Whether we've recorded the first cascade yet.
     private var firstClickDone: Bool = false
+    /// 3BV: minimum clicks needed to clear a board (complexity measure).
+    /// Computed lazily after mine placement. 0 = not yet computed.
+    var threeBV: Int = 0
+    /// True when the player won without placing any flags.
+    var wonWithoutFlags: Bool { won && !usedFlags }
+    /// Number of double-click chords performed (demonstrates advanced technique).
+    var chordsPerformed: Int = 0
+    /// Total cells revealed (excludes the triggering mine on a loss).
+    var cellsRevealed: Int = 0
+    /// Current number of flags placed on the board (mirrors flagged.count but tracked explicitly).
+    var flagsPlaced: Int = 0
+    /// Wall-clock time of the very first cell reveal (more accurate solve time than startTime).
+    var firstRevealTime: Date? = nil
+    /// Number of numbered revealed cells that are chord-ready (adjacent flag count == number, still have hidden neighbors).
+    var chordReadyCount: Int = 0
 
     var currentPlayer: Int { 0 }
     var won: Bool {
@@ -94,9 +109,32 @@ struct MinesweeperGame: GameEngine {
     var flagsLeft: Int { difficulty.mines - flagged.count }
     var flagCount: Int { flagged.count }
     var totalCells: Int { difficulty.width * difficulty.height }
+    /// Human-readable mine density: "Low (14%)", "Medium (21%)", "High (28%)".
+    var mineDensityLabel: String {
+        let pct = difficulty.mines * 100 / totalCells
+        let tier = pct < 18 ? "Low" : pct < 25 ? "Medium" : "High"
+        return "\(tier) (\(pct)%)"
+    }
     var efficiency: Int {
         guard won, difficulty.safeCells > 0 else { return 0 }
         return min(100, revealed.count * 100 / difficulty.safeCells)
+    }
+
+    /// Fraction of safe cells revealed (0.0–1.0); shown as % explored.
+    var revealEfficiency: Double {
+        Double(cellsRevealed) / Double(max(1, difficulty.safeCells))
+    }
+
+    /// Elapsed time measured from the first reveal (more accurate for solve time).
+    var firstRevealElapsed: Int {
+        guard let start = firstRevealTime else { return 0 }
+        return Int((endTime ?? Date()).timeIntervalSince(start))
+    }
+
+    /// mm:ss formatted time from first reveal.
+    var firstRevealTimerString: String {
+        let s = firstRevealElapsed
+        return s >= 60 ? "\(s / 60):\(String(format: "%02d", s % 60))" : "\(s)s"
     }
 
     /// mm:ss formatted elapsed time.
@@ -135,22 +173,26 @@ struct MinesweeperGame: GameEngine {
                 placeMines(avoiding: idx)
                 startTime = Date()
             }
+            if firstRevealTime == nil { firstRevealTime = Date() }
             moveCount += 1
             if mines.contains(idx) {
                 lost = true
                 revealed.insert(idx)
                 endTime = Date()
+                updateChordReady()
                 return
             }
             let before = revealed.count
             floodReveal(from: idx)
             let cascadeSize = revealed.count - before
+            cellsRevealed += cascadeSize
             biggestCascade = max(biggestCascade, cascadeSize)
             if !firstClickDone {
                 firstClearCascade = cascadeSize
                 firstClickDone = true
             }
             if won { endTime = Date() }
+            updateChordReady()
         case .flag(let x, let y):
             guard (0..<difficulty.width).contains(x),
                   (0..<difficulty.height).contains(y) else { throw GameError.illegalMove }
@@ -160,6 +202,7 @@ struct MinesweeperGame: GameEngine {
                 // Cycle: flag → ? → clear
                 flagged.remove(idx)
                 questioned.insert(idx)
+                flagsPlaced -= 1
             } else if questioned.contains(idx) {
                 questioned.remove(idx)
             } else {
@@ -167,8 +210,10 @@ struct MinesweeperGame: GameEngine {
                 let adjacentToFlag = neighbors(idx).contains { flagged.contains($0) }
                 if adjacentToFlag { patternFlags += 1 }
                 flagged.insert(idx)
+                flagsPlaced += 1
                 usedFlags = true
             }
+            updateChordReady()
         }
     }
 
@@ -187,13 +232,18 @@ struct MinesweeperGame: GameEngine {
                 chordStreak = 0
                 revealed.insert(n)
                 endTime = Date()
+                updateChordReady()
                 return
             }
+            let before = revealed.count
             floodReveal(from: n)
+            cellsRevealed += revealed.count - before
         }
         chordStreak += 1
+        chordsPerformed += 1
         if chordStreak > bestChordStreak { bestChordStreak = chordStreak }
         if won { endTime = Date() }
+        updateChordReady()
     }
 
     private mutating func placeMines(avoiding idx: Int) {
@@ -202,6 +252,45 @@ struct MinesweeperGame: GameEngine {
         let total = difficulty.width * difficulty.height
         let candidates = (0..<total).filter { !forbidden.contains($0) }
         mines = Set(candidates.shuffled().prefix(difficulty.mines))
+        threeBV = compute3BV()
+    }
+
+    /// 3BV = number of "opening" flood-fill groups + isolated non-mine cells
+    /// that aren't part of any opening. This is the theoretical minimum clicks.
+    private func compute3BV() -> Int {
+        let total = difficulty.width * difficulty.height
+        var visited = Set<Int>()
+        var openings = 0
+        // Count opening groups (zero-adjacent cells that flood into each other)
+        for idx in 0..<total where !mines.contains(idx) && adjacentMines(idx) == 0 {
+            if visited.contains(idx) { continue }
+            openings += 1
+            var frontier = [idx]
+            while let cur = frontier.popLast() {
+                guard !visited.contains(cur) else { continue }
+                visited.insert(cur)
+                if !mines.contains(cur) && adjacentMines(cur) == 0 {
+                    frontier.append(contentsOf: neighbors(cur).filter { !visited.contains($0) && !mines.contains($0) })
+                }
+            }
+        }
+        // Count isolated numbered cells not covered by any opening
+        let isolated = (0..<total).filter { !mines.contains($0) && adjacentMines($0) > 0 && !visited.contains($0) }.count
+        return openings + isolated
+    }
+
+    /// Recompute chordReadyCount: revealed numbered cells where flagged neighbors == count AND still have hidden neighbors.
+    private mutating func updateChordReady() {
+        chordReadyCount = 0
+        for idx in revealed {
+            let count = adjacentMines(idx)
+            guard count > 0 else { continue }
+            let nbrs = neighbors(idx)
+            let flaggedCount = nbrs.filter { flagged.contains($0) }.count
+            guard flaggedCount == count else { continue }
+            let hasHiddenNeighbor = nbrs.contains { !flagged.contains($0) && !revealed.contains($0) }
+            if hasHiddenNeighbor { chordReadyCount += 1 }
+        }
     }
 
     private mutating func floodReveal(from start: Int) {
@@ -231,12 +320,15 @@ struct MinesweeperGame: GameEngine {
         var tail = ""
         if remaining <= 10 && remaining > 0 { tail = " · 🏁 \(remaining) cell\(remaining == 1 ? "" : "s") to go!" }
         else if chordStreak >= 2 { tail = " · ⚡ chord ×\(chordStreak)" }
-        return "\(flagsLeft)/\(difficulty.mines) 💣 · \(pct)% clear\(efficiency) · \(timerString)\(tail)"
+        let flagStr = flagsPlaced > 0 ? " · 🚩\(flagsPlaced)" : ""
+        let chordStr = chordReadyCount > 0 ? " · ⌛\(chordReadyCount) chord" : ""
+        return "\(flagsLeft)/\(difficulty.mines) 💣\(flagStr) · \(pct)% clear\(efficiency) · \(timerString)\(chordStr)\(tail)"
     }
 
     var resultText: String? {
         if won {
-            var text = "✓ \(difficulty.label) cleared in \(timerString) · \(moveCount) moves"
+            let solveTimer = firstRevealTime != nil ? firstRevealTimerString : timerString
+            var text = "✓ \(difficulty.label) cleared in ⏱\(solveTimer) · \(moveCount) moves · density \(mineDensityLabel)"
             if moveCount > 0 {
                 let ratio = Double(difficulty.safeCells) / Double(moveCount)
                 if ratio >= 3.0 {
@@ -244,20 +336,25 @@ struct MinesweeperGame: GameEngine {
                     text += " · ⚡ \(ratioStr) cells/click"
                 }
             }
-            if !usedFlags { text += " · 🎯 No flags!" }
+            if wonWithoutFlags { text += " · 🎯 No flags!" }
             else if flagged.allSatisfy({ mines.contains($0) }) && !flagged.isEmpty {
                 text += " · 🎯 Perfect flagging!"
             }
             if bestChordStreak >= 3 { text += " · ⚡ \(bestChordStreak)× chord" }
+            if chordsPerformed > 0 { text += " · \(chordsPerformed) chord\(chordsPerformed == 1 ? "" : "s")" }
             if biggestCascade >= 20 { text += " · 💥 \(biggestCascade)-cell open" }
-            if firstClearCascade > 3 { text += " · 🎲 first click opened \(firstClearCascade) cells" }
-            text += " · Efficiency: \(efficiency)%"
+            if firstClearCascade > 3 { text += " · 🎲 first click +\(firstClearCascade)" }
+            if threeBV > 0 { text += " · 3BV: \(threeBV)" }
+            let exploredPct = Int(revealEfficiency * 100)
+            text += " · 🗺️ \(exploredPct)% explored"
             return text
         }
         if lost {
-            let pct = Int(Double(revealed.count - 1) / Double(difficulty.safeCells) * 100)
-            var text = "💥 \(difficulty.label) · survived \(elapsedSeconds)s · \(revealed.count - 1) safe (\(pct)%)"
+            let pct = Int(Double(max(0, revealed.count - 1)) / Double(difficulty.safeCells) * 100)
+            var text = "💥 \(difficulty.label) · survived \(timerString) · \(max(0, revealed.count - 1)) safe (\(pct)%)"
             if pct >= 90 { text += " · 😫 so close!" }
+            else if pct >= 75 { text += " · 💪 strong effort" }
+            if chordsPerformed > 0 { text += " · \(chordsPerformed) chord\(chordsPerformed == 1 ? "" : "s")" }
             return text
         }
         return nil

@@ -61,6 +61,16 @@ struct SnakeGame: GameEngine {
     var bonusFoodMissed = 0        // bonus stars that vanished uneaten
     var wallCollisions = 0        // times snake hit a wall/boundary
     var totalDistance: Int = 0    // total cells traveled (successful moves only)
+    var longestRun: Int = 0       // max consecutive bites without dying
+    var currentRunBites: Int = 0  // bites this life (resets on death)
+    var wallPatternsSeen: Int = 0 // count of distinct wall patterns encountered
+    var scorePerCell: Double { totalDistance > 0 ? Double(score) / Double(totalDistance) : 0 }
+    /// Best score achieved in each level (keyed by level number).
+    var levelBestScores: [Int: Int] = [:]
+    /// Score at the start of the current life (to track per-life delta).
+    var scoreAtLifeStart: Int = 0
+    /// Best per-life score (most points earned in a single life).
+    var bestLifeScore: Int = 0
 
     init() {
         spawnSnake()
@@ -70,6 +80,27 @@ struct SnakeGame: GameEngine {
 
     var currentPlayer: Int { 0 }
     var isOver: Bool { over }
+
+    var speedLabel: String {
+        switch level {
+        case 1...2: return "slow"
+        case 3...4: return "medium"
+        case 5...6: return "fast"
+        case 7...8: return "very fast"
+        default: return "blazing"
+        }
+    }
+
+    var currentLength: Int { body.count + growth }
+
+    /// Human-readable name for the current wall pattern (cycles every 6 levels).
+    var wallPatternName: String {
+        let names = ["Open", "Bars", "Pillars", "Cross", "Corners", "Diagonal"]
+        return names[(level - 1) % 6]
+    }
+
+    /// Number of segments currently in the snake (head + body).
+    var segmentCount: Int { body.count }
 
     static func index(_ x: Int, _ y: Int) -> Int { y * width + x }
     static func x(_ index: Int) -> Int { index % width }
@@ -238,12 +269,18 @@ struct SnakeGame: GameEngine {
             score += Self.pointsPerBite * level + comboBonus
             foodEaten += 1
             bitesThisLife += 1
+            currentRunBites += 1
+            if currentRunBites > longestRun { longestRun = currentRunBites }
             growth += Self.growthPerBite
             bestLength = max(bestLength, body.count + growth)
+            // Track best score per level
+            let existingBest = levelBestScores[level] ?? 0
+            if score > existingBest { levelBestScores[level] = score }
             if foodEaten % Self.bitesPerLevel == 0 {
                 level += 1
                 score += Self.levelBonus
                 justLeveledUp = true
+                wallPatternsSeen += 1
                 if deathsThisLevel == 0 {
                     perfectLevelCount += 1
                     score += 50 * (level - 1)    // 50×prev_level bonus for perfect run
@@ -263,14 +300,18 @@ struct SnakeGame: GameEngine {
     private mutating func loseLife() {
         bestTicksPerLife = max(bestTicksPerLife, ticksThisLife)
         bestBitesPerLife = max(bestBitesPerLife, bitesThisLife)
+        let lifeScore = score - scoreAtLifeStart
+        bestLifeScore = max(bestLifeScore, lifeScore)
         bitesThisLife = 0
         ticksThisLife = 0
+        currentRunBites = 0
         deathsThisLevel += 1
         totalDeaths += 1
         lives -= 1
         if lives <= 0 {
             over = true
         } else {
+            scoreAtLifeStart = score
             spawnSnake()
             placeFood()
             started = false
@@ -281,33 +322,41 @@ struct SnakeGame: GameEngine {
 
     var statusText: String {
         let liveDots = String(repeating: "●", count: max(lives, 0))
-        if justLeveledUp { return "Level \(level)! \(liveDots) · \(score) pts" }
+        if justLeveledUp { return "Level \(level)! \(liveDots) · \(score) pts · \(speedLabel) · \(wallPatternName)" }
         let comboStr = comboCount > 1 ? " · combo ×\(comboCount)" : ""
         let bonusStr: String
         if bonusFood != nil {
-            bonusStr = bonusTicks <= 5 ? " · ⭐ bonus \(bonusTicks)!" : " · ⭐ bonus!"
+            bonusStr = bonusTicks <= 5 ? " · ⭐\(bonusTicks)!" : " · ⭐ bonus"
         } else { bonusStr = "" }
         let bitesLeft = Self.bitesPerLevel - (foodEaten % Self.bitesPerLevel)
         let nextStr = bitesLeft <= 2 ? " · \(bitesLeft)→L\(level + 1)" : ""
-        return "Score \(score) · L\(level) · \(liveDots)\(comboStr)\(bonusStr)\(nextStr)"
+        let speedStr = level > 3 ? " · \(speedLabel)" : ""
+        let lenStr = segmentCount > 3 ? " · len \(segmentCount)" : ""
+        let patternStr = level > 1 ? " · \(wallPatternName)" : ""
+        return "Score \(score) · L\(level) · \(liveDots)\(lenStr)\(comboStr)\(bonusStr)\(nextStr)\(speedStr)\(patternStr)"
     }
 
     var resultText: String? {
         guard over else { return nil }
         var text = "Game over — \(score) pts · L\(level) · \(foodEaten) bites · peak \(bestLength) segs"
         if bonusFoodEaten > 0 {
-            text += " · ⭐ \(bonusFoodEaten) bonus"
+            text += " · ⭐\(bonusFoodEaten) bonus"
             let attempts = bonusFoodEaten + bonusFoodMissed
-            if attempts > 0 && bonusFoodMissed == 0 { text += " (all grabbed!)" }
+            if attempts > 0 && bonusFoodMissed == 0 { text += " (all!)" }
         }
-        if bestTicksPerLife > 0 { text += " · best run: \(bestTicksPerLife) ticks" }
+        if longestRun > 0 { text += " · 🏃 \(longestRun) run" }
+        if wallPatternsSeen > 0 { text += " · 🗺 \(wallPatternsSeen) pattern\(wallPatternsSeen == 1 ? "" : "s")" }
+        if bestLifeScore > 0 { text += " · 🔥 best life: \(bestLifeScore) pts" }
         if perfectLevelCount > 0 { text += " · ⭐ \(perfectLevelCount) perfect level\(perfectLevelCount == 1 ? "" : "s")" }
         if bestCombo >= 3 { text += " · ⚡ best combo ×\(bestCombo)" }
         let liveBites = max(bestBitesPerLife, bitesThisLife)
         if liveBites >= 6 { text += " · 🍎 \(liveBites) bites in one life" }
         if totalDeaths <= 1 && level > 2 { text += " · 🛡️ steady hand" }
         if wallCollisions > 0 { text += " · 💀 \(wallCollisions) wall hit\(wallCollisions == 1 ? "" : "s")" }
-        if totalDistance > 0 { text += " · Traveled \(totalDistance) cells" }
+        if totalDistance > 0 {
+            text += " · \(totalDistance) cells"
+            if scorePerCell >= 1.0 { text += " (\(String(format: "%.1f", scorePerCell)) pts/cell)" }
+        }
         return text
     }
 }

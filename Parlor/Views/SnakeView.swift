@@ -11,6 +11,11 @@ struct SnakeView: View {
     @State private var lastLevel = 1
     @State private var scorePopup: String? = nil
     @State private var levelFlash = false
+    @State private var pressedDirection: GridDirection? = nil
+    // Popup upward drift (#7)
+    @State private var popupOffset: CGFloat = 0
+    // Speed chip flash (#8)
+    @State private var speedFlash = false
 
     var game: SnakeGame? { session.game?.engine as? SnakeGame }
 
@@ -24,18 +29,90 @@ struct SnakeView: View {
                         .font(.title2.weight(.black))
                         .foregroundStyle(.yellow)
                         .shadow(color: .black, radius: 3)
+                        // Upward drift animation (#7)
+                        .offset(y: popupOffset)
                         .transition(.move(edge: .top).combined(with: .opacity))
                         .allowsHitTesting(false)
+                        .onChange(of: scorePopup) { _, newVal in
+                            if newVal != nil {
+                                popupOffset = 0
+                                withAnimation(.easeOut(duration: 1.2)) { popupOffset = -20 }
+                            }
+                        }
+                }
+                // Tap-to-start overlay shown before the first move
+                if let game, !game.started, !game.isOver {
+                    tapToStartOverlay
                 }
             }
             .animation(.easeOut(duration: 0.5), value: scorePopup)
 
+            livesRow
             distanceChip
             controls
                 .padding(.bottom, 6)
         }
         .padding(.top, 6)
         .task(id: session.sessionID) { await clock() }
+    }
+
+    /// Pulsing "tap to start" overlay shown before the first move.
+    @ViewBuilder
+    var tapToStartOverlay: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "arrow.up.arrow.down.arrow.left.arrow.right")
+                .font(.system(size: 26, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+            Text("Swipe or tap arrows\nto start")
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .multilineTextAlignment(.center)
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .background(.black.opacity(0.65), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.22), lineWidth: 1))
+        .transition(.opacity)
+        .allowsHitTesting(false)
+    }
+
+    /// Lives shown as red hearts, lost lives as dim outlines.
+    @ViewBuilder
+    var livesRow: some View {
+        if let game, !game.isOver {
+            HStack(spacing: 5) {
+                ForEach(0..<SnakeGame.startingLives, id: \.self) { i in
+                    Image(systemName: i < game.lives ? "heart.fill" : "heart")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(i < game.lives
+                            ? Color(red: 0.95, green: 0.25, blue: 0.3)
+                            : .white.opacity(0.25))
+                        .animation(.spring(response: 0.3), value: game.lives)
+                }
+                Spacer()
+                VStack(spacing: 2) {
+                    Text("L\(game.level)")
+                        .font(.caption.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.8))
+                        .monospacedDigit()
+                    // Bite-dot progress toward next level
+                    let bitesDone = game.foodEaten % SnakeGame.bitesPerLevel
+                    HStack(spacing: 2) {
+                        ForEach(0..<SnakeGame.bitesPerLevel, id: \.self) { i in
+                            Circle()
+                                .fill(i < bitesDone ? Color.green : Color.white.opacity(0.2))
+                                .frame(width: 4, height: 4)
+                        }
+                    }
+                }
+                Spacer()
+                Text("\(game.score)")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .monospacedDigit()
+            }
+            .padding(.horizontal, 18)
+        }
     }
 
     private func clock() async {
@@ -140,6 +217,11 @@ struct SnakeView: View {
                                  with: .color(Color(red: 1.0, green: 0.85, blue: 0.2).opacity(0.35)))
                     // Countdown ring (shrinks as the bonus expires).
                     let frac = CGFloat(game.bonusTicks) / CGFloat(SnakeGame.bonusTTL)
+                    // Color transitions: green when fresh, orange midway, red when expiring
+                    let ringColor: Color
+                    if frac > 0.6 { ringColor = Color(red: 0.3, green: 0.9, blue: 0.3) }
+                    else if frac > 0.3 { ringColor = Color(red: 1.0, green: 0.65, blue: 0.1) }
+                    else { ringColor = Color(red: 0.95, green: 0.2, blue: 0.2) }
                     let ring = r.insetBy(dx: -3, dy: -3)
                     var arc = Path()
                     arc.addArc(center: CGPoint(x: ring.midX, y: ring.midY),
@@ -147,17 +229,19 @@ struct SnakeView: View {
                                startAngle: .degrees(-90),
                                endAngle: .degrees(-90 + 360 * Double(frac)),
                                clockwise: false)
-                    context.stroke(arc, with: .color(Color(red: 1.0, green: 0.9, blue: 0.3)), lineWidth: 2)
+                    context.stroke(arc, with: .color(ringColor), lineWidth: 2.5)
                     context.draw(Text("⭐").font(.system(size: min(cw, ch) * 0.85)), at: CGPoint(x: r.midX, y: r.midY))
                 }
             }
 
-            // Body, tail to head, fading toward the tail.
+            // Body, tail to head. t=0 is tail (dimmer), t=1 is head (bright).
+            // Opacity fades from 0.6 at tail to 1.0 at head for a gradient effect (#6).
             for (i, segment) in game.body.enumerated().reversed() {
                 let t = CGFloat(i) / CGFloat(max(game.body.count - 1, 1))
+                let segOpacity = 0.6 + 0.4 * t
                 let green = Color(red: 0.25 + 0.2 * t, green: 0.8 - 0.25 * t, blue: 0.3)
                 context.fill(Path(roundedRect: cellRect(segment), cornerRadius: min(cw, ch) * 0.3),
-                             with: .color(green))
+                             with: .color(green.opacity(segOpacity)))
             }
 
             // Head: brighter, with eyes anticipating the pending steer direction.
@@ -248,38 +332,99 @@ struct SnakeView: View {
     }
 
     /// Speed indicator in the bottom-left corner.
+    /// Pulses green when the snake reaches a new speed level (#8).
     @ViewBuilder
     var speedChip: some View {
         if let game, !game.isOver, game.started {
             let level = game.level
             let bars = min(level, 6)
-            HStack(spacing: 2) {
-                ForEach(0..<6, id: \.self) { i in
-                    RoundedRectangle(cornerRadius: 1)
-                        .fill(i < bars ? Color.green.opacity(0.9) : Color.white.opacity(0.15))
-                        .frame(width: 3, height: 4 + CGFloat(i) * 2)
+            let patternNames = ["open", "bar", "pillars", "cross", "corners", "diagonal"]
+            let currentPattern = patternNames[(level - 1) % 6]
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 2) {
+                    ForEach(0..<6, id: \.self) { i in
+                        RoundedRectangle(cornerRadius: 1)
+                            .fill(i < bars
+                                  ? (speedFlash ? Color.white : Color.green.opacity(0.9))
+                                  : Color.white.opacity(0.15))
+                            .frame(width: 3, height: 4 + CGFloat(i) * 2)
+                            .animation(.easeInOut(duration: 0.2), value: speedFlash)
+                    }
+                }
+                if level > 1 {
+                    Text(currentPattern)
+                        .font(.system(size: 7, weight: .semibold))
+                        .foregroundStyle(speedFlash ? .white : .white.opacity(0.55))
+                        .animation(.easeOut(duration: 0.4), value: speedFlash)
                 }
             }
             .padding(6)
+            .onChange(of: game.level) { _, _ in
+                speedFlash = true
+                Task { @MainActor in
+                    do {
+                        try await Task.sleep(nanoseconds: 600_000_000)
+                        speedFlash = false
+                    } catch { return }
+                }
+            }
         }
     }
 
     @ViewBuilder
     var distanceChip: some View {
-        if let game, game.totalDistance > 0 {
-            HStack(spacing: 6) {
-                Text("🛣️ \(game.totalDistance) cells")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.75))
+        if let game, game.totalDistance > 0 || game.started {
+            HStack(spacing: 8) {
+                // Current snake length
+                HStack(spacing: 2) {
+                    Image(systemName: "arrow.left.and.right")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.55))
+                    Text("\(game.currentLength)")
+                        .font(.caption2.weight(.bold))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .monospacedDigit()
+                }
+                if game.totalDistance > 0 {
+                    Divider().frame(height: 10).overlay(.white.opacity(0.2))
+                    // Distance traveled
+                    Text("🛣️\(game.totalDistance)")
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.65))
+                    // Score/cell efficiency
+                    let spc = game.scorePerCell
+                    if spc > 0 {
+                        let spcStr = String(format: "%.1f", spc)
+                        let effColor: Color = spc >= 3 ? .green : spc >= 1.5 ? .yellow : .white.opacity(0.5)
+                        Text("✦\(spcStr)/cell")
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(effColor)
+                    }
+                }
                 if game.bonusFoodEaten > 0 {
-                    Text("⭐ \(game.bonusFoodEaten) bonus")
+                    Divider().frame(height: 10).overlay(.white.opacity(0.2))
+                    Text("⭐×\(game.bonusFoodEaten)")
                         .font(.caption2)
                         .foregroundStyle(Color(red: 1.0, green: 0.85, blue: 0.2).opacity(0.9))
+                    if game.bonusFoodMissed > 0 {
+                        Text("✗\(game.bonusFoodMissed)")
+                            .font(.caption2)
+                            .foregroundStyle(.red.opacity(0.7))
+                    }
+                }
+                // Speed label when past level 3
+                if game.level > 3 {
+                    Divider().frame(height: 10).overlay(.white.opacity(0.2))
+                    let speedColor: Color = game.level >= 7 ? .red : game.level >= 5 ? .orange : .yellow
+                    Text(game.speedLabel)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(speedColor)
                 }
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 3)
-            .background(.black.opacity(0.35), in: Capsule())
+            .padding(.horizontal, 12)
+            .padding(.vertical, 4)
+            .background(.black.opacity(0.38), in: Capsule())
+            .overlay(Capsule().strokeBorder(.white.opacity(0.1), lineWidth: 0.5))
         }
     }
 
@@ -326,13 +471,21 @@ struct SnakeView: View {
     }
 
     func arrow(_ symbol: String, _ direction: GridDirection) -> some View {
-        Button { turn(direction) } label: {
+        let isPressed = pressedDirection == direction
+        return Button {
+            turn(direction)
+            pressedDirection = direction
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) { pressedDirection = nil }
+        } label: {
             Image(systemName: symbol)
                 .font(.title3.weight(.bold))
                 .frame(maxWidth: .infinity, minHeight: 40)
-                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
-                .foregroundStyle(.white)
+                .background(isPressed ? .white.opacity(0.35) : .white.opacity(0.12),
+                            in: RoundedRectangle(cornerRadius: 10))
+                .foregroundStyle(isPressed ? .yellow : .white)
+                .scaleEffect(isPressed ? 0.92 : 1.0)
         }
         .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.1), value: isPressed)
     }
 }

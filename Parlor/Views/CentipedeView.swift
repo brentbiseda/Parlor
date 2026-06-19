@@ -13,6 +13,9 @@ struct CentipedeView: View {
     }
 
     @StateObject private var holder = SceneHolder()
+    // Wave clear banner (#20)
+    @State private var waveBanner: String? = nil
+    @State private var waveBannerOpacity: Double = 0
 
     var game: CentipedeGame? { session.game?.engine as? CentipedeGame }
 
@@ -21,6 +24,18 @@ struct CentipedeView: View {
             if let g = game {
                 centipedeHeader(g)
                     .padding(.horizontal, 12)
+            }
+            // Wave clear banner overlay (#20)
+            if let banner = waveBanner {
+                Text(banner)
+                    .font(.title2.weight(.black))
+                    .foregroundStyle(.yellow)
+                    .shadow(color: .orange.opacity(0.8), radius: 8)
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 8)
+                    .background(.black.opacity(0.75), in: Capsule())
+                    .opacity(waveBannerOpacity)
+                    .animation(.easeInOut(duration: 0.4), value: waveBannerOpacity)
             }
             SpriteView(scene: holder.scene, options: [.allowsTransparency])
                 .aspectRatio(390.0 / 700.0, contentMode: .fit)
@@ -43,6 +58,19 @@ struct CentipedeView: View {
                 MainActor.assumeIsolated {
                     (session?.game?.engine as? CentipedeGame)?.isOver == false
                 }
+            }
+        }
+        .onChange(of: game?.level) { _, newLevel in
+            guard let newLevel else { return }
+            waveBanner = "WAVE \(newLevel)"
+            withAnimation(.easeIn(duration: 0.3)) { waveBannerOpacity = 1.0 }
+            Task { @MainActor in
+                do {
+                    try await Task.sleep(nanoseconds: 1_500_000_000)
+                    withAnimation(.easeOut(duration: 0.5)) { waveBannerOpacity = 0 }
+                    try await Task.sleep(nanoseconds: 500_000_000)
+                    waveBanner = nil
+                } catch { return }
             }
         }
     }
@@ -87,6 +115,24 @@ struct CentipedeView: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
                     .background(Color.white.opacity(0.08), in: Capsule())
+            }
+            // Deepest wave badge (when ahead of current wave)
+            if game.deepestWave > game.level {
+                Text("Peak W\(game.deepestWave)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.cyan)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.cyan.opacity(0.12), in: Capsule())
+            }
+            // Mushrooms destroyed badge
+            if game.mushroomsDestroyed >= 5 {
+                Text("🍄×\(game.mushroomsDestroyed)")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(Color(red: 0.8, green: 0.5, blue: 1.0))
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Color.purple.opacity(0.15), in: Capsule())
             }
         }
         .padding(.vertical, 4)
@@ -164,8 +210,10 @@ final class CentipedeScene: SKScene {
         mushrooms[index] = 2
         let node = SKShapeNode(circleOfRadius: cell * 0.32)
         node.position = gridPoint(col: col, row: row)
+        // Undamaged mushrooms: pink-red color
         node.fillColor = SKColor(red: 0.85, green: 0.45, blue: 0.55, alpha: 1)
         node.strokeColor = SKColor(white: 1, alpha: 0.5)
+        node.name = "mushroom_\(index)"
         addChild(node)
         mushroomNodes[index] = node
     }
@@ -352,7 +400,23 @@ final class CentipedeScene: SKScene {
                 onEvent?(.score(5))
             } else {
                 mushrooms[index] = hits
-                mushroomNodes[index]?.alpha = 0.55
+                // Damaged mushroom: brown/darker color + damage mark (#19)
+                if let node = mushroomNodes[index] {
+                    node.fillColor = SKColor(red: 0.62, green: 0.32, blue: 0.28, alpha: 1)
+                    node.alpha = 0.85
+                    // Add a horizontal damage slash across the mushroom
+                    let slashPath = CGMutablePath()
+                    let r = cell * 0.22
+                    slashPath.move(to: CGPoint(x: -r, y: 0))
+                    slashPath.addLine(to: CGPoint(x: r, y: 0))
+                    let slash = SKShapeNode(path: slashPath)
+                    slash.strokeColor = SKColor(white: 1, alpha: 0.7)
+                    slash.lineWidth = 2
+                    slash.name = "damage_slash"
+                    // Remove old slash if any, then add new one
+                    node.childNode(withName: "damage_slash")?.removeFromParent()
+                    node.addChild(slash)
+                }
             }
         case .segment(let i):
             SoundFX.shared.play(.brick)

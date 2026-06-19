@@ -368,12 +368,12 @@ struct BridgeGame: GameEngine {
     var statusText: String {
         switch phase {
         case .auction:
+            let nsVul = isVulnerable(side: 0)
+            let ewVul = isVulnerable(side: 1)
             let vul: String
-            switch dealNumber {
-            case 1: vul = "none vul"
-            case 2, 3: vul = "\(sideLabel(side(of: dealer))) vul"
-            default: vul = "both vul"
-            }
+            if !nsVul && !ewVul { vul = "none vul" }
+            else if nsVul && ewVul { vul = "🔴 both vul" }
+            else { vul = "🔴 \(nsVul ? "N/S" : "E/W") vul" }
             let bidInfo = currentBidLabel.map { " · bid: \($0)" } ?? " · no bid yet"
             let scoreInfo = " · \(sideLabel(0)) \(teamScores[0]) – \(sideLabel(1)) \(teamScores[1])"
             let hcp = TrickTaking.highCardPoints(hand: hands[0])

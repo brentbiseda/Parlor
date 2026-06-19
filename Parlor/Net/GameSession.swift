@@ -286,6 +286,8 @@ final class GameSession: ObservableObject {
         }
         do {
             try applyAndSync(move)
+        } catch GameError.illegalMove {
+            // silently swallow — views should guard before submitting illegal moves
         } catch {
             toast = error.localizedDescription
         }

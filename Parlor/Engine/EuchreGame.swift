@@ -42,6 +42,16 @@ struct EuchreGame: GameEngine {
     var lonersAttempted = [0, 0]
     /// "Perfect defense" — euchred an opponent who went alone, per team.
     var perfectDefenses = [0, 0]
+    /// Times each suit was called as trump (indexed by Suit.allCases order).
+    var trumpCallsBySuit: [Int] = [0, 0, 0, 0]
+    /// Count of alone declarations that resulted in a march (per team).
+    var aloneWins: [Int] = [0, 0]
+    /// Count of alone declarations that were attempted (per team) — mirrors lonersAttempted.
+    var aloneAttempts: [Int] = [0, 0]
+    /// Consecutive rounds where at least one player declared alone.
+    var loneStreak: Int = 0
+    /// Internal: tracks whether a loner was declared in the current round.
+    var currentRoundHasLoner: Bool = false
 
     init() {
         startRound()
@@ -61,6 +71,7 @@ struct EuchreGame: GameEngine {
         trickCounts = [0, 0, 0, 0]
         roundNumber += 1
         lastTrickSummary = nil
+        currentRoundHasLoner = false
         bidTurn = (dealer + 1) % 4
         phase = .orderingUp
     }
@@ -186,6 +197,13 @@ struct EuchreGame: GameEngine {
         if alone {
             aloneSeat = caller
             sittingOut = (caller + 2) % 4
+            let t = team(of: caller)
+            aloneAttempts[t] += 1
+            currentRoundHasLoner = true
+        }
+        // Track suit frequency
+        if let idx = Suit.allCases.firstIndex(of: suit) {
+            trumpCallsBySuit[idx] += 1
         }
     }
 
@@ -219,6 +237,8 @@ struct EuchreGame: GameEngine {
         guard let makerTeam else { return }
         if aloneSeat != nil { lonersAttempted[makerTeam] += 1 }
         let makerTricks = trickCounts[makerTeam] + trickCounts[makerTeam + 2]
+        let defTricksCount = 5 - makerTricks
+        let trickDetail = "\(makerTricks)-\(defTricksCount) tricks"
         let pts: Int
         let result: String
         if makerTricks >= 3 {
@@ -226,7 +246,10 @@ struct EuchreGame: GameEngine {
                 pts = aloneSeat != nil ? 4 : 2
                 result = aloneSeat != nil ? "March alone! +\(pts)" : "March! +\(pts)"
                 teamMarches[makerTeam] += 1
-                if aloneSeat != nil { teamLoneMarches[makerTeam] += 1 }
+                if aloneSeat != nil {
+                    teamLoneMarches[makerTeam] += 1
+                    aloneWins[makerTeam] += 1
+                }
             } else {
                 pts = 1
                 result = "Made it (+1)"
@@ -235,7 +258,8 @@ struct EuchreGame: GameEngine {
             teamRoundStreak[makerTeam] += 1
             teamRoundStreak[1 - makerTeam] = 0
             if teamRoundStreak[makerTeam] > teamBestStreak[makerTeam] { teamBestStreak[makerTeam] = teamRoundStreak[makerTeam] }
-            lastRoundResult = "\(teamLabel(makerTeam)) — \(result)"
+            let streakStr = teamRoundStreak[makerTeam] >= 2 ? " 🔥\(teamRoundStreak[makerTeam])" : ""
+            lastRoundResult = "\(teamLabel(makerTeam)) — \(result) \(trickDetail)\(streakStr)"
         } else {
             pts = 2
             teamScores[1 - makerTeam] += pts
@@ -244,7 +268,14 @@ struct EuchreGame: GameEngine {
             teamRoundStreak[1 - makerTeam] += 1
             teamRoundStreak[makerTeam] = 0
             if teamRoundStreak[1 - makerTeam] > teamBestStreak[1 - makerTeam] { teamBestStreak[1 - makerTeam] = teamRoundStreak[1 - makerTeam] }
-            lastRoundResult = "\(teamLabel(makerTeam)) euchred! +2 to defenders"
+            let eStreakStr = teamRoundStreak[1 - makerTeam] >= 2 ? " 🔥\(teamRoundStreak[1 - makerTeam])" : ""
+            lastRoundResult = "\(teamLabel(makerTeam)) euchred! \(trickDetail) +2 defenders\(eStreakStr)"
+        }
+        // Update lone streak
+        if currentRoundHasLoner {
+            loneStreak += 1
+        } else {
+            loneStreak = 0
         }
 
         if teamScores.contains(where: { $0 >= 10 }) {
@@ -307,10 +338,31 @@ struct EuchreGame: GameEngine {
         let bestStreak = max(teamBestStreak[0], teamBestStreak[1])
         if bestStreak >= 3 { stats.append("🔥 \(bestStreak)-round streak") }
         let totalLoners = lonersAttempted[0] + lonersAttempted[1]
-        if totalLoners > 0 { stats.append("\(totalLoneMarches)/\(totalLoners) loners made") }
+        if totalLoners > 0 {
+            let pct = Int(Double(totalLoneMarches) / Double(totalLoners) * 100)
+            let teamDetail = (0...1).compactMap { t -> String? in
+                guard lonersAttempted[t] > 0 else { return nil }
+                return "T\(t+1):\(aloneWins[t])/\(aloneAttempts[t])"
+            }.joined(separator: " ")
+            stats.append("\(totalLoneMarches)/\(totalLoners) loners (\(pct)%) [\(teamDetail)]")
+        }
         let totalDefenses = perfectDefenses[0] + perfectDefenses[1]
-        if totalDefenses > 0 { stats.append("🛡️ \(totalDefenses) perfect defense") }
+        if totalDefenses > 0 { stats.append("🛡️ \(totalDefenses) perfect defense\(totalDefenses == 1 ? "" : "s")") }
         if teamScores[1 - winner] == 0 { stats.append("🥋 skunk — \(teamScores[winner])–0!") }
+        // Trump suit breakdown
+        let suitSymbols = Suit.allCases.map { $0.symbol }
+        let totalTrumpCalls = trumpCallsBySuit.reduce(0, +)
+        let suitsCalled = trumpCallsBySuit.filter { $0 > 0 }.count
+        if suitsCalled >= 2 && totalTrumpCalls >= 4 {
+            let breakdown = trumpCallsBySuit.enumerated()
+                .filter { $0.element > 0 }
+                .sorted { $0.element > $1.element }
+                .map { "\(suitSymbols[$0.offset])×\($0.element)" }
+                .joined(separator: " ")
+            stats.append("trump split: \(breakdown)")
+        } else if let dt = trumpCallsBySuit.enumerated().max(by: { $0.element < $1.element }), dt.element >= 3 {
+            stats.append("\(suitSymbols[dt.offset]) dominant trump (\(dt.element)×)")
+        }
         if !stats.isEmpty { text += " · " + stats.joined(separator: " · ") }
         return text
     }

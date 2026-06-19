@@ -13,6 +13,10 @@ struct FreeCellView: View {
     @State private var selection: Selection? = nil
     @State private var autoFinishing = false
     @State private var autoFinishPulse = false
+    // Improvement 5: win flash overlay
+    @State private var completionFlash = false
+    // Improvement 4: free cell drop-target pulse
+    @State private var freeCellPulse: Bool = false
 
     var game: FreeCellGame? { session.game?.engine as? FreeCellGame }
 
@@ -50,6 +54,12 @@ struct FreeCellView: View {
         }
     }
 
+    /// Whether the game was won (all foundations complete, not deadlocked).
+    var gameWon: Bool {
+        guard let game else { return false }
+        return game.isOver && !game.deadlocked
+    }
+
     var body: some View {
         GeometryReader { geo in
             if let game {
@@ -62,20 +72,46 @@ struct FreeCellView: View {
                     Spacer(minLength: 0)
                 }
                 .padding(6)
+                // Improvement 5: brief white win flash overlay
+                .overlay {
+                    if completionFlash {
+                        Color.white.opacity(0.4)
+                            .ignoresSafeArea()
+                            .allowsHitTesting(false)
+                            .transition(.opacity)
+                    }
+                }
+                .onChange(of: gameWon) { _, won in
+                    guard won else { return }
+                    withAnimation(.easeIn(duration: 0.15)) { completionFlash = true }
+                    Task { @MainActor in
+                        do { try await Task.sleep(nanoseconds: 300_000_000) } catch { return }
+                        withAnimation(.easeOut(duration: 0.45)) { completionFlash = false }
+                    }
+                }
+                .overlay {
+                    if autoFinishing {
+                        RoundedRectangle(cornerRadius: 12)
+                            .strokeBorder(Color.green.opacity(0.7), lineWidth: 3)
+                            .animation(.easeInOut(duration: 0.5).repeatForever(autoreverses: true),
+                                       value: autoFinishing)
+                    }
+                }
                 .overlay(alignment: .bottom) {
                     VStack(spacing: 8) {
                         if game.deadlocked {
+                            let remaining = 52 - game.foundationCount
                             HStack(spacing: 6) {
                                 Image(systemName: "xmark.octagon.fill")
                                     .foregroundStyle(.red)
-                                Text("No moves — deal unwinnable")
+                                Text("Stuck after \(game.moveCount) moves · \(remaining) card\(remaining == 1 ? "" : "s") unplaced")
                                     .font(.caption.weight(.semibold))
                                     .foregroundStyle(.white)
                             }
                             .padding(.horizontal, 14)
                             .padding(.vertical, 6)
-                            .background(.red.opacity(0.2), in: Capsule())
-                            .overlay(Capsule().strokeBorder(.red.opacity(0.5), lineWidth: 1))
+                            .background(.red.opacity(0.25), in: Capsule())
+                            .overlay(Capsule().strokeBorder(.red.opacity(0.7), lineWidth: 1.5))
                         }
                         HStack(spacing: 12) {
                             if session.canUndo {
@@ -97,9 +133,9 @@ struct FreeCellView: View {
                                         .font(.headline)
                                 }
                                 .buttonStyle(.borderedProminent)
-                                .tint(.orange)
-                                .scaleEffect(autoFinishPulse ? 1.06 : 1.0)
-                                .shadow(color: .orange.opacity(autoFinishPulse ? 0.6 : 0.2), radius: autoFinishPulse ? 12 : 4)
+                                .tint(.green)
+                                .scaleEffect(autoFinishPulse ? 1.08 : 1.0)
+                                .shadow(color: .green.opacity(autoFinishPulse ? 0.75 : 0.25), radius: autoFinishPulse ? 16 : 5)
                                 .onAppear {
                                     withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
                                         autoFinishPulse = true
@@ -122,9 +158,6 @@ struct FreeCellView: View {
         let barColor: Color = fraction >= 0.8 ? .green : fraction >= 0.5 ? .yellow : .white.opacity(0.5)
         // Move efficiency: placed cards per move (higher is better)
         let efficiency = game.moveCount > 0 ? Double(placed) / Double(game.moveCount) : nil
-        let effLabel: String? = efficiency.map {
-            $0 >= 0.9 ? "⚡Efficient" : $0 >= 0.6 ? nil : nil
-        } ?? nil
         return HStack(spacing: 6) {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
@@ -140,15 +173,20 @@ struct FreeCellView: View {
                 Text("\(placed)/52")
                     .font(.system(size: 9, weight: .semibold))
                     .foregroundStyle(barColor)
-                if let label = effLabel {
-                    Text(label)
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.cyan)
-                } else if let eff = efficiency, game.moveCount > 5 {
+                if let eff = efficiency, game.moveCount > 5 {
                     let pct = Int(eff * 100)
-                    Text("\(pct)%/m")
-                        .font(.system(size: 9))
-                        .foregroundStyle(.white.opacity(0.4))
+                    let label = pct >= 90 ? "⚡\(pct)%" : pct >= 70 ? "✓\(pct)%" : "\(pct)%/m"
+                    let labelColor: Color = pct >= 90 ? .cyan : pct >= 70 ? .green : .white.opacity(0.4)
+                    Text(label)
+                        .font(.system(size: 9, weight: pct >= 70 ? .semibold : .regular))
+                        .foregroundStyle(labelColor)
+                }
+                // Supermoves chip: max cards moveable in one step
+                let maxMove = game.maxRunLength(toEmptyCascade: false)
+                if maxMove > 1 && !game.isOver {
+                    Text("↕\(maxMove)")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(maxMove >= 8 ? .green : maxMove >= 4 ? .cyan : .white.opacity(0.45))
                 }
             }
         }
@@ -159,27 +197,49 @@ struct FreeCellView: View {
         selection = nil
     }
 
+    /// Whether the currently selected card can be placed in a given free cell.
+    func canDropInFreeCell(_ cell: Int, game: FreeCellGame) -> Bool {
+        guard game.freeCells[cell] == nil else { return false }
+        switch selection {
+        case .cascade(let col, let index):
+            return index == game.cascades[col].count - 1
+        default:
+            return false
+        }
+    }
+
     func topRow(_ game: FreeCellGame, cardWidth: CGFloat) -> some View {
         HStack(spacing: 6) {
             // Free cells with usage indicator
             VStack(alignment: .leading, spacing: 2) {
                 let filledCells = game.freeCells.compactMap { $0 }.count
-                if filledCells > 0 {
-                    Text("\(filledCells)/4 cells")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(filledCells >= 3 ? .red.opacity(0.9) : .white.opacity(0.7))
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 1)
-                        .background(filledCells >= 3 ? Color.red.opacity(0.2) : Color.white.opacity(0.08), in: Capsule())
-                }
+                let freeCells = 4 - filledCells
+                // Improvement 6: colored "N free" pill
+                let pillColor: Color = freeCells == 4 ? .green : freeCells >= 2 ? .yellow : freeCells == 1 ? .orange : .red
+                Text("\(freeCells) free")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(freeCells == 0 ? .white : .black)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(pillColor.opacity(0.85), in: Capsule())
+                    .animation(.easeInOut(duration: 0.3), value: freeCells)
                 HStack(spacing: 6) {
                     ForEach(0..<4, id: \.self) { cell in
+                        let isDropTarget = canDropInFreeCell(cell, game: game)
                         Group {
                             if let card = game.freeCells[cell] {
                                 CardView(card: card, width: cardWidth)
                                     .overlay(selectionHighlight(selection == .free(cell), width: cardWidth))
                             } else {
                                 CardSlotView(width: cardWidth, label: "·")
+                                    // Improvement 4: pulsing yellow-green border on valid drop target free cells
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: cardWidth * 0.12)
+                                            .strokeBorder(
+                                                isDropTarget ? Color.yellow.opacity(0.9) : Color.clear,
+                                                lineWidth: isDropTarget ? 2.5 : 0
+                                            )
+                                    )
                             }
                         }
                         .onTapGesture { tapFreeCell(cell, game: game) }
@@ -223,11 +283,27 @@ struct FreeCellView: View {
         return card.suit
     }
 
+    /// Number of cards in a cascade that form a valid bottom-up ordered run.
+    func orderedRunLength(_ pile: [Card]) -> Int {
+        guard !pile.isEmpty else { return 0 }
+        var count = 1
+        for i in stride(from: pile.count - 1, through: 1, by: -1) {
+            let top = pile[i], below = pile[i - 1]
+            let altColors = top.suit.isRed != below.suit.isRed
+            let rankOk = below.rank.rawValue == top.rank.rawValue + 1
+            if altColors && rankOk { count += 1 } else { break }
+        }
+        return count
+    }
+
     func cascadeRow(_ game: FreeCellGame, cardWidth: CGFloat) -> some View {
         let overlap = cardWidth * 0.42
         return HStack(alignment: .top, spacing: 6) {
             ForEach(0..<8, id: \.self) { col in
                 let pile = game.cascades[col]
+                let runLen = orderedRunLength(pile)
+                let isFullyOrdered = runLen == pile.count && !pile.isEmpty
+                let orderColor: Color = isFullyOrdered ? .green : runLen >= 4 ? .cyan : .clear
                 ZStack(alignment: .top) {
                     if pile.isEmpty {
                         CardSlotView(width: cardWidth)
@@ -241,6 +317,14 @@ struct FreeCellView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .top)
+                .overlay(alignment: .bottom) {
+                    if orderColor != .clear {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(orderColor.opacity(0.22))
+                            .frame(height: 4)
+                            .padding(.horizontal, 2)
+                    }
+                }
             }
         }
     }
