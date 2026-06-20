@@ -61,6 +61,15 @@ final class AppModel: ObservableObject {
         session = GameSession(hosting: kind, options: options, transport: transport, myName: displayName)
     }
 
+    /// Host a shared "big screen" table: this device becomes a display-only
+    /// spectator and nearby phones join as the players (controllers).
+    func hostBigScreen(kind: GameKind, options: GameOptions) {
+        activeMatch = nil
+        noteRecent(kind)
+        let transport = MultipeerTransport(hostingGame: kind, hostName: "\(displayName)'s screen")
+        session = GameSession(bigScreen: kind, options: options, transport: transport, myName: displayName)
+    }
+
     private func noteRecent(_ kind: GameKind) {
         recentKinds.removeAll { $0 == kind }
         recentKinds.insert(kind, at: 0)
@@ -120,6 +129,7 @@ final class AppModel: ObservableObject {
         case let g as MuncherGame: return g.score > 0 || g.lives < 3
         case let g as HopperGame: return g.score > 0 || g.lives < 3
         case let g as CentipedeGame: return g.score > 0 || g.livesLost > 0
+        case let g as SolarStrikerGame: return g.score > 0 || g.livesLost > 0
         case let g as SnakeGame: return g.score > 0 || g.lives < 3
         case let g as FootballGame: return g.kicksTaken > 0
         case let g as BaseballGame: return g.pitchesSeen > 0
@@ -207,6 +217,9 @@ final class AppModel: ObservableObject {
             case let g as BaseballGame: won = false; score = g.score
             case let g as SoccerGame: won = g.won
             case let g as HockeyGame: won = g.won
+            case let g as TriviaGame:
+                won = g.ranking().first?.contains(seat) ?? false
+                score = seat < g.scores.count ? g.scores[seat] : nil
             default: break
             }
             let prevBest = stats.stats(for: game.kind).bestScore
@@ -272,6 +285,9 @@ final class AppModel: ObservableObject {
         case let g as SnakeGame where g.score > 0:
             leaderboards.record(kind: .snake, playerName: playerName, value: g.score,
                                 detail: "\(g.body.count) segments")
+        case let g as SolarStrikerGame where g.score > 0:
+            leaderboards.record(kind: .solarStriker, playerName: playerName, value: g.score,
+                                detail: "wave \(g.level)")
         case let g as BombermanGame where g.score > 0:
             leaderboards.record(kind: .bomberman, playerName: playerName, value: g.score,
                                 detail: g.levelsCleared > 0 ? "\(g.levelsCleared) lvl\(g.levelsCleared == 1 ? "" : "s")" : "Lv\(g.level)")

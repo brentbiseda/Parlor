@@ -100,24 +100,24 @@ struct BreakoutView: View {
             .padding(.horizontal, 14)
             .padding(.top, 2)
 
-            // Brick progress bar
-            if game.totalBricks > 0 {
-                let fraction = max(0, Double(game.totalBricks - game.bricksRemaining) / Double(game.totalBricks))
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.1))
-                        RoundedRectangle(cornerRadius: 2)
-                            .fill(LinearGradient(
-                                colors: [Color(red: 0.35, green: 0.75, blue: 1.0),
-                                         Color(red: 0.6, green: 0.4, blue: 0.9)],
-                                startPoint: .leading, endPoint: .trailing))
-                            .frame(width: geo.size.width * fraction)
-                            .animation(.easeOut(duration: 0.2), value: fraction)
-                    }
+            // Brick progress bar — always reserved so layout stays stable
+            let fraction = game.totalBricks > 0
+                ? max(0, Double(game.totalBricks - game.bricksRemaining) / Double(game.totalBricks))
+                : 0
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 2).fill(.white.opacity(0.1))
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(LinearGradient(
+                            colors: [Color(red: 0.35, green: 0.75, blue: 1.0),
+                                     Color(red: 0.6, green: 0.4, blue: 0.9)],
+                            startPoint: .leading, endPoint: .trailing))
+                        .frame(width: geo.size.width * fraction)
+                        .animation(.easeOut(duration: 0.2), value: fraction)
                 }
-                .frame(height: 4)
-                .padding(.horizontal, 14)
             }
+            .frame(height: 4)
+            .padding(.horizontal, 14)
         }
     }
 }

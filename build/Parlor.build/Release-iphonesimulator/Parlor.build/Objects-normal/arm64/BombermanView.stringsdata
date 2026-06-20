@@ -1,0 +1,272 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/BombermanView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Respawning…",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 65
+        }
+      },
+      {
+        "comment": "",
+        "key": "LEVEL %lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 91
+        }
+      },
+      {
+        "comment": "",
+        "key": "CLEARED!",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 94
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐ Perfect — no deaths! +500 pts",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 99
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld bonus",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "Level %lld incoming…",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lv%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "🏆%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 144
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 149
+        }
+      },
+      {
+        "comment": "",
+        "key": "💥r%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "⚡×%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 171
+        }
+      },
+      {
+        "comment": "",
+        "key": "📡",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 174
+        }
+      },
+      {
+        "comment": "",
+        "key": "🛡 %llds",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 176
+        }
+      },
+      {
+        "comment": "",
+        "key": "💀 %llds",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 180
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔵×%lld",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "👻×%lld",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 188
+        }
+      },
+      {
+        "comment": "",
+        "key": "😈×%lld",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 189
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 157
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 249
+        }
+      },
+      {
+        "comment": "",
+        "key": "💥",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 253
+        }
+      },
+      {
+        "comment": "",
+        "key": "⚡",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 257
+        }
+      },
+      {
+        "comment": "",
+        "key": "📡",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "💀",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 265
+        }
+      },
+      {
+        "comment": "",
+        "key": "🛡",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "🍒",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 290
+        }
+      },
+      {
+        "comment": "",
+        "key": "📡",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 532
+        }
+      },
+      {
+        "comment": "",
+        "key": "BOMB",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 533
+        }
+      },
+      {
+        "comment": "",
+        "key": "👟",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 549
+        }
+      },
+      {
+        "comment": "",
+        "key": "KICK",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 550
+        }
+      },
+      {
+        "comment": "",
+        "key": "📡",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 562
+        }
+      },
+      {
+        "comment": "",
+        "key": "BOOM",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 563
+        }
+      }
+    ]
+  },
+  "version": 1
+}

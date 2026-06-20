@@ -1,0 +1,40 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/CardViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 441
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 451
+        }
+      },
+      {
+        "comment": "",
+        "key": "You",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 516
+        }
+      },
+      {
+        "comment": "",
+        "key": "🤖",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 520
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -57,6 +57,11 @@ Default implementations (in `GameEngine` extension):
 - **SharePlay** — `GroupActivity` for FaceTime. Moves flow through `GroupSession` synchronization.
 - Both transports call back into `GameSession` which applies moves and publishes changes.
 
+### Big Screen mode (shared screen + phone controllers)
+`GameSession.init(bigScreen:…)` makes the host a **display-only spectator** (`isBigScreen = true`): it claims no seat (`mySeat = nil`, `localHumanSeats = []`), so `startHostedGame()` skips the seat-0 self-assignment and fills every seat with joining phones + bots. Nearby phones join through the normal `MultipeerTransport`/`joinNearby` path and each renders its per-seat `TableView` as a controller (a teal "Controller · Name" chip appears for clients). Entry point: `AppModel.hostBigScreen(kind:options:)`, surfaced as the "Host on a big screen" button in `GameSetupSheet`. Mirror the host device to a TV with AirPlay.
+
+The host keeps the **full authoritative game** (no special redaction). For hidden-hand games (`gameKind.hasHiddenInfo`) `TableView.gameBody` routes the host to `SpectatorTableView`, which reads the full game but renders **only public info** — face-down `OpponentHandView` fans sized to each seat's real `hands[seat].count`, the played `TrickPlay` cards (via `TrickGameAdapter.trick`), scores/roles (`seatDetail`), and `statusText` — so a face is never drawn and nothing leaks. Perfect-information games (chess/checkers/go/Star Party) reuse their normal board view on the screen; it's automatically non-interactive because every board view gates input on `session.actionableSeat`, which is `nil` for the seatless host.
+
 ## Game Engines
 
 ### Trick-Taking (Hearts, Spades, Euchre, Bridge)
@@ -114,6 +119,8 @@ Chess, Checkers, Go — in `BoardGameViews.swift`. Bot logic in `Bots.swift`.
 `CheckersGame`: `pieceCount(color:)` and `kingCount(color:)` helpers; `statusText` shows `"R:9(K:2) B:8(K:1)"` plus a trailing `lastMoveDesc` (e.g. `"· Red a3–b4"`, `"· Red c3×e5 ♛"` for crowned captures) built from `colLabel(_:)`/`cellLabel(_:)` (`"a"`–`"h"` / `"a1"`–`"h8"`). `resultText` adds `" · loser has no moves"` when applicable. `positionHashes: [Int: Int]` tracks position frequency for 3-fold repetition; `isThreefoldRepetition: Bool`; `statusText` shows `"⚠️ repeat×2"` when any position has appeared twice (warning before draw). Pieces one row from promotion show a hollow crown icon + gold glow ring in the board view. Bot eval adds center control bonus (inner 4×4 squares +0.07, outer ring +0.03).
 
 `GoGame`: `statusText` shows move number (`#N`), stone counts (●B ○W), captures, live atari count (`"⚠️ atari(N)"` when any groups are in atari), and estimated area score with leader margin. Coordinate labels rendered along board edges: letters A–T (skipping I) along bottom, numbers 1–N along left.
+
+`MarioPartyGame` (title **"Star Party"**, `Engine/MarioPartyGame.swift`, `Views/MarioPartyView.swift`) — a 4-player dice-and-board party game. Looping 24-space board (`static let board: [MPSpace]`; types: `.start`/`.blue`/`.red`/`.lucky`/`.item`/`.bowser`/`.event`). The only move is `.marioParty(.roll)`: the active seat rolls 1–10, hops that many spaces (buying a Star — cost 20 coins — when it passes/lands on the floating `starSpace`, which then relocates), then resolves the landing space's coin effect. After every full round of 4 turns a luck-based minigame (`Self.minigameNames`) pays the winner(s) `minigamePayout` coins. `isOver` when `round > totalRounds` (10); `ranking()` orders by stars then coins (ties grouped). Randomness uses a stored `seed: UInt64` driving `SplitMix64` (made `RandomNumberGenerator` in `ConfettiView.swift`) so results survive coding/sync. No hidden info → no handoff curtain. `MarioPartyView` lays spaces around a rounded-rectangle track via `boardPoint(_:count:size:inset:)`, animates tokens on `totalRolls`, and gates the ROLL button on `session.actionableSeat`; bot rolls arrive through the normal `GameSession` bot loop.
 
 ## Bots
 

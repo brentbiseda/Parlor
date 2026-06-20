@@ -1,0 +1,104 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/CapsulesView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "NEXT",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "QUEUE",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 213
+        }
+      },
+      {
+        "comment": "",
+        "key": "✓ Clear!",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 268
+        }
+      },
+      {
+        "comment": "",
+        "key": "VIRUSES",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 231
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 235
+        }
+      },
+      {
+        "comment": "",
+        "key": "×%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 261
+        }
+      },
+      {
+        "comment": "",
+        "key": "LEVEL %lld CLEAR!",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 316
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld pts total",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next Level →",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 348
+        }
+      },
+      {
+        "comment": "",
+        "key": "Viruses cleared: %lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 324
+        }
+      },
+      {
+        "comment": "",
+        "key": "Best chain: ×%lld 🔗",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 340
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pills used: %lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 328
+        }
+      }
+    ]
+  },
+  "version": 1
+}

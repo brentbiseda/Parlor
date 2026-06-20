@@ -1,0 +1,144 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/RecordViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Leaderboards",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 50
+        }
+      },
+      {
+        "comment": "",
+        "key": "Game",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 16
+        }
+      },
+      {
+        "comment": "",
+        "key": "Finish a game of %@ to claim the first spot.",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 28
+        }
+      },
+      {
+        "comment": "",
+        "key": "No records yet",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 26
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 77
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ · %@",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 37
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rankings",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 169
+        }
+      },
+      {
+        "comment": "",
+        "key": "Game",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "Finish a game of %@ — every player at the table gets a rating.",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 109
+        }
+      },
+      {
+        "comment": "",
+        "key": "No rated games",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 120
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld played · %@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 135
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 141
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 144
+        }
+      },
+      {
+        "comment": "",
+        "key": "—",
+        "location": {
+          "startingColumn": 77,
+          "startingLine": 144
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ ratings",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 164
+        }
+      },
+      {
+        "comment": "",
+        "key": "Elo ratings start at %lld and move after every finished game — humans and bots alike. Wins against stronger players count for more.",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 166
+        }
+      }
+    ]
+  },
+  "version": 1
+}

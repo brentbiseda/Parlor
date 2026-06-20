@@ -492,6 +492,7 @@ extension GameKind {
         case .chess: return .brown
         case .checkers: return Color(red: 0.75, green: 0.3, blue: 0.4)
         case .go: return Color(white: 0.35)
+        case .marioParty: return Color(red: 0.85, green: 0.2, blue: 0.35)
         case .pinball: return Color(red: 0.45, green: 0.2, blue: 0.75)
         case .breakout: return Color(red: 0.15, green: 0.5, blue: 0.75)
         case .tetris: return Color(red: 0.8, green: 0.35, blue: 0.55)
@@ -505,10 +506,12 @@ extension GameKind {
         case .centipede: return Color(red: 0.4, green: 0.65, blue: 0.2)
         case .snake: return Color(red: 0.2, green: 0.7, blue: 0.45)
         case .bomberman: return Color(red: 0.8, green: 0.35, blue: 0.1)
+        case .solarStriker: return Color(red: 0.1, green: 0.35, blue: 0.75)
         case .football: return Color(red: 0.45, green: 0.3, blue: 0.2)
         case .baseball: return Color(red: 0.7, green: 0.25, blue: 0.2)
         case .soccer: return Color(red: 0.15, green: 0.55, blue: 0.4)
         case .hockey: return Color(red: 0.25, green: 0.45, blue: 0.7)
+        case .trivia: return Color(red: 0.45, green: 0.18, blue: 0.72)
         }
     }
 }
@@ -1021,6 +1024,20 @@ struct GameSetupSheet: View {
                     } label: {
                         Label("Host a nearby table", systemImage: "antenna.radiowaves.left.and.right")
                     }
+                }
+
+                Section {
+                    Text("This device becomes the shared screen (mirror it to a TV with AirPlay). Everyone else joins from “Join a nearby game” and plays on their phone as a controller.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        model.hostBigScreen(kind: kind, options: options)
+                        dismiss()
+                    } label: {
+                        Label("Host on a big screen", systemImage: "tv.and.hifispeaker.fill")
+                    }
+                } header: {
+                    Text("On a big screen")
                 }
 
                 Section("With friends anywhere") {

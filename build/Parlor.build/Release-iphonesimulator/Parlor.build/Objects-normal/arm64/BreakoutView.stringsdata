@@ -1,0 +1,56 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/BreakoutView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Drag to move · tap to launch",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 34
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 67
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐×%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 85
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lv%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 58
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 74
+        }
+      },
+      {
+        "comment": "",
+        "key": "×%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 75
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,64 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/FreeCellView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Stuck after %lld moves · %lld card%@ unplaced",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "Move %lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "Undo",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 119
+        }
+      },
+      {
+        "comment": "",
+        "key": "Auto-finish",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 132
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/52",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 173
+        }
+      },
+      {
+        "comment": "",
+        "key": "↕%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld free",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 219
+        }
+      }
+    ]
+  },
+  "version": 1
+}

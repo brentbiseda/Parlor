@@ -52,9 +52,30 @@ enum Bot {
             let moves = game.legalMoves()
             let plays = moves.filter { if case .eights(.play) = $0 { return true }; return false }
             return plays.randomElement() ?? moves.randomElement()
+        case let g as TriviaGame:
+            return triviaBot(g, difficulty: .normal)
         default:
             let moves = game.legalMoves().filter { $0 != .resign }
             return moves.randomElement() ?? game.legalMoves().first
+        }
+    }
+
+    // MARK: - Trivia bot
+
+    private static func triviaBot(_ game: TriviaGame, difficulty: BotDifficulty) -> Move? {
+        guard !game.isOver, let q = game.currentQuestion else { return nil }
+        // Accuracy by difficulty
+        let accuracy: Double
+        switch difficulty {
+        case .easy:   accuracy = 0.55
+        case .normal: accuracy = 0.72
+        case .hard:   accuracy = 0.88
+        }
+        if Double.random(in: 0...1) < accuracy {
+            return .trivia(.answer(q.c))
+        } else {
+            let wrong = (0..<4).filter { $0 != q.c }.randomElement() ?? ((q.c + 1) % 4)
+            return .trivia(.answer(wrong))
         }
     }
 
@@ -105,6 +126,8 @@ enum Bot {
             return hardEightsMove(g)
         case let g as GoFishGame:
             return hardGoFishMove(g)
+        case let g as TriviaGame:
+            return triviaBot(g, difficulty: .hard)
         default:
             return nil   // bidding phases & solo games fall through to normal
         }

@@ -350,10 +350,6 @@ struct HandView: View {
                         let t = mid > 0 ? (CGFloat(index) - mid) / mid : 0
                         let lift: CGFloat = isSelected ? -22 : (enabled && isLegal ? -10 : 0)
                         CardView(card: card, width: cardWidth)
-                            .rotationEffect(.degrees(t * 7), anchor: .bottom)
-                            .offset(x: CGFloat(index) * step,
-                                    y: lift + t * t * 10)
-                            .opacity(!enabled || isLegal || !selected.isEmpty || legal.isEmpty ? 1 : 0.45)
                             .overlay(alignment: .top) {
                                 if enabled && isLegal && !isSelected {
                                     RoundedRectangle(cornerRadius: cardWidth * 0.12)
@@ -379,6 +375,10 @@ struct HandView: View {
                             .shadow(
                                 color: isSelected ? .yellow.opacity(0.7) : (enabled && isLegal ? .yellow.opacity(0.55) : .clear),
                                 radius: isSelected ? 14 : 10, y: isSelected ? 3 : 1)
+                            .rotationEffect(.degrees(t * 7), anchor: .bottom)
+                            .offset(x: CGFloat(index) * step,
+                                    y: lift + t * t * 10)
+                            .opacity(!enabled || isLegal || !selected.isEmpty || legal.isEmpty ? 1 : 0.45)
                             .onTapGesture {
                                 if enabled && legal.contains(card) {
                                     // Improvement 10: light haptic for legal card taps

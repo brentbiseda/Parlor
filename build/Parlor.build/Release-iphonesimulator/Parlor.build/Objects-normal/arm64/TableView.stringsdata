@@ -1,0 +1,208 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/TableView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Oops",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "Leave",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 68
+        }
+      },
+      {
+        "comment": "",
+        "key": "Match",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 99
+        }
+      },
+      {
+        "comment": "",
+        "key": "Controller · %@",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 136
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@%@%@%@",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 127
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pass the device",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "to %@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 342
+        }
+      },
+      {
+        "comment": "",
+        "key": "I'm %@ — show my cards",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 349
+        }
+      },
+      {
+        "comment": "",
+        "key": "Result recorded when you leave",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 495
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Personal Best!",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 435
+        }
+      },
+      {
+        "comment": "",
+        "key": "Better luck next time",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 444
+        }
+      },
+      {
+        "comment": "",
+        "key": "Well played!",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 444
+        }
+      },
+      {
+        "comment": "",
+        "key": "winner",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 475
+        }
+      },
+      {
+        "comment": "",
+        "key": "Play again",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 502
+        }
+      },
+      {
+        "comment": "",
+        "key": "Back to standings",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 506
+        }
+      },
+      {
+        "comment": "",
+        "key": "Leave table",
+        "location": {
+          "startingColumn": 77,
+          "startingLine": 506
+        }
+      },
+      {
+        "comment": "",
+        "key": "Waiting for players nearby…",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 631
+        }
+      },
+      {
+        "comment": "",
+        "key": "Waiting for the host to start…",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 632
+        }
+      },
+      {
+        "comment": "",
+        "key": "On each phone: open Parlor → **Join a nearby game**. Mirror this device to a TV with AirPlay for the full effect.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 643
+        }
+      },
+      {
+        "comment": "",
+        "key": "This is the shared screen",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 640
+        }
+      },
+      {
+        "comment": "",
+        "key": "you",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 684
+        }
+      },
+      {
+        "comment": "",
+        "key": "Will become a bot",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 677
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start game",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 719
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start with bots",
+        "location": {
+          "startingColumn": 72,
+          "startingLine": 719
+        }
+      }
+    ]
+  },
+  "version": 1
+}

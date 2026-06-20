@@ -1,0 +1,24 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/ArcadePause.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Paused",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 36
+        }
+      },
+      {
+        "comment": "",
+        "key": "Resume",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 38
+        }
+      }
+    ]
+  },
+  "version": 1
+}

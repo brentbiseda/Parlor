@@ -1,0 +1,200 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/MahjongView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 39
+        }
+      },
+      {
+        "comment": "",
+        "key": "· %lld pair%@",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 44
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥 ×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 49
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔀×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 57
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 63
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 107
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hint",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 123
+        }
+      },
+      {
+        "comment": "",
+        "key": "Shuffle",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 128
+        }
+      },
+      {
+        "comment": "",
+        "key": "E",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "S",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "W",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "N",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "中",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "發",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "白",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌸",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌷",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌼",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌺",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 212
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌱",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "☀️",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "🍂",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "❄️",
+        "location": {
+          "startingColumn": 45,
+          "startingLine": 216
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 224
+        }
+      }
+    ]
+  },
+  "version": 1
+}

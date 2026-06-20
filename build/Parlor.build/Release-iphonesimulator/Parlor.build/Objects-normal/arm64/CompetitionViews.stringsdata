@@ -1,0 +1,552 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/CompetitionViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Waiting for earlier rounds…",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 55
+        }
+      },
+      {
+        "comment": "",
+        "key": "Play match",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "Simulate",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "Name",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 82
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Human",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 84
+        }
+      },
+      {
+        "comment": "",
+        "key": "Add player",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 101
+        }
+      },
+      {
+        "comment": "",
+        "key": "Leagues",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 140
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create a league to play a season of scheduled matches against friends and bots.",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 119
+        }
+      },
+      {
+        "comment": "",
+        "key": "No leagues yet",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ · %lld players · %lld/%lld played",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 125
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ wins the league",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "New League",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 220
+        }
+      },
+      {
+        "comment": "",
+        "key": "League",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 176
+        }
+      },
+      {
+        "comment": "",
+        "key": "Schedule",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 203
+        }
+      },
+      {
+        "comment": "",
+        "key": "League name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 177
+        }
+      },
+      {
+        "comment": "",
+        "key": "Game",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 178
+        }
+      },
+      {
+        "comment": "",
+        "key": "Board",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 182
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot strength",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 188
+        }
+      },
+      {
+        "comment": "",
+        "key": "9 × 9",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 183
+        }
+      },
+      {
+        "comment": "",
+        "key": "13 × 13",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 184
+        }
+      },
+      {
+        "comment": "",
+        "key": "19 × 19",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 185
+        }
+      },
+      {
+        "comment": "",
+        "key": "Players",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 196
+        }
+      },
+      {
+        "comment": "",
+        "key": "3 or more players. Humans play pass-and-play on this device; bot-only matches can be simulated.",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 199
+        }
+      },
+      {
+        "comment": "",
+        "key": "A multiple of 4 players (tables seat four). Partnerships rotate from round to round.",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "Double round robin",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 205
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rounds: %lld",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 207
+        }
+      },
+      {
+        "comment": "",
+        "key": "Create league",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 214
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 223
+        }
+      },
+      {
+        "comment": "",
+        "key": "League deleted",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 320
+        }
+      },
+      {
+        "comment": "",
+        "key": "Standings",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 263
+        }
+      },
+      {
+        "comment": "",
+        "key": "#",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 266
+        }
+      },
+      {
+        "comment": "",
+        "key": "Player",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 267
+        }
+      },
+      {
+        "comment": "",
+        "key": "P",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 268
+        }
+      },
+      {
+        "comment": "",
+        "key": "W",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "D",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 270
+        }
+      },
+      {
+        "comment": "",
+        "key": "L",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 271
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pts",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 272
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 278
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 285
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 286
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 287
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 288
+        }
+      },
+      {
+        "comment": "",
+        "key": "Round %lld",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 298
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete league",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 313
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tournaments",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 359
+        }
+      },
+      {
+        "comment": "",
+        "key": "Set up a knockout bracket — survive every round to take the crown.",
+        "location": {
+          "startingColumn": 58,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "No tournaments yet",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 335
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ · %lld entrants",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 343
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ took the crown",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 348
+        }
+      },
+      {
+        "comment": "",
+        "key": "New Tournament",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 432
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tournament",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 392
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tournament name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 393
+        }
+      },
+      {
+        "comment": "",
+        "key": "Game",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 394
+        }
+      },
+      {
+        "comment": "",
+        "key": "Entrants",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 397
+        }
+      },
+      {
+        "comment": "",
+        "key": "Board",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 402
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot strength",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 408
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 86,
+          "startingLine": 398
+        }
+      },
+      {
+        "comment": "",
+        "key": "9 × 9",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 403
+        }
+      },
+      {
+        "comment": "",
+        "key": "13 × 13",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 404
+        }
+      },
+      {
+        "comment": "",
+        "key": "19 × 19",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 405
+        }
+      },
+      {
+        "comment": "",
+        "key": "Entrants",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 416
+        }
+      },
+      {
+        "comment": "",
+        "key": "Single elimination — the draw is random. Win or go home.",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 419
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tables of four; the top two finishers (the winning pair in partnership games) advance.",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 420
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start tournament",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 426
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 435
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tournament deleted",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 500
+        }
+      },
+      {
+        "comment": "",
+        "key": "Delete tournament",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 493
+        }
+      }
+    ]
+  },
+  "version": 1
+}

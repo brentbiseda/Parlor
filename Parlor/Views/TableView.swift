@@ -131,6 +131,17 @@ struct TableView: View {
                             .padding(.top, 4)
                         }
 
+                        // Joined phones are controllers for one seat.
+                        if session.role == .client, let seat = session.mySeat {
+                            Label("Controller · \(session.playerName(seat: seat))", systemImage: "gamecontroller.fill")
+                                .font(.caption2.weight(.bold))
+                                .foregroundStyle(.teal)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 3)
+                                .background(.teal.opacity(0.15), in: Capsule())
+                                .overlay(Capsule().strokeBorder(.teal.opacity(0.35), lineWidth: 0.75))
+                        }
+
                         HStack(spacing: 6) {
                             if session.actionableSeat != nil {
                                 Circle()
@@ -214,6 +225,19 @@ struct TableView: View {
 
     @ViewBuilder
     var gameBody: some View {
+        // A big-screen host renders a display-only spectator view. Hidden-hand
+        // games use a dedicated table that never draws a face; perfect-info
+        // games (board games) reuse their normal board, which is already
+        // non-interactive here because the screen holds no player seat.
+        if session.isBigScreen && session.lobby.gameKind.hasHiddenInfo {
+            SpectatorTableView(session: session)
+        } else {
+            perGameBody
+        }
+    }
+
+    @ViewBuilder
+    var perGameBody: some View {
         switch session.lobby.gameKind {
         case .hearts, .spades, .euchre, .bridge:
             TrickTableView(session: session)
@@ -221,6 +245,8 @@ struct TableView: View {
             GridBoardView(session: session)
         case .go:
             GoBoardView(session: session)
+        case .marioParty:
+            MarioPartyView(session: session)
         case .solitaire:
             KlondikeView(session: session)
         case .freecell:
@@ -263,6 +289,9 @@ struct TableView: View {
         case .bomberman:
             BombermanView(session: session)
                 .id(ObjectIdentifier(session))
+        case .solarStriker:
+            SolarStrikerView(session: session)
+                .id(ObjectIdentifier(session))
         case .football:
             FootballView(session: session)
                 .id(ObjectIdentifier(session))
@@ -274,6 +303,9 @@ struct TableView: View {
                 .id(ObjectIdentifier(session))
         case .hockey:
             HockeyView(session: session)
+                .id(ObjectIdentifier(session))
+        case .trivia:
+            TriviaView(session: session)
                 .id(ObjectIdentifier(session))
         }
     }
@@ -601,6 +633,22 @@ struct LobbyWaitView: View {
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.7))
                         .multilineTextAlignment(.center)
+                }
+
+                if session.isBigScreen {
+                    VStack(spacing: 6) {
+                        Label("This is the shared screen", systemImage: "tv.and.hifispeaker.fill")
+                            .font(.subheadline.weight(.bold))
+                            .foregroundStyle(.teal)
+                        Text("On each phone: open Parlor → **Join a nearby game**. Mirror this device to a TV with AirPlay for the full effect.")
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.75))
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(14)
+                    .frame(maxWidth: 360)
+                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
+                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.teal.opacity(0.3), lineWidth: 1))
                 }
 
                 // Seat roster.

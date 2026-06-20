@@ -20,6 +20,10 @@ final class GameSession: ObservableObject {
     let myName: String
     /// Stable across save/resume so suspended games upsert their entry.
     private(set) var sessionID = UUID()
+    /// Big-screen host: this device is a display-only spectator (no player
+    /// seat). Every seat is filled by a joining phone or a bot, and the host
+    /// renders a spectator view that only ever shows public information.
+    private(set) var isBigScreen = false
 
     @Published var lobby: LobbyState
     @Published var game: AnyGame?
@@ -104,6 +108,18 @@ final class GameSession: ObservableObject {
         wireTransport()
     }
 
+    /// Host a **big-screen** table: this device is a display-only spectator
+    /// and takes no seat. Phones join as the players; bots fill the rest when
+    /// the host starts.
+    init(bigScreen kind: GameKind, options: GameOptions, transport: any GameTransport, myName: String) {
+        role = .host
+        self.transport = transport
+        self.myName = myName
+        isBigScreen = true
+        lobby = LobbyState(gameKind: kind, options: options, hostID: Identity.playerID, players: [])
+        wireTransport()
+    }
+
     /// Join a networked table.
     init(joining transport: any GameTransport, expectedKind: GameKind?, myName: String) {
         role = .client
@@ -145,9 +161,12 @@ final class GameSession: ObservableObject {
             lobby.players.append(PlayerInfo(id: "bot-\(lobby.players.count)",
                                             name: "Bot \(lobby.players.count + 1)", isBot: true))
         }
-        mySeat = 0
-        localHumanSeats = [0]
-        revealedSeat = 0
+        // A big-screen host stays a pure spectator: it claims no seat.
+        if !isBigScreen {
+            mySeat = 0
+            localHumanSeats = [0]
+            revealedSeat = 0
+        }
         let fresh = AnyGame.make(kind: lobby.gameKind, options: lobby.options)
         game = fresh
         transport?.broadcast(.lobby(lobby))
@@ -338,6 +357,8 @@ final class GameSession: ObservableObject {
             SoundFX.shared.play(.cardDraw)
         case .fish:
             SoundFX.shared.play(.cardPlay)
+        case .marioParty(.roll):
+            SoundFX.shared.play(.launch)
         default:
             break
         }

@@ -1,0 +1,112 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/SnakeView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Swipe or tap arrows\nto start",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 66
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 109
+        }
+      },
+      {
+        "comment": "",
+        "key": "L%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 94
+        }
+      },
+      {
+        "comment": "",
+        "key": "🍎",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 207
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 233
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next: %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 301
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 322
+        }
+      },
+      {
+        "comment": "",
+        "key": "🛣️%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 391
+        }
+      },
+      {
+        "comment": "",
+        "key": "✦%@/cell",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 399
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐×%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 406
+        }
+      },
+      {
+        "comment": "",
+        "key": "✗%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 410
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 383
+        }
+      },
+      {
+        "comment": "",
+        "key": "Queued:",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 436
+        }
+      }
+    ]
+  },
+  "version": 1
+}

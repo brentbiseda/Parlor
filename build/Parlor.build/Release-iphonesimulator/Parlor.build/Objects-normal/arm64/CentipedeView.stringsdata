@@ -1,0 +1,64 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/CentipedeView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Drag to move — the blaster fires itself",
+        "location": {
+          "startingColumn": 19,
+          "startingLine": 47
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 90
+        }
+      },
+      {
+        "comment": "",
+        "key": "Wave %lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 95
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎯%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 103
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "Peak W%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "🍄×%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 130
+        }
+      }
+    ]
+  },
+  "version": 1
+}

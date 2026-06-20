@@ -110,7 +110,9 @@ struct ConfettiView: View {
 }
 
 /// Tiny deterministic RNG so every confetti piece gets stable parameters.
-struct SplitMix64 {
+/// Conforms to `RandomNumberGenerator` so engines can draw stdlib randoms
+/// (`Int.random(in:using:)`, `randomElement(using:)`) from a stored seed.
+struct SplitMix64: RandomNumberGenerator {
     var state: UInt64
     init(seed: UInt64) { state = seed }
 

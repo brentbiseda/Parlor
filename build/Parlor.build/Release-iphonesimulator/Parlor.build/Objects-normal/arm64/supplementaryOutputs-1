@@ -1,0 +1,12 @@
+{
+  "/Users/brentbiseda/Parlor/Parlor/App/AppModel.swift" : {
+    "abi-baseline-json" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor.abi.json",
+    "const-values" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor-primary.swiftconstvalues",
+    "dependencies" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor-primary.d",
+    "diagnostics" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor-primary.dia",
+    "objc-header" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor-Swift.h",
+    "swiftdoc" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor.swiftdoc",
+    "swiftmodule" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor.swiftmodule",
+    "swiftsourceinfo" : "/Users/brentbiseda/Parlor/build/Parlor.build/Release-iphonesimulator/Parlor.build/Objects-normal/arm64/Parlor.swiftsourceinfo"
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/KlondikeView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Undo",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 80
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hint",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 89
+        }
+      },
+      {
+        "comment": "",
+        "key": "Auto",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "Draw 3",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "Draw 1",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lldm",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 323
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 328
+        }
+      },
+      {
+        "comment": "",
+        "key": "↑%lld%%",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 338
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔗%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 343
+        }
+      },
+      {
+        "comment": "",
+        "key": "⏱%@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 348
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 369
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pass %lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 392
+        }
+      },
+      {
+        "comment": "",
+        "key": "↺%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 404
+        }
+      }
+    ]
+  },
+  "version": 1
+}

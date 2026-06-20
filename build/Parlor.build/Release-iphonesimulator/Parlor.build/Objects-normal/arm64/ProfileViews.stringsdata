@@ -1,0 +1,192 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/ProfileViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Profiles",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 294
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your stats",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 119
+        }
+      },
+      {
+        "comment": "",
+        "key": "Table felt",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 240
+        }
+      },
+      {
+        "comment": "",
+        "key": "Card back",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 269
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld rated games",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 55
+        }
+      },
+      {
+        "comment": "",
+        "key": "No rated games yet",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 56
+        }
+      },
+      {
+        "comment": "",
+        "key": "Who's playing?",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 81
+        }
+      },
+      {
+        "comment": "",
+        "key": "The active profile is your name at every table, on leaderboards, and in the rankings. Pass-and-play guests and bots get their own ranking entries automatically.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "New profile",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 93
+        }
+      },
+      {
+        "comment": "",
+        "key": "Career summary",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 117
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 177
+        }
+      },
+      {
+        "comment": "",
+        "key": "ELO",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 213
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 193
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 200
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 204
+        }
+      },
+      {
+        "comment": "",
+        "key": "—",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 208
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 66,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "Edit Profile",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 408
+        }
+      },
+      {
+        "comment": "",
+        "key": "Symbol",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 360
+        }
+      },
+      {
+        "comment": "",
+        "key": "Color",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 386
+        }
+      },
+      {
+        "comment": "",
+        "key": "Name",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 356
+        }
+      },
+      {
+        "comment": "",
+        "key": "Save",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 412
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 419
+        }
+      }
+    ]
+  },
+  "version": 1
+}

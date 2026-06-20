@@ -1,0 +1,64 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/PinballView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Jackpot %lld%%",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 52
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hold a side to flip · hold lane to launch",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 79
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "💰×%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 132
+        }
+      },
+      {
+        "comment": "",
+        "key": "×%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 141
+        }
+      },
+      {
+        "comment": "",
+        "key": "Ball:",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 121
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 124
+        }
+      }
+    ]
+  },
+  "version": 1
+}

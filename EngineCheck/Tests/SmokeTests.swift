@@ -84,6 +84,32 @@ final class SmokeTests: XCTestCase {
         }
         XCTAssertLessThan(game.lives, lives)
     }
+    func testMarioParty() { for _ in 0..<5 { playOut(.marioParty) } }
+
+    func testMarioPartyRules() throws {
+        var game = MarioPartyGame()
+        XCTAssertEqual(game.coins, [10, 10, 10, 10])
+        XCTAssertEqual(game.stars, [0, 0, 0, 0])
+        XCTAssertEqual(game.legalMoves(), [.marioParty(.roll)])
+        // A full round is four rolls; afterwards a minigame has paid out and
+        // the round counter has advanced.
+        for _ in 0..<MarioPartyGame.seatCount { try game.applyValidated(.marioParty(.roll)) }
+        XCTAssertEqual(game.minigamesPlayed, 1)
+        XCTAssertEqual(game.round, 2)
+        XCTAssertEqual(game.current, 0)
+        // Play to the end: exactly totalRounds rounds, then no more moves.
+        var guardrail = 0
+        while !game.isOver && guardrail < 1000 {
+            try game.applyValidated(.marioParty(.roll))
+            guardrail += 1
+        }
+        XCTAssertTrue(game.isOver)
+        XCTAssertEqual(game.minigamesPlayed, MarioPartyGame.totalRounds)
+        XCTAssertThrowsError(try game.applyValidated(.marioParty(.roll)))
+        // Ranking places every seat exactly once.
+        XCTAssertEqual(game.ranking().flatMap { $0 }.sorted(), [0, 1, 2, 3])
+    }
+
     func testUno() { for _ in 0..<3 { playOut(.uno) } }
     func testEights() { for _ in 0..<3 { playOut(.eights) } }
     func testGoFish() { for _ in 0..<3 { playOut(.gofish) } }

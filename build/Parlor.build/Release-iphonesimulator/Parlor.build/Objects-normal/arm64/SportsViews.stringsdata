@@ -1,0 +1,176 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/SportsViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "✓",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "✗",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "best 🔥%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 126
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 131
+        }
+      },
+      {
+        "comment": "",
+        "key": "⚾ %lld/%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 328
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 332
+        }
+      },
+      {
+        "comment": "",
+        "key": "📏%lldft",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "You",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld : %lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 548
+        }
+      },
+      {
+        "comment": "",
+        "key": "🧤 %lld save%@ (%lld%%)",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 554
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎯 No saves yet",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 558
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 566
+        }
+      },
+      {
+        "comment": "",
+        "key": "✓",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 601
+        }
+      },
+      {
+        "comment": "",
+        "key": "✗",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 601
+        }
+      },
+      {
+        "comment": "",
+        "key": "You",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 791
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 793
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 820
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 822
+        }
+      },
+      {
+        "comment": "",
+        "key": "🥅 Shutout?",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 831
+        }
+      },
+      {
+        "comment": "",
+        "key": "↩ -%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 840
+        }
+      }
+    ]
+  },
+  "version": 1
+}

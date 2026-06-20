@@ -1,0 +1,168 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/HopperView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "❤️",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "🤍",
+        "location": {
+          "startingColumn": 54,
+          "startingLine": 83
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 169
+        }
+      },
+      {
+        "comment": "",
+        "key": "🐸",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "💀",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 113
+        }
+      },
+      {
+        "comment": "",
+        "key": "CAR!",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 124
+        }
+      },
+      {
+        "comment": "",
+        "key": "🪵",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "💧",
+        "location": {
+          "startingColumn": 47,
+          "startingLine": 137
+        }
+      },
+      {
+        "comment": "",
+        "key": "RIDING",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 139
+        }
+      },
+      {
+        "comment": "",
+        "key": "DANGER",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 139
+        }
+      },
+      {
+        "comment": "",
+        "key": "Lv%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 150
+        }
+      },
+      {
+        "comment": "",
+        "key": "×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pads:",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 176
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld left",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 187
+        }
+      },
+      {
+        "comment": "",
+        "key": "🐸",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 181
+        }
+      },
+      {
+        "comment": "",
+        "key": "○",
+        "location": {
+          "startingColumn": 44,
+          "startingLine": 181
+        }
+      },
+      {
+        "comment": "",
+        "key": "TIME BONUS",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 204
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 208
+        }
+      },
+      {
+        "comment": "",
+        "key": "🐸",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 317
+        }
+      },
+      {
+        "comment": "",
+        "key": "🐸",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 377
+        }
+      }
+    ]
+  },
+  "version": 1
+}

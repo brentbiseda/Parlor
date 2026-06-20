@@ -1,0 +1,456 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/MarioPartyView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Tap the dice to start the party!",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 281
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 112
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 127
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 129
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 220
+        }
+      },
+      {
+        "comment": "",
+        "key": "Round %lld/%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 236
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎮 Minigame!",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 239
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐ costs %lld🪙",
+        "location": {
+          "startingColumn": 65,
+          "startingLine": 239
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ — %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 255
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎮 MINIGAME RESULT",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 288
+        }
+      },
+      {
+        "comment": "",
+        "key": "ROLL",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 327
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ rolling…",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 345
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld taps",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 520
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 512
+        }
+      },
+      {
+        "comment": "",
+        "key": "sec",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 515
+        }
+      },
+      {
+        "comment": "",
+        "key": "TAP!",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done ✓",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "START",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld hits · round %lld/%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 588
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 622
+        }
+      },
+      {
+        "comment": "",
+        "key": "Coin %lld/%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 669
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 672
+        }
+      },
+      {
+        "comment": "",
+        "key": "🪙",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 686
+        }
+      },
+      {
+        "comment": "",
+        "key": "Round %lld/%lld · score %lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 744
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 762
+        }
+      },
+      {
+        "comment": "",
+        "key": "Wait…",
+        "location": {
+          "startingColumn": 37,
+          "startingLine": 757
+        }
+      },
+      {
+        "comment": "",
+        "key": "GO!",
+        "location": {
+          "startingColumn": 64,
+          "startingLine": 757
+        }
+      },
+      {
+        "comment": "",
+        "key": "TAP",
+        "location": {
+          "startingColumn": 100,
+          "startingLine": 757
+        }
+      },
+      {
+        "comment": "",
+        "key": "Next →",
+        "location": {
+          "startingColumn": 108,
+          "startingLine": 757
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld pairs · %lld flips",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 839
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld · ✅%lld ❌%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 936
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap:",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 930
+        }
+      },
+      {
+        "comment": "",
+        "key": "← LEFT",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1021
+        }
+      },
+      {
+        "comment": "",
+        "key": "RIGHT →",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1026
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap  %lld  next! · %lld hits · %lld misses",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1082
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1093
+        }
+      },
+      {
+        "comment": "",
+        "key": "Round %lld/%lld · %lld pts",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1139
+        }
+      },
+      {
+        "comment": "",
+        "key": "CUT",
+        "location": {
+          "startingColumn": 36,
+          "startingLine": 1158
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld stars",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1224
+        }
+      },
+      {
+        "comment": "",
+        "key": "Memorize!",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1221
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap the pattern!",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 1221
+        }
+      },
+      {
+        "comment": "",
+        "key": "Beat %lld/%lld · %lld on beat",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1296
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1321
+        }
+      },
+      {
+        "comment": "",
+        "key": "Round %lld/%lld · %lld pts",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1359
+        }
+      },
+      {
+        "comment": "",
+        "key": "Was:",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1363
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1364
+        }
+      },
+      {
+        "comment": "",
+        "key": "New amount:",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1375
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 1377
+        }
+      },
+      {
+        "comment": "",
+        "key": "⬆ HIGHER",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1380
+        }
+      },
+      {
+        "comment": "",
+        "key": "LOWER ⬇",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1384
+        }
+      },
+      {
+        "comment": "",
+        "key": "Find the star · %lld guess%@ left",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1429
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap SPIN — stop on gold!",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1511
+        }
+      },
+      {
+        "comment": "",
+        "key": "…",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 1542
+        }
+      },
+      {
+        "comment": "",
+        "key": "SPIN!",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 1542
+        }
+      },
+      {
+        "comment": "",
+        "key": "⭐",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 1529
+        }
+      },
+      {
+        "comment": "",
+        "key": "✕",
+        "location": {
+          "startingColumn": 63,
+          "startingLine": 1529
+        }
+      }
+    ]
+  },
+  "version": 1
+}

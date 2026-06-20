@@ -1,0 +1,120 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/MinesweeperView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Long-press any square to flag it",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 53
+        }
+      },
+      {
+        "comment": "",
+        "key": "Mode",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "Dig",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 46
+        }
+      },
+      {
+        "comment": "",
+        "key": "Flag",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 47
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎉 You Win!",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 62
+        }
+      },
+      {
+        "comment": "",
+        "key": "3BV/s %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 128
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld left",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 155
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 183
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 185
+        }
+      },
+      {
+        "comment": "",
+        "key": "💥",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 283
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 285
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 290
+        }
+      },
+      {
+        "comment": "",
+        "key": "🚩",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 293
+        }
+      },
+      {
+        "comment": "",
+        "key": "?",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 296
+        }
+      }
+    ]
+  },
+  "version": 1
+}

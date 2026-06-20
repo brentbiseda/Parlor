@@ -1,0 +1,16 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/SpectatorTableView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "BIG SCREEN",
+        "location": {
+          "startingColumn": 15,
+          "startingLine": 111
+        }
+      }
+    ]
+  },
+  "version": 1
+}

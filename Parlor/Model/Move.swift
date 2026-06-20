@@ -166,6 +166,57 @@ enum ArcadeEvent: Codable, Hashable {
     case levelUp
 }
 
+// MARK: - Solar Striker dedicated events (separate from generic ArcadeEvent)
+
+enum SolarWeapon: String, Codable, Hashable, CaseIterable {
+    case standard, triple, rapid, laser, homing
+
+    var displayName: String {
+        switch self {
+        case .standard: return "Blaster"
+        case .triple:   return "Triple Shot"
+        case .rapid:    return "Rapid Fire"
+        case .laser:    return "Laser"
+        case .homing:   return "Homing"
+        }
+    }
+    var icon: String {
+        switch self {
+        case .standard: return "minus"
+        case .triple:   return "arrow.up.and.line.horizontal.and.arrow.down"
+        case .rapid:    return "bolt.fill"
+        case .laser:    return "beam.horizontal.3"
+        case .homing:   return "target"
+        }
+    }
+    var tintName: String {
+        switch self {
+        case .standard: return "white"
+        case .triple:   return "purple"
+        case .rapid:    return "yellow"
+        case .laser:    return "green"
+        case .homing:   return "orange"
+        }
+    }
+}
+
+enum SolarEvent: Codable, Hashable {
+    case scored(Int)
+    case lifeLost
+    case waveCleared
+    case weaponPickup(SolarWeapon)
+    case smartBomb                         // clears all enemies
+    case multiplierPickup                  // ×2 score for 15s
+    case bossHP(current: Int, max: Int)    // live boss health update
+}
+
+// MARK: - Trivia
+
+enum TriviaMove: Codable, Hashable {
+    case answer(Int)     // option index 0–3
+    case timeOut         // question timer expired without answering
+}
+
 enum UnoColor: String, Codable, Hashable, CaseIterable {
     case red, yellow, green, blue
 }
@@ -198,6 +249,14 @@ enum EightsMove: Codable, Hashable {
 
 enum GoFishMove: Codable, Hashable {
     case ask(seat: Int, rank: Rank)
+}
+
+/// Star Party (dice-and-board party game): roll during board phase, or submit
+/// an interactive minigame score at the end of each round.
+enum MarioPartyMove: Codable, Hashable {
+    case roll
+    /// Human player's score from the interactive minigame (0–100 range).
+    case playMinigame(playerScore: Int)
 }
 
 enum KlondikeMove: Codable, Hashable {
@@ -244,4 +303,7 @@ enum Move: Codable, Hashable {
     case eights(EightsMove)
     case fish(GoFishMove)
     case bomberman(BombermanMove)
+    case marioParty(MarioPartyMove)
+    case solar(SolarEvent)
+    case trivia(TriviaMove)
 }

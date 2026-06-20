@@ -1,0 +1,128 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/GoFishView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "🔥 Hot streak!",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pond: %lld · Books: %lld/13",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 44
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥%lld",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 48
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎣 %lld%% hit",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 61
+        }
+      },
+      {
+        "comment": "",
+        "key": "💰 %lld haul",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 70
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌊×%lld",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 78
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎣 %lld pond",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 88
+        }
+      },
+      {
+        "comment": "",
+        "key": "Best: %@ (%lld/4)",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 114
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap a rank, then a player",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 109
+        }
+      },
+      {
+        "comment": "",
+        "key": "Asking for %@s — tap a player",
+        "location": {
+          "startingColumn": 40,
+          "startingLine": 110
+        }
+      },
+      {
+        "comment": "",
+        "key": "No cards left",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 332
+        }
+      },
+      {
+        "comment": "",
+        "key": "Waiting to draw…",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 332
+        }
+      },
+      {
+        "comment": "",
+        "key": "⚠️",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 238
+        }
+      },
+      {
+        "comment": "",
+        "key": "♠♥",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 290
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 375
+        }
+      }
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,104 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/TetrisView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "→LV %lld lines",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 282
+        }
+      },
+      {
+        "comment": "",
+        "key": "NEXT",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 253
+        }
+      },
+      {
+        "comment": "",
+        "key": "HOLD",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 266
+        }
+      },
+      {
+        "comment": "",
+        "key": "CLEARS",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 328
+        }
+      },
+      {
+        "comment": "",
+        "key": "1L×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 332
+        }
+      },
+      {
+        "comment": "",
+        "key": "2L×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 337
+        }
+      },
+      {
+        "comment": "",
+        "key": "3L×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 342
+        }
+      },
+      {
+        "comment": "",
+        "key": "T×%lld(%lld%%)",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 350
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌀×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 355
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔵×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 360
+        }
+      },
+      {
+        "comment": "",
+        "key": "💎×%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 365
+        }
+      },
+      {
+        "comment": "",
+        "key": "—",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 410
+        }
+      }
+    ]
+  },
+  "version": 1
+}

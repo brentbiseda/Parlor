@@ -1,0 +1,216 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/ShedGameViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Pick a Color",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 72
+        }
+      },
+      {
+        "comment": "",
+        "key": "Best",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 96
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 167
+        }
+      },
+      {
+        "comment": "",
+        "key": "LOW!",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 171
+        }
+      },
+      {
+        "comment": "",
+        "key": "PASS",
+        "location": {
+          "startingColumn": 62,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "DRAW",
+        "location": {
+          "startingColumn": 71,
+          "startingLine": 165
+        }
+      },
+      {
+        "comment": "",
+        "key": "🃏 %lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 221
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 281
+        }
+      },
+      {
+        "comment": "",
+        "key": "you",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "S%lld",
+        "location": {
+          "startingColumn": 41,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "W",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 317
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 309
+        }
+      },
+      {
+        "comment": "",
+        "key": "!",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 329
+        }
+      },
+      {
+        "comment": "",
+        "key": "UNO!",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 363
+        }
+      },
+      {
+        "comment": "",
+        "key": "1 CARD!",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 371
+        }
+      },
+      {
+        "comment": "",
+        "key": "UNO!",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 409
+        }
+      },
+      {
+        "comment": "",
+        "key": "UNO!",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 429
+        }
+      },
+      {
+        "comment": "",
+        "key": "Name a Suit",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 461
+        }
+      },
+      {
+        "comment": "",
+        "key": "Best",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 480
+        }
+      },
+      {
+        "comment": "",
+        "key": "Q×%lld",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 551
+        }
+      },
+      {
+        "comment": "",
+        "key": "💣%lld",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 556
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 43,
+          "startingLine": 546
+        }
+      },
+      {
+        "comment": "",
+        "key": "Chain ×%lld · DRAW %lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 572
+        }
+      },
+      {
+        "comment": "",
+        "key": "PASS",
+        "location": {
+          "startingColumn": 80,
+          "startingLine": 609
+        }
+      },
+      {
+        "comment": "",
+        "key": "DRAW",
+        "location": {
+          "startingColumn": 89,
+          "startingLine": 609
+        }
+      },
+      {
+        "comment": "",
+        "key": "DRAW %lld — play a 2 to stack or draw now",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 645
+        }
+      }
+    ]
+  },
+  "version": 1
+}

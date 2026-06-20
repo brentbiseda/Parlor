@@ -1,0 +1,432 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/RootView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Parlor",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 134
+        }
+      },
+      {
+        "comment": "",
+        "key": "Join a nearby game",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 43
+        }
+      },
+      {
+        "comment": "",
+        "key": "Same Wi-Fi or Bluetooth",
+        "location": {
+          "startingColumn": 42,
+          "startingLine": 45
+        }
+      },
+      {
+        "comment": "",
+        "key": "OK",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 138
+        }
+      },
+      {
+        "comment": "",
+        "key": "Parlor",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 148
+        }
+      },
+      {
+        "comment": "",
+        "key": "♠  ♥  ♣  ♦",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 161
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap to switch profile",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 198
+        }
+      },
+      {
+        "comment": "",
+        "key": "Play %@",
+        "location": {
+          "startingColumn": 35,
+          "startingLine": 355
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 390
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%%",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 556
+        }
+      },
+      {
+        "comment": "",
+        "key": "NEW",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 565
+        }
+      },
+      {
+        "comment": "",
+        "key": "Resume",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 717
+        }
+      },
+      {
+        "comment": "",
+        "key": "Discard game",
+        "location": {
+          "startingColumn": 23,
+          "startingLine": 767
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rules",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 853
+        }
+      },
+      {
+        "comment": "",
+        "key": "Card back",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 863
+        }
+      },
+      {
+        "comment": "",
+        "key": "Table felt",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 884
+        }
+      },
+      {
+        "comment": "",
+        "key": "Table",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 913
+        }
+      },
+      {
+        "comment": "",
+        "key": "Draw three cards",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 854
+        }
+      },
+      {
+        "comment": "",
+        "key": "Passes through the deck",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 855
+        }
+      },
+      {
+        "comment": "",
+        "key": "Unlimited",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 856
+        }
+      },
+      {
+        "comment": "",
+        "key": "1 (no redeals)",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 857
+        }
+      },
+      {
+        "comment": "",
+        "key": "2",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 858
+        }
+      },
+      {
+        "comment": "",
+        "key": "3",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 859
+        }
+      },
+      {
+        "comment": "",
+        "key": "5",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 860
+        }
+      },
+      {
+        "comment": "",
+        "key": "Play",
+        "location": {
+          "startingColumn": 27,
+          "startingLine": 945
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 954
+        }
+      },
+      {
+        "comment": "",
+        "key": "Board",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 980
+        }
+      },
+      {
+        "comment": "",
+        "key": "On this device",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 1001
+        }
+      },
+      {
+        "comment": "",
+        "key": "With people nearby",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 1017
+        }
+      },
+      {
+        "comment": "",
+        "key": "With friends anywhere",
+        "location": {
+          "startingColumn": 25,
+          "startingLine": 1043
+        }
+      },
+      {
+        "comment": "",
+        "key": "Size",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 981
+        }
+      },
+      {
+        "comment": "",
+        "key": "9 × 9",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 982
+        }
+      },
+      {
+        "comment": "",
+        "key": "13 × 13",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 983
+        }
+      },
+      {
+        "comment": "",
+        "key": "19 × 19",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 984
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bot strength",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 991
+        }
+      },
+      {
+        "comment": "",
+        "key": "Bots",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 996
+        }
+      },
+      {
+        "comment": "",
+        "key": "Remaining %lld seat(s) play as bots.",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1004
+        }
+      },
+      {
+        "comment": "",
+        "key": "Players here: %lld",
+        "location": {
+          "startingColumn": 29,
+          "startingLine": 1002
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start pass & play",
+        "location": {
+          "startingColumn": 48,
+          "startingLine": 1012
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start vs bots",
+        "location": {
+          "startingColumn": 70,
+          "startingLine": 1012
+        }
+      },
+      {
+        "comment": "",
+        "key": "Friends with the app on the same Wi-Fi or Bluetooth join from “Join a nearby game”.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1018
+        }
+      },
+      {
+        "comment": "",
+        "key": "Host a nearby table",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 1025
+        }
+      },
+      {
+        "comment": "",
+        "key": "This device becomes the shared screen (mirror it to a TV with AirPlay). Everyone else joins from “Join a nearby game” and plays on their phone as a controller.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1030
+        }
+      },
+      {
+        "comment": "",
+        "key": "Host on a big screen",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 1037
+        }
+      },
+      {
+        "comment": "",
+        "key": "On a big screen",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1040
+        }
+      },
+      {
+        "comment": "",
+        "key": "Start a FaceTime call (or share the link from the FaceTime app), then start SharePlay here. Friends need the app.",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1044
+        }
+      },
+      {
+        "comment": "",
+        "key": "Play over SharePlay",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 1051
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1059
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nearby tables",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1129
+        }
+      },
+      {
+        "comment": "",
+        "key": "Looking for nearby tables…",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1087
+        }
+      },
+      {
+        "comment": "",
+        "key": "Make sure your friend has hosted a table and you're on the same Wi-Fi or within Bluetooth range.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1089
+        }
+      },
+      {
+        "comment": "",
+        "key": "Hosted by %@",
+        "location": {
+          "startingColumn": 39,
+          "startingLine": 1116
+        }
+      },
+      {
+        "comment": "",
+        "key": "Cancel",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1133
+        }
+      }
+    ]
+  },
+  "version": 1
+}

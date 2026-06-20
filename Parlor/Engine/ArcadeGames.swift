@@ -435,3 +435,127 @@ struct HockeyGame: GameEngine {
         return "Bot wins \(botGoals)–\(yourGoals) · \(totalGoals) total goals\(flavor) · \(periods)"
     }
 }
+
+// MARK: - Solar Striker (vertical space shooter)
+
+/// Thin scorekeeping engine for the Solar Striker SpriteKit scene. The scene
+/// handles physics; the engine records score, lives, wave, and kill stats.
+/// Enemy kills report `.score(10)` (regular) or `.score(30)` (armored) or
+/// `.score(500)` (boss). Wave clears fire `.levelUp`. Player deaths `.lifeLost`.
+struct SolarStrikerGame: GameEngine {
+    static let kind = GameKind.solarStriker
+    static let livesPerGame = 3
+
+    var score = 0
+    var livesLost = 0
+    var level = 1
+    var enemiesDestroyed = 0
+    var bossesDefeated = 0
+    var longestStreak = 0
+    var powerUpsCollected = 0
+    var smartBombsUsed = 0
+    var currentWeapon: SolarWeapon = .standard
+    var weaponTicks = 0           // remaining ticks of current power weapon
+    var hasMultiplier = false
+    var multiplierTicks = 0
+    var bossCurrentHP = 0
+    var bossMaxHP = 0
+    private var currentStreak = 0
+    private var lifeStartScore = 0
+    var bestLifeScore = 0
+
+    var currentPlayer: Int { 0 }
+    var isOver: Bool { livesLost >= Self.livesPerGame }
+    var livesLeft: Int { Self.livesPerGame - livesLost }
+    var isBossWave: Bool { bossCurrentHP > 0 }
+    var effectiveMultiplier: Int { hasMultiplier ? 2 : 1 }
+
+    func legalMoves() -> [Move] { isOver ? [] : [.solar(.lifeLost)] }
+
+    func isLegal(_ move: Move) -> Bool {
+        if case .solar = move { return !isOver }
+        if case .arcade = move { return !isOver }   // backward compat
+        return false
+    }
+
+    mutating func apply(_ move: Move) throws {
+        switch move {
+        case .solar(let event):
+            try applySolar(event)
+        case .arcade(let event):
+            // Legacy path kept for backward compatibility
+            switch event {
+            case .score(let pts): try applySolar(.scored(pts))
+            case .lifeLost:       try applySolar(.lifeLost)
+            case .levelUp:        try applySolar(.waveCleared)
+            default: break
+            }
+        default:
+            throw GameError.illegalMove
+        }
+    }
+
+    private mutating func applySolar(_ event: SolarEvent) throws {
+        switch event {
+        case .scored(let pts):
+            let effective = pts * effectiveMultiplier
+            score += effective
+            enemiesDestroyed += 1
+            currentStreak += 1
+            if currentStreak > longestStreak { longestStreak = currentStreak }
+
+        case .lifeLost:
+            let lifeScore = score - lifeStartScore
+            if lifeScore > bestLifeScore { bestLifeScore = lifeScore }
+            lifeStartScore = score
+            currentStreak = 0
+            livesLost += 1
+            bossCurrentHP = 0    // boss resets on death
+
+        case .waveCleared:
+            level += 1
+            bossCurrentHP = 0
+
+        case .weaponPickup(let weapon):
+            currentWeapon = weapon
+            weaponTicks = weapon == .standard ? 0 : 600   // ~10 seconds at 60fps
+            powerUpsCollected += 1
+
+        case .smartBomb:
+            smartBombsUsed += 1
+            currentStreak = max(0, currentStreak)   // streak preserved through bomb
+
+        case .multiplierPickup:
+            hasMultiplier = true
+            multiplierTicks = 900   // 15 seconds
+            powerUpsCollected += 1
+
+        case .bossHP(let current, let max):
+            bossCurrentHP = current
+            bossMaxHP = max
+            if current <= 0 {
+                bossesDefeated += 1
+                score += 1000 * effectiveMultiplier
+                currentStreak += 1
+            }
+        }
+    }
+
+    var statusText: String {
+        let streakStr = currentStreak >= 5 ? " · 🔥\(currentStreak)" : ""
+        let wpn = currentWeapon == .standard ? "" : " · \(currentWeapon.displayName)"
+        let mult = hasMultiplier ? " · ×2" : ""
+        return "Score \(score) · Wave \(level) · " + String(repeating: "◆", count: livesLeft) + wpn + mult + streakStr
+    }
+
+    var resultText: String? {
+        guard isOver else { return nil }
+        var parts = ["Game over — \(score) pts", "wave \(level)", "\(enemiesDestroyed) enemies"]
+        if bossesDefeated > 0 { parts.append("👾 \(bossesDefeated) boss\(bossesDefeated == 1 ? "" : "es")") }
+        if longestStreak >= 5 { parts.append("🔥 \(longestStreak) streak") }
+        if powerUpsCollected > 0 { parts.append("⚡ \(powerUpsCollected) power-ups") }
+        if smartBombsUsed > 0 { parts.append("💣 \(smartBombsUsed) bombs") }
+        if bestLifeScore > 0 { parts.append("best life \(bestLifeScore) pts") }
+        return parts.joined(separator: " · ")
+    }
+}

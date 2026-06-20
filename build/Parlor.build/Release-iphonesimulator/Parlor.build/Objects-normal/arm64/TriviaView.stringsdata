@@ -1,0 +1,88 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/TriviaView.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Q%lld of %lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 86
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 98
+        }
+      },
+      {
+        "comment": "",
+        "key": "·",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 132
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 256
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎉 Quiz Complete!",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 276
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld pts · %lld/%lld correct",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 297
+        }
+      },
+      {
+        "comment": "",
+        "key": "QUESTION RECAP",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 311
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 357
+        }
+      },
+      {
+        "comment": "",
+        "key": "✓ %@",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 347
+        }
+      },
+      {
+        "comment": "",
+        "key": "✗ %@",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 351
+        }
+      }
+    ]
+  },
+  "version": 1
+}

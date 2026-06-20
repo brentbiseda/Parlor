@@ -1,0 +1,512 @@
+{
+  "source": "/Users/brentbiseda/Parlor/Parlor/Views/TrickGameViews.swift",
+  "tables": {
+    "Localizable": [
+      {
+        "comment": "",
+        "key": "Scores",
+        "location": {
+          "startingColumn": 16,
+          "startingLine": 375
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 193
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/13",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 214
+        }
+      },
+      {
+        "comment": "",
+        "key": "🔥%lld",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 239
+        }
+      },
+      {
+        "comment": "",
+        "key": "Received:",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 282
+        }
+      },
+      {
+        "comment": "",
+        "key": "⚠️",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 295
+        }
+      },
+      {
+        "comment": "",
+        "key": "Tap a card to discard",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 1200
+        }
+      },
+      {
+        "comment": "",
+        "key": "Scores",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 372
+        }
+      },
+      {
+        "comment": "",
+        "key": "Done",
+        "location": {
+          "startingColumn": 20,
+          "startingLine": 376
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/3",
+        "location": {
+          "startingColumn": 18,
+          "startingLine": 421
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld · %lld/%lld",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 468
+        }
+      },
+      {
+        "comment": "",
+        "key": "🎒 PENALTY!",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 477
+        }
+      },
+      {
+        "comment": "",
+        "key": "S%lld NIL%@",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 495
+        }
+      },
+      {
+        "comment": "",
+        "key": "♛",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 526
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 535
+        }
+      },
+      {
+        "comment": "",
+        "key": "♥%lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 540
+        }
+      },
+      {
+        "comment": "",
+        "key": "–",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 545
+        }
+      },
+      {
+        "comment": "",
+        "key": "🌙 %lld/26",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 563
+        }
+      },
+      {
+        "comment": "",
+        "key": "♛ not yet",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 567
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 31,
+          "startingLine": 618
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld/%lld",
+        "location": {
+          "startingColumn": 56,
+          "startingLine": 618
+        }
+      },
+      {
+        "comment": "",
+        "key": "to 500",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 677
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@/%@",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 686
+        }
+      },
+      {
+        "comment": "",
+        "key": "to 10",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 728
+        }
+      },
+      {
+        "comment": "",
+        "key": "deal %lld/4",
+        "location": {
+          "startingColumn": 22,
+          "startingLine": 739
+        }
+      },
+      {
+        "comment": "",
+        "key": "spread %lld",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 768
+        }
+      },
+      {
+        "comment": "",
+        "key": "–",
+        "location": {
+          "startingColumn": 53,
+          "startingLine": 778
+        }
+      },
+      {
+        "comment": "",
+        "key": "+%lld",
+        "location": {
+          "startingColumn": 61,
+          "startingLine": 778
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1009
+        }
+      },
+      {
+        "comment": "",
+        "key": "Keep risk:",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1021
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ Pass %lld/3",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1050
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your bid",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1100
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1072
+        }
+      },
+      {
+        "comment": "",
+        "key": "Rec.",
+        "location": {
+          "startingColumn": 34,
+          "startingLine": 1089
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nil",
+        "location": {
+          "startingColumn": 51,
+          "startingLine": 1092
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 59,
+          "startingLine": 1092
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nil",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 1104
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 1104
+        }
+      },
+      {
+        "comment": "",
+        "key": "Your bid",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1113
+        }
+      },
+      {
+        "comment": "",
+        "key": "Nil",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 1117
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 57,
+          "startingLine": 1117
+        }
+      },
+      {
+        "comment": "",
+        "key": "Order up",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1127
+        }
+      },
+      {
+        "comment": "",
+        "key": "?",
+        "location": {
+          "startingColumn": 26,
+          "startingLine": 1129
+        }
+      },
+      {
+        "comment": "",
+        "key": "%@ strength: %@ (%lld trump)",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1148
+        }
+      },
+      {
+        "comment": "",
+        "key": "R♖",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 1151
+        }
+      },
+      {
+        "comment": "",
+        "key": "L♖",
+        "location": {
+          "startingColumn": 49,
+          "startingLine": 1152
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pass",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1156
+        }
+      },
+      {
+        "comment": "",
+        "key": "Order up",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1158
+        }
+      },
+      {
+        "comment": "",
+        "key": "Alone!",
+        "location": {
+          "startingColumn": 28,
+          "startingLine": 1160
+        }
+      },
+      {
+        "comment": "",
+        "key": "Dealer must name trump",
+        "location": {
+          "startingColumn": 33,
+          "startingLine": 1166
+        }
+      },
+      {
+        "comment": "",
+        "key": "Name trump?",
+        "location": {
+          "startingColumn": 60,
+          "startingLine": 1166
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 38,
+          "startingLine": 1180
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pass",
+        "location": {
+          "startingColumn": 32,
+          "startingLine": 1189
+        }
+      },
+      {
+        "comment": "",
+        "key": "HCP:",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1262
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 30,
+          "startingLine": 1265
+        }
+      },
+      {
+        "comment": "",
+        "key": "—",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 1312
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld%@",
+        "location": {
+          "startingColumn": 50,
+          "startingLine": 1316
+        }
+      },
+      {
+        "comment": "",
+        "key": "",
+        "location": {
+          "startingColumn": 46,
+          "startingLine": 1328
+        }
+      },
+      {
+        "comment": "",
+        "key": "Level",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1341
+        }
+      },
+      {
+        "comment": "",
+        "key": "%lld",
+        "location": {
+          "startingColumn": 55,
+          "startingLine": 1342
+        }
+      },
+      {
+        "comment": "",
+        "key": "Pass",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1355
+        }
+      },
+      {
+        "comment": "",
+        "key": "Double",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1357
+        }
+      },
+      {
+        "comment": "",
+        "key": "Redouble",
+        "location": {
+          "startingColumn": 24,
+          "startingLine": 1360
+        }
+      }
+    ]
+  },
+  "version": 1
+}
