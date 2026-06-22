@@ -77,52 +77,82 @@ struct CentipedeView: View {
 
     @ViewBuilder
     func centipedeHeader(_ game: CentipedeGame) -> some View {
-        HStack(spacing: 10) {
-            // Lives dots
-            HStack(spacing: 4) {
-                ForEach(0..<CentipedeGame.livesPerGame, id: \.self) { i in
-                    Circle()
-                        .fill(i < game.livesLeft ? Color.green : Color.white.opacity(0.15))
-                        .frame(width: 8, height: 8)
+        HStack(spacing: 8) {
+            // Lives pill
+            HStack(spacing: 0) {
+                Text("LIVES")
+                    .font(.system(size: 7, weight: .black)).kerning(0.8)
+                    .foregroundStyle(.white.opacity(0.4))
+                    .padding(.trailing, 5)
+                HStack(spacing: 3) {
+                    ForEach(0..<CentipedeGame.livesPerGame, id: \.self) { i in
+                        Circle()
+                            .fill(i < game.livesLeft
+                                ? Color(red: 0.2, green: 0.9, blue: 0.4)
+                                : Color.white.opacity(0.15))
+                            .frame(width: 7, height: 7)
+                            .shadow(color: i < game.livesLeft ? Color.green.opacity(0.6) : .clear, radius: 3)
+                    }
                 }
             }
-            // Score
-            Text("\(game.score)")
-                .font(.system(size: 15, weight: .bold).monospacedDigit())
-                .foregroundStyle(.white)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.green.opacity(0.2), lineWidth: 0.75)
+                }
+            )
+
+            // Score pill
+            HStack(spacing: 3) {
+                Image(systemName: "bolt.fill")
+                    .font(.system(size: 7)).foregroundStyle(.yellow.opacity(0.8))
+                Text("\(game.score)")
+                    .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.yellow.opacity(0.18), lineWidth: 0.75)
+                }
+            )
+
             Spacer(minLength: 0)
+
             // Wave chip
-            Text("Wave \(game.level)")
-                .font(.caption.weight(.semibold))
-                .foregroundStyle(.green)
-                .padding(.horizontal, 7)
-                .padding(.vertical, 3)
-                .background(Color.green.opacity(0.15), in: Capsule())
+            HStack(spacing: 3) {
+                Image(systemName: "waveform").font(.system(size: 7)).foregroundStyle(.green)
+                Text("W\(game.level)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.green)
+            }
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background(Color.green.opacity(0.13), in: Capsule())
+            .overlay(Capsule().strokeBorder(Color.green.opacity(0.35), lineWidth: 0.75))
+
             // Segments shot badge
             if game.segmentsShot > 0 {
                 Text("🎯\(game.segmentsShot)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.yellow)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.yellow)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Color.yellow.opacity(0.12), in: Capsule())
+                    .overlay(Capsule().strokeBorder(Color.yellow.opacity(0.3), lineWidth: 0.5))
             }
             // Best life callout
             if game.bestLifeScore > 0 {
                 Text("⭐\(game.bestLifeScore)")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.65))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
-                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .font(.caption2).foregroundStyle(.white.opacity(0.65))
+                    .padding(.horizontal, 6).padding(.vertical, 3)
+                    .background(Color.white.opacity(0.07), in: Capsule())
             }
-            // Deepest wave badge (when ahead of current wave)
+            // Deepest wave badge
             if game.deepestWave > game.level {
                 Text("Peak W\(game.deepestWave)")
-                    .font(.caption2.weight(.semibold))
-                    .foregroundStyle(.cyan)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .font(.caption2.weight(.semibold)).foregroundStyle(.cyan)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Color.cyan.opacity(0.12), in: Capsule())
             }
             // Mushrooms destroyed badge
@@ -130,8 +160,7 @@ struct CentipedeView: View {
                 Text("🍄×\(game.mushroomsDestroyed)")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(Color(red: 0.8, green: 0.5, blue: 1.0))
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 3)
+                    .padding(.horizontal, 6).padding(.vertical, 3)
                     .background(Color.purple.opacity(0.15), in: Capsule())
             }
         }

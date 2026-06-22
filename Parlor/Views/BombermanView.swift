@@ -189,9 +189,12 @@ struct BombermanView: View {
                 if demons   > 0 { Text("😈×\(demons)").font(.system(size: 9)).foregroundStyle(.red) }
             }
             .padding(.horizontal, 16)
+            .frame(minHeight: 18)
+            .frame(maxHeight: 18)
         }
         .padding(.horizontal, 14)
         .padding(.top, 2)
+        .frame(height: 48)
     }
 
     // MARK: - Board canvas

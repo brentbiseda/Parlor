@@ -11,16 +11,32 @@ struct AvatarView: View {
 
     var body: some View {
         ZStack {
+            // Main gradient fill
             Circle()
-                .fill(LinearGradient(colors: [Avatar.color(profile.colorIndex),
-                                              Avatar.color(profile.colorIndex).opacity(0.6)],
-                                     startPoint: .topLeading, endPoint: .bottomTrailing))
+                .fill(
+                    LinearGradient(
+                        colors: [Avatar.color(profile.colorIndex),
+                                 Avatar.color(profile.colorIndex).opacity(0.6)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing
+                    )
+                )
+            // Top sheen highlight
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [.white.opacity(0.3), .clear],
+                        startPoint: .topLeading, endPoint: .center
+                    )
+                )
+            // Symbol
             Image(systemName: profile.isBot ? "cpu" : profile.symbol)
-                .font(.system(size: size * 0.45, weight: .semibold))
+                .font(.system(size: size * 0.42, weight: .semibold))
                 .foregroundStyle(.white)
+                .shadow(color: .black.opacity(0.25), radius: 2)
         }
         .frame(width: size, height: size)
-        .overlay(Circle().strokeBorder(.white.opacity(0.35), lineWidth: 1))
+        .overlay(Circle().strokeBorder(.white.opacity(0.32), lineWidth: max(1, size * 0.028)))
+        .shadow(color: Avatar.color(profile.colorIndex).opacity(0.4), radius: size * 0.22)
     }
 }
 

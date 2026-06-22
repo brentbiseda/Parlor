@@ -1,7 +1,21 @@
 import SwiftUI
+import UIKit
+
+/// App delegate that controls supported orientations dynamically.
+/// BigScreen mode sets `mask = .all` so the TV display can go landscape;
+/// everything else stays portrait-only.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    static var mask: UIInterfaceOrientationMask = .portrait
+
+    func application(_ application: UIApplication,
+                     supportedInterfaceOrientationsFor window: UIWindow?) -> UIInterfaceOrientationMask {
+        AppDelegate.mask
+    }
+}
 
 @main
 struct ParlorApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
 
@@ -17,7 +31,6 @@ struct ParlorApp: App {
                 .onOpenURL { model.handle(url: $0) }
         }
         .onChange(of: scenePhase) { _, phase in
-            // Asynchronous play: park the live table when the app backgrounds.
             if phase == .background { model.saveSnapshotForBackground() }
         }
     }

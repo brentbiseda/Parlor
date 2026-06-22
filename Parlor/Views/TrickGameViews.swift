@@ -176,18 +176,23 @@ struct TrickTableView: View {
                     if let hearts = game.engine as? HeartsGame, hearts.phase == .playing {
                         let taken = hearts.tricksPlayed
                         let total = 13
+                        let fraction = total > 0 ? CGFloat(taken) / CGFloat(total) : 0
+                        let barColor: Color = fraction > 0.8 ? .orange : fraction > 0.5 ? .yellow : Color(red: 0.2, green: 0.85, blue: 0.45)
                         GeometryReader { barGeo in
                             ZStack(alignment: .leading) {
                                 Capsule()
-                                    .fill(Color.white.opacity(0.10))
-                                    .frame(height: 4)
+                                    .fill(Color.white.opacity(0.08))
+                                    .frame(height: 5)
                                 Capsule()
-                                    .fill(Color.green.opacity(0.75))
-                                    .frame(width: total > 0 ? barGeo.size.width * CGFloat(taken) / CGFloat(total) : 0, height: 4)
+                                    .fill(
+                                        LinearGradient(colors: [barColor, barColor.opacity(0.6)],
+                                                       startPoint: .leading, endPoint: .trailing)
+                                    )
+                                    .frame(width: barGeo.size.width * fraction, height: 5)
                                     .animation(.easeOut(duration: 0.3), value: taken)
                             }
                         }
-                        .frame(height: 4)
+                        .frame(height: 5)
                         .padding(.horizontal, 12)
                         .overlay(alignment: .trailing) {
                             Text("\(taken)/\(total)")
@@ -445,20 +450,29 @@ struct TrickTableView: View {
                 let theirs = !ours && i < played
                 let atOurContract = ourContract > 0 && i == ourContract - 1
                 let atTheirContract = theirContract > 0 && i == 13 - theirContract
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(ours ? Color.blue : theirs ? Color.red : Color.white.opacity(0.12))
-                    .frame(width: 14, height: 10)
+                RoundedRectangle(cornerRadius: 2.5)
+                    .fill(
+                        ours
+                        ? LinearGradient(colors: [Color(red: 0.3, green: 0.5, blue: 1.0), Color.blue.opacity(0.7)],
+                                         startPoint: .top, endPoint: .bottom)
+                        : theirs
+                        ? LinearGradient(colors: [Color(red: 1.0, green: 0.35, blue: 0.3), Color.red.opacity(0.7)],
+                                         startPoint: .top, endPoint: .bottom)
+                        : LinearGradient(colors: [Color.white.opacity(0.15), Color.white.opacity(0.07)],
+                                         startPoint: .top, endPoint: .bottom)
+                    )
+                    .frame(width: 14, height: 11)
                     .overlay(alignment: .trailing) {
                         if atOurContract {
                             Rectangle()
-                                .fill(Color.white.opacity(0.6))
+                                .fill(Color.white.opacity(0.7))
                                 .frame(width: 1.5)
                         }
                     }
                     .overlay(alignment: .leading) {
                         if atTheirContract && !atOurContract {
                             Rectangle()
-                                .fill(Color.white.opacity(0.4))
+                                .fill(Color.white.opacity(0.5))
                                 .frame(width: 1.5)
                         }
                     }
@@ -813,23 +827,41 @@ struct TrickTableView: View {
                    bagWarning: Bool = false) -> some View {
         HStack(spacing: 5) {
             Text(label)
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(.white.opacity(0.75))
+                .font(.caption2.weight(.bold))
+                .foregroundStyle(.white.opacity(highlight ? 0.85 : 0.65))
             Text(value)
-                .font(.callout.weight(.bold))
-                .monospacedDigit()
+                .font(.system(size: 15, weight: .black, design: .rounded).monospacedDigit())
                 .foregroundStyle(highlight ? .yellow : .white)
+                .contentTransition(.numericText())
             if let detail {
                 Text(detail)
-                    .font(.caption2)
-                    .foregroundStyle(bagWarning ? Color.orange : .white.opacity(0.6))
-                    .fontWeight(bagWarning ? .bold : .regular)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(bagWarning ? Color.orange : .white.opacity(0.55))
             }
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 4)
-        .background(bagWarning ? Color.orange.opacity(0.22) : .black.opacity(highlight ? 0.4 : 0.25), in: Capsule())
-        .overlay(Capsule().strokeBorder(bagWarning ? .orange.opacity(0.6) : .white.opacity(highlight ? 0.3 : 0.12), lineWidth: bagWarning ? 1.5 : 1))
+        .padding(.horizontal, 11)
+        .padding(.vertical, 5)
+        .background(
+            ZStack {
+                if bagWarning {
+                    Capsule().fill(
+                        LinearGradient(colors: [Color.orange.opacity(0.28), Color.orange.opacity(0.12)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    Capsule().strokeBorder(Color.orange.opacity(0.65), lineWidth: 1.5)
+                } else if highlight {
+                    Capsule().fill(
+                        LinearGradient(colors: [Color.white.opacity(0.14), Color.white.opacity(0.04)],
+                                       startPoint: .top, endPoint: .bottom)
+                    )
+                    Capsule().strokeBorder(Color.yellow.opacity(0.45), lineWidth: 1.2)
+                } else {
+                    Capsule().fill(Color.black.opacity(0.3))
+                    Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                }
+            }
+        )
+        .shadow(color: highlight ? Color.yellow.opacity(0.15) : bagWarning ? Color.orange.opacity(0.3) : .clear, radius: 6)
     }
 
     func opponentBadge(offset: Int, adapter: TrickGameAdapter, game: AnyGame) -> some View {

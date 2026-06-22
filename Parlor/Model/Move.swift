@@ -270,6 +270,75 @@ enum KlondikeMove: Codable, Hashable {
     case foundationToTableau(foundation: Int, to: Int)
 }
 
+// MARK: - Web label
+
+extension Move {
+    /// Human-readable label shown on web controller buttons.
+    var webLabel: String {
+        switch self {
+        case .playCard(let c): return c.label
+        case .passCards(let cs): return cs.map(\.label).joined(separator: " ")
+        case .bid(let n): return n == 0 ? "Nil" : "\(n)"
+        case .bridgeCall(let c): return c.label
+        case .euchreCall(let c):
+            switch c {
+            case .pass: return "Pass"
+            case .orderUp(let alone): return alone ? "Order Up (alone)" : "Order Up"
+            case .callTrump(let s, let alone): return alone ? "\(s.symbol) alone" : s.symbol
+            }
+        case .board: return "Move"
+        case .place(let p): return "(\(p.x),\(p.y))"
+        case .pass: return "Pass"
+        case .resign: return "Resign"
+        case .klondike(let m):
+            switch m {
+            case .draw: return "Draw"
+            case .resetStock: return "Reset"
+            case .wasteToFoundation: return "Foundation"
+            case .wasteToTableau(let c): return "Waste → Col \(c+1)"
+            case .tableauToFoundation(let c): return "Col \(c+1) → Foundation"
+            case .tableauToTableau(let f, _, let t): return "Col \(f+1) → Col \(t+1)"
+            case .foundationToTableau(_, let t): return "Foundation → Col \(t+1)"
+            }
+        case .freecell(_): return "Move"
+        case .matchTiles: return "Match"
+        case .shuffleRemaining: return "Shuffle"
+        case .pinball, .breakout, .tetris, .capsules, .minesweeper, .maze, .hopper, .snake, .arcade, .solar: return "Action"
+        case .uno(let m):
+            switch m {
+            case .play(let c, _):
+                let colorName = c.color?.rawValue.capitalized ?? "Wild"
+                let valStr: String
+                switch c.value {
+                case .number(let n): valStr = "\(n)"
+                case .skip: valStr = "Skip"
+                case .reverse: valStr = "Reverse"
+                case .drawTwo: valStr = "+2"
+                case .wild: valStr = "Wild"
+                case .wildDrawFour: valStr = "+4"
+                }
+                return "\(colorName) \(valStr)"
+            case .draw: return "Draw"
+            case .pass: return "Pass"
+            case .callUno: return "UNO!"
+            }
+        case .eights(let m):
+            switch m {
+            case .play(let c, _): return c.label
+            case .draw: return "Draw"
+            case .pass: return "Pass"
+            }
+        case .fish(.ask(_, let rank)): return "Ask for \(rank.label)s"
+        case .fish: return "Go Fish"
+        case .bomberman: return "Action"
+        case .marioParty(.roll): return "Roll"
+        case .marioParty(.playMinigame(let s)): return "Score \(s)"
+        case .trivia(.answer(let i)): return ["A","B","C","D"][safe: i] ?? "\(i)"
+        case .trivia(.timeOut): return "Time Out"
+        }
+    }
+}
+
 /// One move type shared by every game so networking stays trivial.
 /// Each engine validates only the cases it understands.
 enum Move: Codable, Hashable {

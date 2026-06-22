@@ -847,115 +847,239 @@ struct SoloSetupSheet: View {
     @AppStorage("parlor.pinball.layout") private var layoutID = "classic"
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if kind == .solitaire {
-                    Section("Rules") {
-                        Toggle("Draw three cards", isOn: $drawThree)
-                        Picker("Passes through the deck", selection: $maxPasses) {
-                            Text("Unlimited").tag(0)
-                            Text("1 (no redeals)").tag(1)
-                            Text("2").tag(2)
-                            Text("3").tag(3)
-                            Text("5").tag(5)
-                        }
-                    }
-                    Section("Card back") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(CardBack.allCases) { style in
-                                    VStack(spacing: 4) {
-                                        FaceDownCardView(width: 46, styleOverride: style)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 46 * 0.12)
-                                                    .strokeBorder(Color.accentColor,
-                                                                  lineWidth: cardBack == style.rawValue ? 3 : 0)
-                                            )
-                                        Text(style.title)
-                                            .font(.caption2)
-                                            .foregroundStyle(cardBack == style.rawValue ? .primary : .secondary)
-                                    }
-                                    .onTapGesture { cardBack = style.rawValue }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                    Section("Table felt") {
-                        ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 12) {
-                                ForEach(FeltTheme.allCases) { theme in
-                                    VStack(spacing: 4) {
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .fill(LinearGradient(colors: theme.colors,
-                                                                  startPoint: .topLeading,
-                                                                  endPoint: .bottomTrailing))
-                                            .frame(width: 46, height: 46)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 8)
-                                                    .strokeBorder(Color.accentColor,
-                                                                  lineWidth: feltTheme == theme.rawValue ? 3 : 0)
-                                            )
-                                            .shadow(color: .black.opacity(0.3), radius: 3, y: 1)
-                                        Text(theme.title)
-                                            .font(.caption2)
-                                            .foregroundStyle(feltTheme == theme.rawValue ? .primary : .secondary)
-                                    }
-                                    .onTapGesture { feltTheme = theme.rawValue }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: Color(red: 0.05, green: 0.07, blue: 0.14), location: 0),
+                    .init(color: Color(red: 0.03, green: 0.05, blue: 0.10), location: 1)
+                ],
+                startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+            RadialGradient(
+                colors: [kind.tileColor.opacity(0.28), .clear],
+                center: .top, startRadius: 0, endRadius: 360)
+            .ignoresSafeArea()
 
-                if kind == .pinball {
-                    Section("Table") {
-                        ForEach(PinballTheme.all) { theme in
-                            Button {
-                                layoutID = theme.id
-                            } label: {
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Header
+                    HStack {
+                        Spacer()
+                        Button { dismiss() } label: {
+                            Image(systemName: "xmark")
+                                .font(.system(size: 13, weight: .bold))
+                                .foregroundStyle(.white.opacity(0.6))
+                                .frame(width: 32, height: 32)
+                                .background(.white.opacity(0.1), in: Circle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 12)
+
+                    // Game icon + title
+                    VStack(spacing: 10) {
+                        ZStack {
+                            Circle()
+                                .fill(kind.tileColor.opacity(0.22))
+                                .frame(width: 72, height: 72)
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(colors: [kind.tileColor.opacity(0.65), kind.tileColor.opacity(0.18)],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    lineWidth: 1.5)
+                                .frame(width: 72, height: 72)
+                            Image(systemName: kind.symbolName)
+                                .font(.system(size: 30, weight: .semibold))
+                                .foregroundStyle(
+                                    LinearGradient(colors: [.white, kind.tileColor.opacity(0.9)],
+                                                   startPoint: .top, endPoint: .bottom)
+                                )
+                                .shadow(color: kind.tileColor.opacity(0.6), radius: 8)
+                        }
+                        Text(kind.title)
+                            .font(.system(size: 22, weight: .bold))
+                            .foregroundStyle(.white)
+                        Text("Solo")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+
+                    // Klondike options
+                    if kind == .solitaire {
+                        SetupCard(title: "Rules", icon: "list.bullet") {
+                            VStack(spacing: 12) {
                                 HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(theme.name)
-                                            .font(.headline)
-                                            .foregroundStyle(.primary)
-                                        Text(theme.blurb)
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
+                                    Text("Draw three cards")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.white.opacity(0.9))
                                     Spacer()
-                                    if layoutID == theme.id {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundStyle(.green)
+                                    Toggle("", isOn: $drawThree)
+                                        .labelsHidden()
+                                        .tint(kind.tileColor)
+                                }
+
+                                Divider().overlay(.white.opacity(0.08))
+
+                                VStack(alignment: .leading, spacing: 8) {
+                                    Text("Passes through deck")
+                                        .font(.subheadline.weight(.medium))
+                                        .foregroundStyle(.white.opacity(0.9))
+                                    HStack(spacing: 8) {
+                                        ForEach([0, 1, 2, 3, 5], id: \.self) { passes in
+                                            let label = passes == 0 ? "∞" : "\(passes)"
+                                            Button {
+                                                maxPasses = passes
+                                            } label: {
+                                                Text(label)
+                                                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                                                    .frame(maxWidth: .infinity)
+                                                    .padding(.vertical, 8)
+                                                    .background(
+                                                        maxPasses == passes
+                                                        ? kind.tileColor.opacity(0.35)
+                                                        : Color.white.opacity(0.07),
+                                                        in: RoundedRectangle(cornerRadius: 9)
+                                                    )
+                                                    .overlay(
+                                                        RoundedRectangle(cornerRadius: 9)
+                                                            .strokeBorder(
+                                                                maxPasses == passes ? kind.tileColor.opacity(0.7) : Color.white.opacity(0.1),
+                                                                lineWidth: 1
+                                                            )
+                                                    )
+                                                    .foregroundStyle(maxPasses == passes ? .white : .white.opacity(0.6))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
-                }
+                        .padding(.horizontal, 16)
 
-                Button {
-                    let options = GameOptions(klondikeDrawThree: drawThree,
-                                              klondikeMaxPasses: maxPasses,
-                                              pinballLayout: layoutID)
-                    model.startLocal(kind: kind, options: options, humanCount: 1)
-                    dismiss()
-                } label: {
-                    Label("Play", systemImage: "play.fill")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .navigationTitle(kind.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
+                        SetupCard(title: "Card back", icon: "square.on.square") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(CardBack.allCases) { style in
+                                        VStack(spacing: 5) {
+                                            FaceDownCardView(width: 46, styleOverride: style)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 46 * 0.12)
+                                                        .strokeBorder(
+                                                            cardBack == style.rawValue ? kind.tileColor : Color.clear,
+                                                            lineWidth: 2.5
+                                                        )
+                                                )
+                                                .shadow(color: cardBack == style.rawValue ? kind.tileColor.opacity(0.4) : .clear, radius: 6)
+                                            Text(style.title)
+                                                .font(.caption2.weight(.medium))
+                                                .foregroundStyle(cardBack == style.rawValue ? .white : .white.opacity(0.45))
+                                        }
+                                        .onTapGesture {
+                                            cardBack = style.rawValue
+                                            SoundFX.shared.play(.click)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+
+                        SetupCard(title: "Table felt", icon: "rectangle.fill") {
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 12) {
+                                    ForEach(FeltTheme.allCases) { theme in
+                                        VStack(spacing: 5) {
+                                            RoundedRectangle(cornerRadius: 8)
+                                                .fill(LinearGradient(colors: theme.colors,
+                                                                     startPoint: .topLeading,
+                                                                     endPoint: .bottomTrailing))
+                                                .frame(width: 48, height: 36)
+                                                .overlay(
+                                                    RoundedRectangle(cornerRadius: 8)
+                                                        .strokeBorder(
+                                                            feltTheme == theme.rawValue ? kind.tileColor : Color.white.opacity(0.1),
+                                                            lineWidth: feltTheme == theme.rawValue ? 2.5 : 1
+                                                        )
+                                                )
+                                                .shadow(color: feltTheme == theme.rawValue ? kind.tileColor.opacity(0.4) : .clear, radius: 6)
+                                            Text(theme.title)
+                                                .font(.caption2.weight(.medium))
+                                                .foregroundStyle(feltTheme == theme.rawValue ? .white : .white.opacity(0.45))
+                                                .lineLimit(1).minimumScaleFactor(0.8)
+                                        }
+                                        .onTapGesture {
+                                            feltTheme = theme.rawValue
+                                            SoundFX.shared.play(.click)
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 2)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+
+                    // Pinball table selection
+                    if kind == .pinball {
+                        SetupCard(title: "Table", icon: "circle.hexagongrid.fill") {
+                            VStack(spacing: 2) {
+                                ForEach(Array(PinballTheme.all.enumerated()), id: \.element.id) { i, theme in
+                                    if i > 0 { Divider().overlay(.white.opacity(0.07)) }
+                                    Button {
+                                        layoutID = theme.id
+                                        SoundFX.shared.play(.click)
+                                    } label: {
+                                        HStack(spacing: 12) {
+                                            ZStack {
+                                                RoundedRectangle(cornerRadius: 8)
+                                                    .fill(kind.tileColor.opacity(0.18))
+                                                    .frame(width: 36, height: 36)
+                                                Image(systemName: "circle.hexagongrid.fill")
+                                                    .font(.system(size: 15))
+                                                    .foregroundStyle(kind.tileColor)
+                                            }
+                                            VStack(alignment: .leading, spacing: 2) {
+                                                Text(theme.name)
+                                                    .font(.subheadline.weight(.semibold))
+                                                    .foregroundStyle(.white)
+                                                Text(theme.blurb)
+                                                    .font(.caption)
+                                                    .foregroundStyle(.white.opacity(0.55))
+                                            }
+                                            Spacer()
+                                            if layoutID == theme.id {
+                                                Image(systemName: "checkmark.circle.fill")
+                                                    .font(.system(size: 18))
+                                                    .foregroundStyle(kind.tileColor)
+                                            }
+                                        }
+                                        .padding(.vertical, 6)
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                    }
+
+                    // Play button
+                    SetupActionButton(label: "Play \(kind.title)", icon: "play.fill", color: kind.tileColor) {
+                        let options = GameOptions(klondikeDrawThree: drawThree,
+                                                  klondikeMaxPasses: maxPasses,
+                                                  pinballLayout: layoutID)
+                        model.startLocal(kind: kind, options: options, humanCount: 1)
+                        dismiss()
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 32)
                 }
             }
         }
         .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }
 
@@ -974,93 +1098,227 @@ struct GameSetupSheet: View {
     }
 
     var body: some View {
-        NavigationStack {
-            Form {
-                if kind == .go {
-                    Section("Board") {
-                        Picker("Size", selection: $goSize) {
-                            Text("9 × 9").tag(9)
-                            Text("13 × 13").tag(13)
-                            Text("19 × 19").tag(19)
+        ZStack {
+            LinearGradient(
+                stops: [
+                    .init(color: Color(red: 0.05, green: 0.07, blue: 0.14), location: 0),
+                    .init(color: Color(red: 0.03, green: 0.05, blue: 0.10), location: 1)
+                ],
+                startPoint: .top, endPoint: .bottom)
+            .ignoresSafeArea()
+            RadialGradient(
+                colors: [kind.tileColor.opacity(0.30), .clear],
+                center: .top, startRadius: 0, endRadius: 380)
+            .ignoresSafeArea()
+
+            ScrollView {
+                VStack(spacing: 20) {
+                    // Header
+                    VStack(spacing: 12) {
+                        HStack {
+                            Spacer()
+                            Button {
+                                dismiss()
+                            } label: {
+                                Image(systemName: "xmark")
+                                    .font(.system(size: 13, weight: .bold))
+                                    .foregroundStyle(.white.opacity(0.6))
+                                    .frame(width: 32, height: 32)
+                                    .background(.white.opacity(0.1), in: Circle())
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .pickerStyle(.segmented)
-                    }
-                }
-
-                Section {
-                    Picker("Bot strength", selection: $difficultyRaw) {
-                        ForEach(BotDifficulty.allCases) { Text($0.title).tag($0.rawValue) }
-                    }
-                    .pickerStyle(.segmented)
-                } header: {
-                    Text("Bots")
-                } footer: {
-                    Text((BotDifficulty(rawValue: difficultyRaw) ?? .normal).blurb)
-                }
-
-                Section("On this device") {
-                    Stepper("Players here: \(humanCount)", value: $humanCount, in: 1...kind.playerCount)
-                    if humanCount < kind.playerCount {
-                        Text("Remaining \(kind.playerCount - humanCount) seat(s) play as bots.")
+                        ZStack {
+                            Circle()
+                                .fill(kind.tileColor.opacity(0.25))
+                                .frame(width: 80, height: 80)
+                            Circle()
+                                .strokeBorder(
+                                    LinearGradient(colors: [kind.tileColor.opacity(0.7), kind.tileColor.opacity(0.2)],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    lineWidth: 1.5)
+                                .frame(width: 80, height: 80)
+                            Image(systemName: kind.symbolName)
+                                .font(.system(size: 36, weight: .semibold))
+                                .foregroundStyle(kind.tileColor)
+                        }
+                        .shadow(color: kind.tileColor.opacity(0.5), radius: 20)
+                        Text(kind.title)
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.white)
+                        Text(kind.subtitle)
                             .font(.caption)
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.white.opacity(0.5))
+                            .multilineTextAlignment(.center)
                     }
-                    Button {
-                        model.startLocal(kind: kind, options: options, humanCount: humanCount)
-                        dismiss()
-                    } label: {
-                        Label(humanCount > 1 ? "Start pass & play" : "Start vs bots",
-                              systemImage: "iphone")
-                    }
-                }
+                    .padding(.horizontal, 20)
+                    .padding(.top, 4)
 
-                Section("With people nearby") {
-                    Text("Friends with the app on the same Wi-Fi or Bluetooth join from “Join a nearby game”.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        model.hostNearby(kind: kind, options: options)
-                        dismiss()
-                    } label: {
-                        Label("Host a nearby table", systemImage: "antenna.radiowaves.left.and.right")
+                    // Go board size
+                    if kind == .go {
+                        SetupCard(title: "Board size", icon: "square.grid.3x3") {
+                            Picker("Size", selection: $goSize) {
+                                Text("9×9").tag(9)
+                                Text("13×13").tag(13)
+                                Text("19×19").tag(19)
+                            }
+                            .pickerStyle(.segmented)
+                            .padding(.top, 4)
+                        }
                     }
-                }
 
-                Section {
-                    Text("This device becomes the shared screen (mirror it to a TV with AirPlay). Everyone else joins from “Join a nearby game” and plays on their phone as a controller.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        model.hostBigScreen(kind: kind, options: options)
-                        dismiss()
-                    } label: {
-                        Label("Host on a big screen", systemImage: "tv.and.hifispeaker.fill")
+                    // Bot difficulty
+                    SetupCard(title: "Bot strength", icon: "cpu") {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Picker("", selection: $difficultyRaw) {
+                                ForEach(BotDifficulty.allCases) { Text($0.title).tag($0.rawValue) }
+                            }
+                            .pickerStyle(.segmented)
+                            Text((BotDifficulty(rawValue: difficultyRaw) ?? .normal).blurb)
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                        }
                     }
-                } header: {
-                    Text("On a big screen")
-                }
 
-                Section("With friends anywhere") {
-                    Text("Start a FaceTime call (or share the link from the FaceTime app), then start SharePlay here. Friends need the app.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Button {
-                        model.startSharePlay(kind: kind, options: options)
-                        dismiss()
-                    } label: {
-                        Label("Play over SharePlay", systemImage: "shareplay")
+                    // Solo / pass & play
+                    SetupCard(title: "On this device", icon: "iphone") {
+                        VStack(spacing: 12) {
+                            HStack {
+                                Text("Players here")
+                                    .foregroundStyle(.white.opacity(0.8))
+                                Spacer()
+                                HStack(spacing: 16) {
+                                    Button {
+                                        if humanCount > 1 { humanCount -= 1 }
+                                    } label: {
+                                        Image(systemName: "minus.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(humanCount > 1 ? .white : .white.opacity(0.25))
+                                    }
+                                    .buttonStyle(.plain)
+                                    Text("\(humanCount)")
+                                        .font(.title3.weight(.bold))
+                                        .frame(width: 28)
+                                        .monospacedDigit()
+                                    Button {
+                                        if humanCount < kind.playerCount { humanCount += 1 }
+                                    } label: {
+                                        Image(systemName: "plus.circle.fill")
+                                            .font(.title3)
+                                            .foregroundStyle(humanCount < kind.playerCount ? .white : .white.opacity(0.25))
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                            if humanCount < kind.playerCount {
+                                Text("\(kind.playerCount - humanCount) seat\(kind.playerCount - humanCount == 1 ? "" : "s") fill with bots")
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.45))
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            SetupActionButton(
+                                label: humanCount > 1 ? "Pass & play" : "Play vs bots",
+                                icon: "play.fill",
+                                color: kind.tileColor
+                            ) {
+                                model.startLocal(kind: kind, options: options, humanCount: humanCount)
+                                dismiss()
+                            }
+                        }
+                    }
+
+                    // Nearby multiplayer
+                    SetupCard(title: "With people nearby", icon: "antenna.radiowaves.left.and.right") {
+                        VStack(spacing: 10) {
+                            Text("Friends on the same Wi-Fi or Bluetooth join via Join a nearby game.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            SetupActionButton(label: "Host a table", icon: "wifi", color: Color(red: 0.08, green: 0.50, blue: 0.68)) {
+                                model.hostNearby(kind: kind, options: options)
+                                dismiss()
+                            }
+                        }
+                    }
+
+                    // Big screen
+                    SetupCard(title: "Big screen", icon: "tv.and.hifispeaker.fill") {
+                        VStack(spacing: 10) {
+                            Text("Mirror this device to a TV with AirPlay. Everyone plays on their phones as controllers.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            SetupActionButton(label: "Host on big screen", icon: "tv.and.hifispeaker.fill", color: Color.teal) {
+                                model.hostBigScreen(kind: kind, options: options)
+                                dismiss()
+                            }
+                        }
+                    }
+
+                    // SharePlay
+                    SetupCard(title: "Over FaceTime", icon: "shareplay") {
+                        VStack(spacing: 10) {
+                            Text("Start a FaceTime call first, then launch SharePlay. Friends need the app.")
+                                .font(.caption)
+                                .foregroundStyle(.white.opacity(0.5))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            SetupActionButton(label: "Play over SharePlay", icon: "shareplay", color: Color(red: 0.52, green: 0.18, blue: 0.72)) {
+                                model.startSharePlay(kind: kind, options: options)
+                                dismiss()
+                            }
+                        }
                     }
                 }
-            }
-            .navigationTitle(kind.title)
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("Cancel") { dismiss() }
-                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 32)
             }
         }
-        .presentationDetents([.medium, .large])
+        .preferredColorScheme(.dark)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+    }
+}
+
+private struct SetupCard<Content: View>: View {
+    let title: String
+    let icon: String
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .foregroundStyle(.white.opacity(0.7))
+            content
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 16))
+        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+    }
+}
+
+private struct SetupActionButton: View {
+    let label: String
+    let icon: String
+    let color: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(label, systemImage: icon)
+                .font(.subheadline.weight(.semibold))
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .background(
+                    LinearGradient(colors: [color, color.opacity(0.75)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(.white.opacity(0.2), lineWidth: 0.75))
+        }
+        .buttonStyle(PressableTileStyle())
+        .foregroundStyle(.white)
     }
 }
 

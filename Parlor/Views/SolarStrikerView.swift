@@ -103,48 +103,100 @@ struct SolarStrikerView: View {
 
     @ViewBuilder
     private func strikerHeader(_ game: SolarStrikerGame) -> some View {
-        HStack(spacing: 8) {
-            // Lives
-            HStack(spacing: 3) {
-                ForEach(0..<SolarStrikerGame.livesPerGame, id: \.self) { i in
-                    Image(systemName: i < game.livesLeft ? "diamond.fill" : "diamond")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(i < game.livesLeft
-                            ? Color(red: 0.3, green: 0.8, blue: 1.0) : .white.opacity(0.2))
+        let cyan = Color(red: 0.3, green: 0.8, blue: 1.0)
+        HStack(spacing: 6) {
+            // Lives pill
+            HStack(spacing: 0) {
+                Text("LIVES")
+                    .font(.system(size: 7, weight: .black)).kerning(0.8)
+                    .foregroundStyle(.white.opacity(0.45))
+                    .padding(.trailing, 4)
+                HStack(spacing: 2) {
+                    ForEach(0..<SolarStrikerGame.livesPerGame, id: \.self) { i in
+                        Image(systemName: i < game.livesLeft ? "diamond.fill" : "diamond")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundStyle(i < game.livesLeft ? cyan : .white.opacity(0.18))
+                            .shadow(color: i < game.livesLeft ? cyan.opacity(0.7) : .clear, radius: 3)
+                    }
                 }
             }
-            Text("\(game.score)")
-                .font(.system(size: 15, weight: .bold).monospacedDigit()).foregroundStyle(.white)
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(cyan.opacity(0.25), lineWidth: 0.75)
+                }
+            )
+
+            // Score pill
+            HStack(spacing: 3) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 7, weight: .bold))
+                    .foregroundStyle(.yellow.opacity(0.8))
+                Text("\(game.score)")
+                    .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+                    .foregroundStyle(.white)
+                    .contentTransition(.numericText())
+            }
+            .padding(.horizontal, 8).padding(.vertical, 5)
+            .background(
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8).fill(.white.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(.yellow.opacity(0.2), lineWidth: 0.75)
+                }
+            )
+
             Spacer(minLength: 0)
 
             // Weapon indicator
             if game.currentWeapon != .standard {
+                let wc = weaponColor(game.currentWeapon)
                 Label(game.currentWeapon.displayName, systemImage: game.currentWeapon.icon)
                     .font(.caption2.weight(.bold))
-                    .foregroundStyle(weaponColor(game.currentWeapon))
-                    .padding(.horizontal, 7).padding(.vertical, 3)
-                    .background(weaponColor(game.currentWeapon).opacity(0.2), in: Capsule())
-                    .overlay(Capsule().strokeBorder(weaponColor(game.currentWeapon).opacity(0.5), lineWidth: 0.75))
+                    .foregroundStyle(wc)
+                    .padding(.horizontal, 7).padding(.vertical, 4)
+                    .background(wc.opacity(0.18), in: Capsule())
+                    .overlay(Capsule().strokeBorder(wc.opacity(0.55), lineWidth: 0.75))
+                    .shadow(color: wc.opacity(0.4), radius: 5)
             }
             if game.hasMultiplier {
-                Text("×2").font(.caption2.weight(.black)).foregroundStyle(.yellow)
-                    .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(.yellow.opacity(0.15), in: Capsule())
+                Text("×2")
+                    .font(.caption.weight(.black)).foregroundStyle(.yellow)
+                    .padding(.horizontal, 7).padding(.vertical, 4)
+                    .background(.yellow.opacity(0.18), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.yellow.opacity(0.6), lineWidth: 0.75))
+                    .shadow(color: .yellow.opacity(0.4), radius: 5)
             }
-            Text("Wave \(game.level)")
-                .font(.caption.weight(.semibold)).foregroundStyle(Color(red: 0.3, green: 0.8, blue: 1.0))
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(Color(red: 0.3, green: 0.8, blue: 1.0).opacity(0.15), in: Capsule())
+
+            // Wave chip
+            HStack(spacing: 3) {
+                if game.isBossWave {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 7)).foregroundStyle(.red)
+                }
+                Text("W\(game.level)")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(game.isBossWave ? .red : cyan)
+            }
+            .padding(.horizontal, 7).padding(.vertical, 4)
+            .background((game.isBossWave ? Color.red : cyan).opacity(0.15), in: Capsule())
+            .overlay(Capsule().strokeBorder((game.isBossWave ? Color.red : cyan).opacity(0.4), lineWidth: 0.75))
+
             if game.longestStreak >= 5 {
                 Text("🔥\(game.longestStreak)")
                     .font(.caption2.weight(.semibold)).foregroundStyle(.orange)
-                    .padding(.horizontal, 6).padding(.vertical, 3)
-                    .background(.orange.opacity(0.12), in: Capsule())
+                    .padding(.horizontal, 6).padding(.vertical, 4)
+                    .background(.orange.opacity(0.14), in: Capsule())
             }
         }
-        .frame(minHeight: 32)
-        .padding(.vertical, 4).padding(.horizontal, 2)
-        .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 10))
+        .frame(minHeight: 36)
+        .padding(.vertical, 4).padding(.horizontal, 6)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 12).fill(.black.opacity(0.35))
+                RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.08), lineWidth: 0.75)
+            }
+        )
     }
 
     private func weaponColor(_ w: SolarWeapon) -> Color {

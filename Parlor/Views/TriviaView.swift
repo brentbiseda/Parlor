@@ -12,6 +12,7 @@ struct TriviaView: View {
     @State private var flashCorrect = false
     @State private var questionKey = UUID()   // forces re-entrance animation
     @State private var resultFlash: String? = nil
+    @State private var scorePulse = false
 
     var game: TriviaGame? { session.game?.engine as? TriviaGame }
 
@@ -142,19 +143,33 @@ struct TriviaView: View {
     // MARK: - Question card
 
     private func questionCard(_ q: TriviaQ) -> some View {
-        Text(q.q)
+        let col = catColor(q.cat)
+        return Text(q.q)
             .font(.system(size: 20, weight: .bold))
             .foregroundStyle(.white)
             .multilineTextAlignment(.center)
             .lineSpacing(4)
             .padding(.horizontal, 22)
-            .padding(.vertical, 18)
+            .padding(.vertical, 20)
             .frame(maxWidth: .infinity)
             .background(
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(.white.opacity(0.07))
-                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.1), lineWidth: 1))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 22)
+                        .fill(
+                            LinearGradient(
+                                colors: [col.opacity(0.18), Color.white.opacity(0.05)],
+                                startPoint: .top, endPoint: .bottom
+                            )
+                        )
+                    RoundedRectangle(cornerRadius: 22)
+                        .strokeBorder(
+                            LinearGradient(colors: [col.opacity(0.55), col.opacity(0.1)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1.2
+                        )
+                }
             )
+            .shadow(color: col.opacity(0.25), radius: 14, x: 0, y: 4)
             .padding(.horizontal, 12)
     }
 
@@ -196,6 +211,14 @@ struct TriviaView: View {
             return nil
         }()
 
+        let letterLabel = ["A", "B", "C", "D"][safe: i] ?? "\(i)"
+        let letterBg: Color = {
+            if !showResult { return isSelected ? accent : .white.opacity(0.12) }
+            if isCorrect  { return Color(red: 0.18, green: 0.82, blue: 0.38) }
+            if isSelected { return Color(red: 0.92, green: 0.25, blue: 0.30) }
+            return .white.opacity(0.08)
+        }()
+
         Button {
             guard enabled else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
@@ -216,12 +239,22 @@ struct TriviaView: View {
             session.submit(.trivia(.answer(i)))
             scheduleAutoAdvance()
         } label: {
-            HStack(spacing: 8) {
-                if let ic = icon {
-                    Image(systemName: ic)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(isCorrect ? Color(red: 0.18, green: 0.82, blue: 0.38) : Color(red: 0.92, green: 0.25, blue: 0.30))
+            HStack(spacing: 10) {
+                ZStack {
+                    if let ic = icon {
+                        Image(systemName: ic)
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    } else {
+                        Text(letterLabel)
+                            .font(.system(size: 11, weight: .black))
+                            .foregroundStyle(.white)
+                    }
                 }
+                .frame(width: 24, height: 24)
+                .background(letterBg, in: RoundedRectangle(cornerRadius: 6))
+                .animation(.easeInOut(duration: 0.2), value: showResult)
+
                 Text(option)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white.opacity(showResult && !isCorrect && !isSelected ? 0.4 : 0.95))
@@ -230,10 +263,11 @@ struct TriviaView: View {
                     .minimumScaleFactor(0.8)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12).padding(.vertical, 14)
+            .padding(.horizontal, 12).padding(.vertical, 13)
             .background(bg, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(border, lineWidth: isSelected || (showResult && isCorrect) ? 2 : 0.75))
-            .shadow(color: (showResult && isCorrect) ? Color(red: 0.18, green: 0.82, blue: 0.38).opacity(0.5) : .clear, radius: 10)
+            .shadow(color: (showResult && isCorrect) ? Color(red: 0.18, green: 0.82, blue: 0.38).opacity(0.6) : .clear, radius: 12)
+            .shadow(color: (showResult && isCorrect) ? Color(red: 0.18, green: 0.82, blue: 0.38).opacity(0.2) : .clear, radius: 24)
             .scaleEffect(isSelected && !showResult ? 0.97 : 1.0)
             .animation(.spring(response: 0.15), value: isSelected)
         }
@@ -248,24 +282,53 @@ struct TriviaView: View {
             ForEach(0..<g.numPlayers, id: \.self) { seat in
                 let isMe = session.localHumanSeats.contains(seat)
                 let isCurrent = seat == g.currentSeat && !g.isOver
-                VStack(spacing: 2) {
+                VStack(spacing: 3) {
                     Text(session.playerName(seat: seat))
-                        .font(.system(size: 9, weight: .semibold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(isMe ? .teal : .white.opacity(0.65))
                         .lineLimit(1).minimumScaleFactor(0.7)
                     Text("\(g.scores[seat])")
-                        .font(.system(size: 16, weight: .black, design: .rounded))
+                        .font(.system(size: 18, weight: .black, design: .rounded))
                         .foregroundStyle(isCurrent ? .yellow : .white)
                         .contentTransition(.numericText())
+                        .monospacedDigit()
+                    if isCurrent {
+                        Text("your turn")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.yellow.opacity(0.75))
+                    } else {
+                        Text("pts")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(.white.opacity(0.3))
+                    }
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(isCurrent ? .yellow.opacity(0.12) : .white.opacity(0.05), in: RoundedRectangle(cornerRadius: 10))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(isCurrent ? .yellow.opacity(0.5) : .clear, lineWidth: 1.5))
+                .padding(.vertical, 8)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 12)
+                            .fill(isCurrent ? Color.yellow.opacity(0.12) : Color.white.opacity(0.05))
+                        if isCurrent {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(
+                                    LinearGradient(colors: [.yellow, .orange.opacity(0.6)],
+                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    lineWidth: scorePulse ? 2 : 1.2
+                                )
+                                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: scorePulse)
+                        } else {
+                            RoundedRectangle(cornerRadius: 12)
+                                .strokeBorder(.white.opacity(0.06), lineWidth: 0.75)
+                        }
+                    }
+                )
+                .shadow(color: isCurrent ? .yellow.opacity(0.2) : .clear, radius: 8)
             }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 8)
+        .onAppear { scorePulse = true }
+        .onChange(of: g.currentSeat) { _, _ in scorePulse = true }
     }
 
     // MARK: - Result screen

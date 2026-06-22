@@ -80,38 +80,69 @@ struct SnakeView: View {
     @ViewBuilder
     var livesRow: some View {
         if let game, !game.isOver {
-            HStack(spacing: 5) {
-                ForEach(0..<SnakeGame.startingLives, id: \.self) { i in
-                    Image(systemName: i < game.lives ? "heart.fill" : "heart")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(i < game.lives
-                            ? Color(red: 0.95, green: 0.25, blue: 0.3)
-                            : .white.opacity(0.25))
-                        .animation(.spring(response: 0.3), value: game.lives)
+            HStack(spacing: 8) {
+                // Lives pill
+                HStack(spacing: 3) {
+                    ForEach(0..<SnakeGame.startingLives, id: \.self) { i in
+                        Image(systemName: i < game.lives ? "heart.fill" : "heart")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(i < game.lives
+                                ? Color(red: 0.95, green: 0.25, blue: 0.3)
+                                : .white.opacity(0.2))
+                            .shadow(color: i < game.lives ? Color.red.opacity(0.5) : .clear, radius: 4)
+                            .animation(.spring(response: 0.3), value: game.lives)
+                    }
                 }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06))
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(Color.red.opacity(0.2), lineWidth: 0.75)
+                    }
+                )
+
                 Spacer()
-                VStack(spacing: 2) {
-                    Text("L\(game.level)")
-                        .font(.caption.weight(.bold))
-                        .foregroundStyle(.white.opacity(0.8))
+
+                // Level + bite progress pill
+                VStack(spacing: 3) {
+                    Text("LVL \(game.level)")
+                        .font(.system(size: 10, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.85))
                         .monospacedDigit()
-                    // Bite-dot progress toward next level
                     let bitesDone = game.foodEaten % SnakeGame.bitesPerLevel
                     HStack(spacing: 2) {
                         ForEach(0..<SnakeGame.bitesPerLevel, id: \.self) { i in
-                            Circle()
-                                .fill(i < bitesDone ? Color.green : Color.white.opacity(0.2))
-                                .frame(width: 4, height: 4)
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(i < bitesDone ? Color.green : Color.white.opacity(0.18))
+                                .frame(width: 6, height: 3)
+                                .animation(.easeOut(duration: 0.2), value: bitesDone)
                         }
                     }
                 }
+                .padding(.horizontal, 8).padding(.vertical, 4)
+                .background(Color.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.1), lineWidth: 0.5))
+
                 Spacer()
-                Text("\(game.score)")
-                    .font(.caption.weight(.bold))
-                    .foregroundStyle(.white.opacity(0.8))
-                    .monospacedDigit()
+
+                // Score pill
+                HStack(spacing: 3) {
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 8)).foregroundStyle(.yellow.opacity(0.8))
+                    Text("\(game.score)")
+                        .font(.system(size: 14, weight: .black, design: .rounded).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .contentTransition(.numericText())
+                }
+                .padding(.horizontal, 8).padding(.vertical, 5)
+                .background(
+                    ZStack {
+                        RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.06))
+                        RoundedRectangle(cornerRadius: 8).strokeBorder(Color.yellow.opacity(0.18), lineWidth: 0.75)
+                    }
+                )
             }
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 14)
         }
     }
 
@@ -422,9 +453,14 @@ struct SnakeView: View {
                 }
             }
             .padding(.horizontal, 12)
-            .padding(.vertical, 4)
-            .background(.black.opacity(0.38), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.1), lineWidth: 0.5))
+            .padding(.vertical, 5)
+            .background(
+                ZStack {
+                    Capsule().fill(Color.black.opacity(0.4))
+                    Capsule().strokeBorder(Color.white.opacity(0.12), lineWidth: 0.75)
+                }
+            )
+            .shadow(color: .black.opacity(0.3), radius: 4)
         }
     }
 

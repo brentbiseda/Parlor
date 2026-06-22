@@ -21,13 +21,16 @@ struct MuncherView: View {
     var body: some View {
         VStack(spacing: 6) {
             if let game {
-                if game.frightened {
-                    powerTimer(game: game)
-                        .padding(.horizontal, 12)
-                } else if game.isScatterPhase {
-                    scatterBar(game: game)
-                        .padding(.horizontal, 12)
+                ZStack {
+                    if game.frightened {
+                        powerTimer(game: game)
+                            .padding(.horizontal, 12)
+                    } else if game.isScatterPhase {
+                        scatterBar(game: game)
+                            .padding(.horizontal, 12)
+                    }
                 }
+                .frame(height: 28)
             }
             ZStack {
                 maze

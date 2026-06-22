@@ -279,13 +279,19 @@ struct TetrisView: View {
                 let toNext = 10 - (game.lines % 10)
                 if !game.isOver {
                     let toNextCapped = toNext == 10 ? 0 : toNext
-                    Text("→LV \(toNextCapped) lines")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.6))
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 3)
-                        .background(Color.white.opacity(0.08), in: Capsule())
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.15), lineWidth: 0.5))
+                    let levelColor: Color = toNextCapped <= 2 ? .yellow : .white.opacity(0.55)
+                    HStack(spacing: 4) {
+                        Image(systemName: "arrow.right.to.line")
+                            .font(.system(size: 7, weight: .bold))
+                            .foregroundStyle(levelColor)
+                        Text("LV in \(toNextCapped)")
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(levelColor)
+                    }
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 4)
+                    .background(levelColor.opacity(0.1), in: Capsule())
+                    .overlay(Capsule().strokeBorder(levelColor.opacity(0.3), lineWidth: 0.75))
                 }
                 if let badge = clearBadge {
                     let isTSpin = badge.contains("T-SPIN") || badge.contains("I-SPIN")
@@ -415,16 +421,31 @@ struct TetrisView: View {
     }
 
     func statBlock(_ label: String, _ value: String, tint: Color = .white) -> some View {
-        VStack(alignment: .leading, spacing: 1) {
+        VStack(alignment: .leading, spacing: 2) {
             Text(label)
-                .font(.caption2.weight(.bold))
-                .foregroundStyle(.white.opacity(0.6))
+                .font(.system(size: 8, weight: .black)).kerning(0.5)
+                .foregroundStyle(.white.opacity(0.45))
             Text(value)
-                .font(.title3.weight(.bold))
-                .monospacedDigit()
+                .font(.system(size: 20, weight: .black, design: .rounded).monospacedDigit())
                 .foregroundStyle(tint)
+                .contentTransition(.numericText())
                 .animation(.easeInOut(duration: 0.3), value: tint == .red)
         }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.05))
+                if tint != .white {
+                    RoundedRectangle(cornerRadius: 8).fill(tint.opacity(0.06))
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(tint.opacity(0.3), lineWidth: 0.75)
+                } else {
+                    RoundedRectangle(cornerRadius: 8).strokeBorder(Color.white.opacity(0.08), lineWidth: 0.5)
+                }
+            }
+        )
+        .shadow(color: tint != .white ? tint.opacity(0.18) : .clear, radius: 5)
     }
 
     var controls: some View {

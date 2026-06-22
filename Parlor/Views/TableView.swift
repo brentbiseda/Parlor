@@ -109,7 +109,8 @@ struct TableView: View {
             }
             .safeAreaInset(edge: .top, spacing: 0) {
                 if let game = session.game, game.resultText == nil {
-                    VStack(spacing: 4) {
+                    let accent = session.lobby.gameKind.tileColor
+                    VStack(spacing: 0) {
                         // Player turn strip for multiplayer games.
                         if game.playerCount > 1 {
                             HStack(spacing: 0) {
@@ -128,7 +129,8 @@ struct TableView: View {
                                 }
                             }
                             .padding(.horizontal, 20)
-                            .padding(.top, 4)
+                            .padding(.top, 6)
+                            .padding(.bottom, 2)
                         }
 
                         // Joined phones are controllers for one seat.
@@ -140,17 +142,17 @@ struct TableView: View {
                                 .padding(.vertical, 3)
                                 .background(.teal.opacity(0.15), in: Capsule())
                                 .overlay(Capsule().strokeBorder(.teal.opacity(0.35), lineWidth: 0.75))
+                                .padding(.top, 4)
                         }
 
-                        HStack(spacing: 6) {
+                        HStack(spacing: 8) {
                             if session.actionableSeat != nil {
                                 Circle()
                                     .fill(Color.green)
-                                    .frame(width: 6, height: 6)
+                                    .frame(width: 7, height: 7)
+                                    .shadow(color: .green.opacity(turnPulse ? 0.9 : 0.4), radius: 5)
                                     .accessibilityHidden(true)
                             }
-                            // 1. Capsule background wrapping status text for better readability.
-                            // 6. lineLimit(2) + minimumScaleFactor(0.78) for long Chess/Go strings.
                             Text(statusLine(game))
                                 .font(.footnote.weight(.semibold))
                                 .foregroundStyle(.white)
@@ -158,38 +160,41 @@ struct TableView: View {
                                 .minimumScaleFactor(0.78)
                                 .multilineTextAlignment(.center)
                                 .accessibilityLabel(statusLine(game))
-                                .padding(.horizontal, 10)
-                                .background(Capsule().fill(Color.primary.opacity(0.06)))
                         }
                         .accessibilityElement(children: .combine)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 5)
+                        .padding(.horizontal, 18)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
                         .background {
                             ZStack {
-                                Color.black.opacity(0.45)
-                                LinearGradient(colors: [.white.opacity(0.07), .clear],
-                                               startPoint: .top, endPoint: .bottom)
+                                Color.black.opacity(0.55)
+                                LinearGradient(
+                                    colors: [accent.opacity(0.18), .clear],
+                                    startPoint: .leading, endPoint: .trailing)
+                                LinearGradient(
+                                    colors: [.white.opacity(0.06), .clear],
+                                    startPoint: .top, endPoint: .bottom)
                             }
-                            .clipShape(Capsule())
                         }
-                        .overlay(Capsule().strokeBorder(.white.opacity(0.12), lineWidth: 0.75))
-                        // 2. Animated green glow when it's the local human's turn.
-                        .shadow(color: session.actionableSeat != nil
-                                    ? .green.opacity(turnPulse ? 0.4 : 0.15)
-                                    : .black.opacity(0.3),
-                                radius: session.actionableSeat != nil ? 8 : 6, y: 2)
+                        .overlay(alignment: .bottom) {
+                            Rectangle()
+                                .fill(LinearGradient(
+                                    colors: [accent.opacity(session.actionableSeat != nil ? (turnPulse ? 0.65 : 0.35) : 0.18), .clear],
+                                    startPoint: .leading, endPoint: .trailing))
+                                .frame(height: 1)
+                                .animation(.easeInOut(duration: 1.2), value: turnPulse)
+                        }
                         .onAppear {
                             withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
                                 turnPulse = true
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .padding(.bottom, 5)
+                        .padding(.bottom, 2)
                     }
                     .background {
                         ZStack {
-                            Color.black.opacity(0.25)
-                            LinearGradient(colors: [Color.black.opacity(0.3), .clear],
+                            Color.black.opacity(0.30)
+                            LinearGradient(colors: [accent.opacity(0.08), .clear],
                                            startPoint: .top, endPoint: .bottom)
                         }
                         .ignoresSafeArea()
@@ -314,47 +319,68 @@ struct TableView: View {
         let seat = session.game.map { $0.controller(of: $0.currentPlayer) } ?? 0
         let name = session.playerName(seat: seat)
         return ZStack {
-            Color.black.opacity(0.88)
-                .ignoresSafeArea()
-            Rectangle()
-                .fill(.ultraThinMaterial)
-                .ignoresSafeArea()
-            VStack(spacing: 24) {
+            Color.black.opacity(0.92).ignoresSafeArea()
+            Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
+            // Decorative radial glow in background
+            RadialGradient(
+                colors: [Color.teal.opacity(0.18), Color.blue.opacity(0.08), .clear],
+                center: .center, startRadius: 10, endRadius: 260
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 28) {
+                // Icon cluster
                 ZStack {
                     Circle()
                         .fill(
-                            RadialGradient(colors: [Color.teal.opacity(0.3), .clear],
-                                           center: .center, startRadius: 0, endRadius: 60))
-                        .frame(width: 120, height: 120)
+                            RadialGradient(colors: [Color.teal.opacity(0.35), Color.blue.opacity(0.1), .clear],
+                                           center: .center, startRadius: 0, endRadius: 65)
+                        )
+                        .frame(width: 130, height: 130)
                     Circle()
-                        .strokeBorder(.white.opacity(0.15), lineWidth: 1.5)
-                        .frame(width: 100, height: 100)
+                        .strokeBorder(Color.teal.opacity(0.3), lineWidth: 1)
+                        .frame(width: 110, height: 110)
+                    Circle()
+                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.75)
+                        .frame(width: 90, height: 90)
                     Image(systemName: "hand.point.right.fill")
-                        .font(.system(size: 52))
-                        .foregroundStyle(.white)
+                        .font(.system(size: 48))
+                        .foregroundStyle(
+                            LinearGradient(colors: [.white, Color.teal.opacity(0.7)],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .shadow(color: Color.teal.opacity(0.5), radius: 12)
                 }
-                VStack(spacing: 8) {
-                    Text("Pass the device")
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.white.opacity(0.55))
-                        .textCase(.uppercase)
-                        .kerning(1.2)
+
+                VStack(spacing: 10) {
+                    Text("PASS THE DEVICE")
+                        .font(.system(size: 11, weight: .black)).kerning(2)
+                        .foregroundStyle(.white.opacity(0.45))
                     Text("to \(name)")
-                        .font(.title.weight(.bold))
+                        .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
                 }
+
                 Button {
                     session.revealForHandoff()
                 } label: {
-                    Label("I'm \(name) — show my cards", systemImage: "eye.fill")
-                        .font(.headline)
-                        .padding(.horizontal, 24)
-                        .padding(.vertical, 14)
-                        .background(
-                            LinearGradient(colors: [Color.teal, Color(red: 0.05, green: 0.4, blue: 0.45)],
-                                           startPoint: .topLeading, endPoint: .bottomTrailing),
-                            in: RoundedRectangle(cornerRadius: 16))
-                        .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(.white.opacity(0.2), lineWidth: 1))
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("I'm \(name) — show my cards")
+                            .font(.system(size: 16, weight: .semibold))
+                    }
+                    .padding(.horizontal, 24)
+                    .padding(.vertical, 15)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.teal, Color(red: 0.05, green: 0.45, blue: 0.5)],
+                            startPoint: .topLeading, endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 18)
+                    )
+                    .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.25), lineWidth: 1))
+                    .shadow(color: Color.teal.opacity(0.4), radius: 12, y: 4)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
@@ -386,140 +412,186 @@ struct TableView: View {
 
     func resultBanner(_ result: String) -> some View {
         let isLoss = localOutcome == false
+        let gameColor = session.lobby.gameKind.tileColor
         let accentColor: Color = isLoss ? Color(red: 0.85, green: 0.22, blue: 0.22) : Color(red: 1.0, green: 0.82, blue: 0.2)
-        let bannerGradient: [Color] = isLoss
-            ? [Color(red: 0.35, green: 0.08, blue: 0.08), Color(red: 0.18, green: 0.04, blue: 0.04)]
-            : [Color(red: 0.38, green: 0.28, blue: 0.0), Color(red: 0.18, green: 0.13, blue: 0.0)]
         let ranking = session.game?.ranking() ?? []
         let isMultiplayer = (session.game?.playerCount ?? 1) > 1
 
         return VStack(spacing: 0) {
-            LinearGradient(colors: bannerGradient, startPoint: .leading, endPoint: .trailing)
+            // Gradient top accent bar
+            LinearGradient(
+                colors: isLoss
+                    ? [Color(red: 0.6, green: 0.1, blue: 0.1), Color(red: 0.3, green: 0.05, blue: 0.05)]
+                    : [Color(red: 1.0, green: 0.85, blue: 0.1), gameColor.opacity(0.5)],
+                startPoint: .leading, endPoint: .trailing)
                 .frame(height: 4)
                 .clipShape(UnevenRoundedRectangle(topLeadingRadius: 24, topTrailingRadius: 24))
 
-            VStack(spacing: 16) {
+            VStack(spacing: 18) {
+                // Trophy / retry icon
                 ZStack {
                     Circle()
-                        .fill(accentColor.opacity(0.18))
-                        .frame(width: 80, height: 80)
+                        .fill(accentColor.opacity(0.12))
+                        .frame(width: 88, height: 88)
                     Circle()
-                        .strokeBorder(accentColor.opacity(0.35), lineWidth: 1.5)
-                        .frame(width: 80, height: 80)
-                    if isLoss {
-                        Image(systemName: "arrow.counterclockwise.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundStyle(.white.opacity(0.8))
-                    } else {
+                        .strokeBorder(accentColor.opacity(0.28), lineWidth: 1.5)
+                        .frame(width: 88, height: 88)
+                    if !isLoss {
                         Circle()
-                            .stroke(accentColor.opacity(0.5), lineWidth: 2)
-                            .frame(width: 80, height: 80)
-                            .scaleEffect(trophyPulse ? 1.25 : 1.0)
-                            .opacity(trophyPulse ? 0 : 0.7)
-                        Image(systemName: "trophy.fill")
-                            .font(.system(size: 44))
-                            .foregroundStyle(accentColor)
-                            .shadow(color: accentColor.opacity(0.8), radius: 16)
-                            .scaleEffect(trophyPulse ? 1.08 : 1.0)
+                            .stroke(accentColor.opacity(0.45), lineWidth: 1.5)
+                            .frame(width: 88, height: 88)
+                            .scaleEffect(trophyPulse ? 1.35 : 1.0)
+                            .opacity(trophyPulse ? 0 : 0.6)
+                        Circle()
+                            .stroke(accentColor.opacity(0.25), lineWidth: 1)
+                            .frame(width: 88, height: 88)
+                            .scaleEffect(trophyPulse ? 1.6 : 1.0)
+                            .opacity(trophyPulse ? 0 : 0.35)
                     }
+                    Image(systemName: isLoss ? "arrow.counterclockwise.circle.fill" : "trophy.fill")
+                        .font(.system(size: 46))
+                        .foregroundStyle(isLoss ? .white.opacity(0.7) : accentColor)
+                        .shadow(color: isLoss ? .clear : accentColor.opacity(0.9), radius: 18)
+                        .scaleEffect(isLoss ? 1.0 : (trophyPulse ? 1.06 : 1.0))
                 }
                 .onAppear {
                     guard !isLoss else { return }
-                    withAnimation(.easeOut(duration: 1.4).repeatForever(autoreverses: false)) {
+                    withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
                         trophyPulse = true
                     }
                 }
 
-                VStack(spacing: 5) {
+                VStack(spacing: 6) {
                     if model.lastResultWasPersonalBest {
                         Label("New Personal Best!", systemImage: "star.fill")
                             .font(.caption.weight(.bold))
                             .foregroundStyle(.yellow)
-                            .padding(.horizontal, 10)
-                            .padding(.vertical, 4)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
                             .background(.yellow.opacity(0.18), in: Capsule())
                             .overlay(Capsule().strokeBorder(.yellow.opacity(0.4), lineWidth: 1))
+                            .shadow(color: .yellow.opacity(0.3), radius: 8)
                             .transition(.scale.combined(with: .opacity))
                     }
                     Text(isLoss ? "Better luck next time" : "Well played!")
-                        .font(.caption.weight(.semibold))
+                        .font(.caption.weight(.bold))
                         .foregroundStyle(accentColor)
                         .textCase(.uppercase)
-                        .kerning(1.2)
+                        .kerning(1.5)
                     resultTextView(result)
                 }
 
-                // 3. Per-player finish table with spring-animated medal chips.
+                // Per-player finish table
                 if isMultiplayer && !ranking.isEmpty {
                     let medals = ["🥇", "🥈", "🥉"]
-                    VStack(spacing: 4) {
+                    VStack(spacing: 5) {
                         ForEach(ranking.indices, id: \.self) { groupIdx in
                             let group = ranking[groupIdx]
                             ForEach(group, id: \.self) { seat in
                                 HStack(spacing: 10) {
-                                    // Medal chip with scale animation on appear.
                                     Text(groupIdx < medals.count ? medals[groupIdx] : "·")
                                         .font(.body)
-                                        .frame(width: 24)
-                                        .scaleEffect(medalsAppeared ? 1.0 : 0.5)
+                                        .frame(width: 26)
+                                        .scaleEffect(medalsAppeared ? 1.0 : 0.4)
                                         .animation(
-                                            .spring(response: 0.45, dampingFraction: 0.55)
-                                            .delay(Double(groupIdx) * 0.12 + Double(group.firstIndex(of: seat) ?? 0) * 0.06),
-                                            value: medalsAppeared
-                                        )
+                                            .spring(response: 0.5, dampingFraction: 0.55)
+                                            .delay(Double(groupIdx) * 0.14 + Double(group.firstIndex(of: seat) ?? 0) * 0.07),
+                                            value: medalsAppeared)
                                     Text(session.playerName(seat: seat))
                                         .font(.subheadline.weight(groupIdx == 0 ? .semibold : .regular))
-                                        .foregroundStyle(groupIdx == 0 ? accentColor : .white.opacity(0.75))
+                                        .foregroundStyle(groupIdx == 0 ? accentColor : .white.opacity(0.7))
                                     Spacer()
                                     if groupIdx == 0 {
-                                        Text("winner")
-                                            .font(.caption2.weight(.semibold))
-                                            .foregroundStyle(accentColor.opacity(0.8))
-                                            .textCase(.uppercase)
-                                            .kerning(0.8)
+                                        Text("WINNER")
+                                            .font(.system(size: 9, weight: .black))
+                                            .foregroundStyle(accentColor)
+                                            .padding(.horizontal, 7)
+                                            .padding(.vertical, 3)
+                                            .background(accentColor.opacity(0.18), in: Capsule())
+                                            .overlay(Capsule().strokeBorder(accentColor.opacity(0.4), lineWidth: 0.75))
                                     }
                                 }
                                 .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(.white.opacity(groupIdx == 0 ? 0.1 : 0.04),
-                                            in: RoundedRectangle(cornerRadius: 8))
+                                .padding(.vertical, 7)
+                                .background {
+                                    if groupIdx == 0 {
+                                        LinearGradient(
+                                            colors: [accentColor.opacity(0.14), .white.opacity(0.04)],
+                                            startPoint: .leading, endPoint: .trailing)
+                                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    } else {
+                                        Color.white.opacity(0.04)
+                                            .clipShape(RoundedRectangle(cornerRadius: 10))
+                                    }
+                                }
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 10)
+                                        .strokeBorder(groupIdx == 0 ? accentColor.opacity(0.22) : .white.opacity(0.07), lineWidth: 0.75)
+                                )
                             }
                         }
                     }
-                    .padding(.horizontal, 4)
+                    .padding(.horizontal, 2)
                     .onAppear { medalsAppeared = true }
                     .onDisappear { medalsAppeared = false }
                 }
 
                 if model.activeMatch != nil {
-                    Label("Result recorded when you leave", systemImage: "checkmark.circle")
+                    Label("Result recorded when you leave", systemImage: "checkmark.circle.fill")
                         .font(.caption)
-                        .foregroundStyle(.white.opacity(0.6))
+                        .foregroundStyle(.white.opacity(0.55))
                 }
 
-                HStack(spacing: 12) {
+                // Action buttons
+                VStack(spacing: 10) {
                     if session.role == .local {
-                        Button("Play again") { model.playAgain() }
-                            .buttonStyle(.borderedProminent)
-                            .tint(isLoss ? Color(red: 0.55, green: 0.12, blue: 0.12) : Color(red: 0.15, green: 0.5, blue: 0.25))
+                        Button {
+                            model.playAgain()
+                        } label: {
+                            Label("Play again", systemImage: "arrow.counterclockwise")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 13)
+                                .background(
+                                    LinearGradient(
+                                        colors: isLoss
+                                            ? [Color(red: 0.55, green: 0.12, blue: 0.12), Color(red: 0.35, green: 0.06, blue: 0.06)]
+                                            : [gameColor, gameColor.opacity(0.7)],
+                                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                                    in: RoundedRectangle(cornerRadius: 14))
+                                .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.2), lineWidth: 0.75))
+                        }
+                        .buttonStyle(PressableTileStyle())
+                        .foregroundStyle(.white)
                     }
-                    Button(model.activeMatch != nil ? "Back to standings" : "Leave table") {
-                        model.endSession()
+                    HStack(spacing: 10) {
+                        Button {
+                            model.endSession()
+                        } label: {
+                            Text(model.activeMatch != nil ? "Back to standings" : "Leave")
+                                .font(.subheadline.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 11)
+                                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.18), lineWidth: 0.75))
+                        }
+                        .buttonStyle(PressableTileStyle())
+                        .foregroundStyle(.white)
+
+                        ShareLink(item: result) {
+                            Image(systemName: "square.and.arrow.up")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(width: 44, height: 44)
+                                .background(.white.opacity(0.1), in: RoundedRectangle(cornerRadius: 12))
+                                .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(.white.opacity(0.18), lineWidth: 0.75))
+                                .foregroundStyle(.white)
+                        }
+                        .buttonStyle(PressableTileStyle())
                     }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-                    ShareLink(item: result) {
-                        Image(systemName: "square.and.arrow.up")
-                            .font(.system(size: 15, weight: .medium))
-                            .frame(width: 34, height: 34)
-                            .background(.white.opacity(0.1), in: Circle())
-                            .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.75))
-                            .foregroundStyle(.white)
-                    }
-                    .buttonStyle(.plain)
                 }
             }
-            .padding(24)
+            .padding(.horizontal, 20)
+            .padding(.vertical, 22)
         }
         .foregroundStyle(.white)
         .background {
@@ -528,31 +600,35 @@ struct TableView: View {
                 RoundedRectangle(cornerRadius: 24).fill(
                     LinearGradient(
                         colors: isLoss
-                            ? [Color(red: 0.22, green: 0.06, blue: 0.06).opacity(0.6), .clear]
-                            : [Color(red: 0.25, green: 0.20, blue: 0.0).opacity(0.55), .clear],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
-                // 5. Small static colored dots near the banner for a festive look (win only).
+                            ? [Color(red: 0.20, green: 0.05, blue: 0.05).opacity(0.7), .clear]
+                            : [Color(red: 0.22, green: 0.16, blue: 0.0).opacity(0.65), gameColor.opacity(0.08)],
+                        startPoint: .top, endPoint: .bottom))
                 if !isLoss {
                     ForEach(confettiDots.indices, id: \.self) { idx in
                         let dot = confettiDots[idx]
                         Circle()
                             .fill(dot.2)
-                            .frame(width: 6 + CGFloat(idx % 2) * 3, height: 6 + CGFloat(idx % 2) * 3)
+                            .frame(width: 5 + CGFloat(idx % 3) * 3, height: 5 + CGFloat(idx % 3) * 3)
                             .offset(x: dot.0, y: dot.1)
-                            .opacity(0.72)
+                            .opacity(0.65)
+                            .blur(radius: CGFloat(idx % 2) * 0.5)
                     }
                 }
             }
         }
         .overlay(
             RoundedRectangle(cornerRadius: 24)
-                .strokeBorder(accentColor.opacity(0.25), lineWidth: 1)
+                .strokeBorder(
+                    LinearGradient(
+                        colors: [accentColor.opacity(0.35), accentColor.opacity(0.1)],
+                        startPoint: .topLeading, endPoint: .bottomTrailing),
+                    lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.5), radius: 24)
+        .shadow(color: isLoss ? .black.opacity(0.6) : accentColor.opacity(0.2), radius: 28, y: 4)
+        .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
         .environment(\.colorScheme, .dark)
-        .padding(24)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 20)
     }
 
     /// Breaks "Title · stat1 · stat2" resultText into a bold headline + smaller stat pills.
@@ -597,6 +673,7 @@ struct TableView: View {
 
 struct LobbyWaitView: View {
     @ObservedObject var session: GameSession
+    @EnvironmentObject var model: AppModel
     @State private var scanPulse: CGFloat = 0
     @State private var waitDots: Int = 0
     let waitTimer = Timer.publish(every: 0.6, on: .main, in: .common).autoconnect()
@@ -636,19 +713,45 @@ struct LobbyWaitView: View {
                 }
 
                 if session.isBigScreen {
-                    VStack(spacing: 6) {
-                        Label("This is the shared screen", systemImage: "tv.and.hifispeaker.fill")
-                            .font(.subheadline.weight(.bold))
+                    Label("This is the shared screen", systemImage: "tv.and.hifispeaker.fill")
+                        .font(.subheadline.weight(.bold))
+                        .foregroundStyle(.teal)
+                }
+
+                // QR code panel — shown whenever the web server is running (host or BigScreen).
+                if let webURL = model.webServer?.localURL {
+                    VStack(spacing: 12) {
+                        Text(session.isBigScreen
+                             ? "Scan to play in your browser — no app needed!"
+                             : "Others can scan this to join from their browser — no app needed!")
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(.white.opacity(0.9))
+                            .multilineTextAlignment(.center)
+
+                        if let qrImage = qrCode(from: webURL.absoluteString) {
+                            Image(uiImage: qrImage)
+                                .interpolation(.none)
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 190, height: 190)
+                                .clipShape(RoundedRectangle(cornerRadius: 14))
+                                .padding(6)
+                                .background(.white, in: RoundedRectangle(cornerRadius: 16))
+                        }
+
+                        Text(webURL.absoluteString)
+                            .font(.system(.caption, design: .monospaced))
                             .foregroundStyle(.teal)
-                        Text("On each phone: open Parlor → **Join a nearby game**. Mirror this device to a TV with AirPlay for the full effect.")
+
+                        Text("Or open Parlor → **Join a nearby game**" + (session.isBigScreen ? "\nMirror this device with AirPlay for the full effect." : ""))
                             .font(.caption)
-                            .foregroundStyle(.white.opacity(0.75))
+                            .foregroundStyle(.white.opacity(0.55))
                             .multilineTextAlignment(.center)
                     }
-                    .padding(14)
-                    .frame(maxWidth: 360)
-                    .background(.teal.opacity(0.12), in: RoundedRectangle(cornerRadius: 14))
-                    .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(.teal.opacity(0.3), lineWidth: 1))
+                    .padding(18)
+                    .frame(maxWidth: 400)
+                    .background(.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
+                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.teal.opacity(0.35), lineWidth: 1))
                 }
 
                 // Seat roster.
@@ -752,5 +855,17 @@ struct LobbyWaitView: View {
         .onReceive(waitTimer) { _ in
             waitDots = (waitDots + 1) % 3
         }
+    }
+
+    private func qrCode(from string: String) -> UIImage? {
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(Data(string.utf8), forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let output = filter.outputImage else { return nil }
+        let scale: CGFloat = 8
+        let scaled = output.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let context = CIContext()
+        guard let cgImage = context.createCGImage(scaled, from: scaled.extent) else { return nil }
+        return UIImage(cgImage: cgImage)
     }
 }

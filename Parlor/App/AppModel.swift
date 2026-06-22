@@ -12,6 +12,8 @@ final class AppModel: ObservableObject {
     @Published private(set) var recentKinds: [GameKind] = []
     /// Set true when the most recently completed solo game beat the previous personal best score.
     @Published private(set) var lastResultWasPersonalBest = false
+    /// HTTP server that serves the browser-based game controller for BigScreen mode.
+    @Published var webServer: BigScreenWebServer?
 
     let competitions = CompetitionStore()
     let stats = StatsStore()
@@ -58,7 +60,11 @@ final class AppModel: ObservableObject {
         activeMatch = nil
         noteRecent(kind)
         let transport = MultipeerTransport(hostingGame: kind, hostName: displayName)
-        session = GameSession(hosting: kind, options: options, transport: transport, myName: displayName)
+        let s = GameSession(hosting: kind, options: options, transport: transport, myName: displayName)
+        session = s
+        let server = BigScreenWebServer()
+        server.start(with: s)
+        webServer = server
     }
 
     /// Host a shared "big screen" table: this device becomes a display-only
@@ -67,7 +73,14 @@ final class AppModel: ObservableObject {
         activeMatch = nil
         noteRecent(kind)
         let transport = MultipeerTransport(hostingGame: kind, hostName: "\(displayName)'s screen")
-        session = GameSession(bigScreen: kind, options: options, transport: transport, myName: displayName)
+        let s = GameSession(bigScreen: kind, options: options, transport: transport, myName: displayName)
+        session = s
+        // Allow landscape so the TV display can rotate freely.
+        AppDelegate.mask = .all
+        // Start the local web server so phones can join via QR code.
+        let server = BigScreenWebServer()
+        server.start(with: s)
+        webServer = server
     }
 
     private func noteRecent(_ kind: GameKind) {
@@ -107,6 +120,10 @@ final class AppModel: ObservableObject {
         }
         session = nil
         activeMatch = nil
+        // Stop web server and restore portrait-only orientation.
+        webServer?.stop()
+        webServer = nil
+        AppDelegate.mask = .portrait
     }
 
     /// Multiplayer tables always suspend; an untouched solo deal isn't worth keeping.

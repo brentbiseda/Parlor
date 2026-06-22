@@ -20,10 +20,13 @@ struct HopperView: View {
                 // Life hearts row (#15)
                 lifeHeartsRow(game: game)
                     .padding(.horizontal, 12)
+                    .frame(height: 24)
                 statsStrip(game: game)
                     .padding(.horizontal, 12)
+                    .frame(height: 36)
                 timerBar(game: game)
                     .padding(.horizontal, 12)
+                    .frame(height: 14)
             }
             ZStack {
                 board
@@ -75,19 +78,17 @@ struct HopperView: View {
     }
 
     /// Life hearts display (#15): filled hearts for lives, empty for lost lives.
-    @ViewBuilder
     func lifeHeartsRow(game: HopperGame) -> some View {
-        if !game.isOver {
-            HStack(spacing: 6) {
-                ForEach(0..<3, id: \.self) { i in
-                    Text(i < game.lives ? "❤️" : "🤍")
-                        .font(.system(size: 18))
-                        .opacity(i < game.lives ? 1.0 : 0.5)
-                        .animation(.spring(response: 0.3), value: game.lives)
-                }
-                Spacer()
+        HStack(spacing: 6) {
+            ForEach(0..<3, id: \.self) { i in
+                Text(i < game.lives ? "❤️" : "🤍")
+                    .font(.system(size: 18))
+                    .opacity(i < game.lives ? 1.0 : 0.5)
+                    .animation(.spring(response: 0.3), value: game.lives)
             }
+            Spacer()
         }
+        .opacity(game.isOver ? 0 : 1)
     }
 
     /// Returns how many road-obstacle cells are within `window` cells of `frogX` on `row`.

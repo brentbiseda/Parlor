@@ -426,6 +426,23 @@ final class GameSession: ObservableObject {
         }
     }
 
+    // MARK: - Web Players (BigScreen)
+
+    /// Add a web-browser player to the lobby. Returns false if full or already started.
+    func addWebPlayer(_ player: PlayerInfo) -> Bool {
+        guard role == .host, game == nil, lobby.players.count < seatsTotal else { return false }
+        guard !lobby.players.contains(where: { $0.id == player.id }) else { return true }
+        lobby.players.append(player)
+        transport?.broadcast(.lobby(lobby))
+        return true
+    }
+
+    /// Apply a move submitted by a web-browser player on behalf of `seat`.
+    func submitFromWeb(move: Move, seat: Int) {
+        guard let g = game, !g.isOver, seat == g.currentPlayer else { return }
+        try? applyAndSync(move)
+    }
+
     // MARK: - Teardown
 
     func leave() {
