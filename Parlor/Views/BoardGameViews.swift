@@ -36,10 +36,19 @@ struct GridBoardView: View {
                 .padding(.horizontal, 12)
             Spacer()
             if session.actionableSeat != nil, session.game?.isOver == false {
-                Button("Resign", role: .destructive) { session.submit(.resign) }
-                    .buttonStyle(.bordered)
-                    .tint(.white)
-                    .padding(.bottom, 6)
+                Button {
+                    session.submit(.resign)
+                } label: {
+                    Label("Resign", systemImage: "flag.fill")
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 9)
+                        .background(.white.opacity(0.08), in: Capsule())
+                        .overlay(Capsule().strokeBorder(.white.opacity(0.14), lineWidth: 0.75))
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 8)
             }
         }
         .confirmationDialog("Promote to", isPresented: Binding(

@@ -10,6 +10,7 @@ struct RootView: View {
     @State private var soloSetupKind: GameKind? = nil
     @State private var showProfiles = false
     @State private var joinPulse: CGFloat = 0
+    @State private var showModelToast = false
     @AppStorage(SoundFX.enabledKey) private var soundOn = true
 
     var body: some View {
@@ -131,13 +132,42 @@ struct RootView: View {
                     .environmentObject(model)
             }
         }
-        .alert("Parlor", isPresented: Binding(
-            get: { model.toast != nil },
-            set: { if !$0 { model.toast = nil } }
-        )) {
-            Button("OK", role: .cancel) {}
-        } message: {
-            Text(model.toast ?? "")
+        .overlay(alignment: .top) {
+            if showModelToast, let msg = model.toast {
+                HStack(spacing: 9) {
+                    Image(systemName: "info.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.teal)
+                    Text(msg)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(3)
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 12)
+                .background {
+                    ZStack {
+                        Capsule().fill(.ultraThinMaterial)
+                        Capsule().fill(Color.teal.opacity(0.15))
+                    }
+                    .overlay(Capsule().strokeBorder(Color.teal.opacity(0.35), lineWidth: 1))
+                }
+                .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+                .padding(.top, 10)
+                .padding(.horizontal, 24)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .onChange(of: model.toast) { _, toast in
+            guard toast != nil else { return }
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) { showModelToast = true }
+            Task { @MainActor in
+                try? await Task.sleep(for: .seconds(2.8))
+                withAnimation(.easeIn(duration: 0.35)) { showModelToast = false }
+                try? await Task.sleep(for: .seconds(0.4))
+                model.toast = nil
+            }
         }
     }
 
@@ -512,6 +542,9 @@ extension GameKind {
         case .soccer: return Color(red: 0.15, green: 0.55, blue: 0.4)
         case .hockey: return Color(red: 0.25, green: 0.45, blue: 0.7)
         case .trivia: return Color(red: 0.45, green: 0.18, blue: 0.72)
+        case .promptParty: return Color(red: 0.85, green: 0.4, blue: 0.15)
+        case .bluff: return Color(red: 0.5, green: 0.15, blue: 0.75)
+        case .jackAttack: return Color(red: 0.85, green: 0.75, blue: 0.1)
         }
     }
 }
@@ -600,6 +633,20 @@ struct GameTile: View {
                         .padding(.vertical, 3)
                         .background(Color(red: 1.0, green: 0.85, blue: 0.3).opacity(0.15), in: Capsule())
                         .overlay(Capsule().strokeBorder(Color(red: 1.0, green: 0.85, blue: 0.3).opacity(0.35), lineWidth: 0.5))
+                    }
+                    if let wr = winRate {
+                        ZStack(alignment: .leading) {
+                            Capsule()
+                                .fill(.black.opacity(0.3))
+                                .frame(maxWidth: .infinity, maxHeight: 3)
+                            Capsule()
+                                .fill(LinearGradient(
+                                    colors: [dotColor ?? .white, (dotColor ?? .white).opacity(0.55)],
+                                    startPoint: .leading, endPoint: .trailing))
+                                .frame(maxWidth: .infinity, maxHeight: 3)
+                                .scaleEffect(x: CGFloat(wr), anchor: .leading)
+                        }
+                        .padding(.top, 1)
                     }
                 }
             }
@@ -1092,9 +1139,17 @@ struct GameSetupSheet: View {
     @State private var goSize = 9
     @AppStorage("parlor.botDifficulty") private var difficultyRaw = BotDifficulty.normal.rawValue
 
+    // Party game settings
+    @State private var partyPlayerCount: Int = 4
+    @State private var triviaCategories: Set<TriviaCategory> = []
+    @State private var triviaDifficulty: TriviaDifficulty? = nil
+
     var options: GameOptions {
         GameOptions(goBoardSize: goSize,
-                    botDifficulty: BotDifficulty(rawValue: difficultyRaw) ?? .normal)
+                    botDifficulty: BotDifficulty(rawValue: difficultyRaw) ?? .normal,
+                    partyPlayerCount: partyPlayerCount,
+                    triviaCategories: Array(triviaCategories),
+                    triviaDifficulty: triviaDifficulty)
     }
 
     var body: some View {
@@ -1167,62 +1222,184 @@ struct GameSetupSheet: View {
                         }
                     }
 
-                    // Bot difficulty
-                    SetupCard(title: "Bot strength", icon: "cpu") {
-                        VStack(alignment: .leading, spacing: 8) {
-                            Picker("", selection: $difficultyRaw) {
-                                ForEach(BotDifficulty.allCases) { Text($0.title).tag($0.rawValue) }
+                    // Party game options
+                    if kind.isPartyGame {
+                        let minPlayers = (kind == .promptParty || kind == .bluff) ? 3 : 2
+                        let maxPlayers = (kind == .promptParty || kind == .bluff) ? 8 : 16
+                        SetupCard(title: "Players", icon: "person.3.fill") {
+                            VStack(spacing: 10) {
+                                HStack {
+                                    Text("Number of players")
+                                        .foregroundStyle(.white.opacity(0.8))
+                                    Spacer()
+                                    HStack(spacing: 16) {
+                                        Button {
+                                            if partyPlayerCount > minPlayers { partyPlayerCount -= 1 }
+                                        } label: {
+                                            Image(systemName: "minus.circle.fill")
+                                                .font(.title3)
+                                                .foregroundStyle(partyPlayerCount > minPlayers ? .white : .white.opacity(0.25))
+                                        }
+                                        .buttonStyle(.plain)
+                                        Text("\(partyPlayerCount)")
+                                            .font(.title3.weight(.bold))
+                                            .frame(width: 28)
+                                            .monospacedDigit()
+                                        Button {
+                                            if partyPlayerCount < maxPlayers { partyPlayerCount += 1 }
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.title3)
+                                                .foregroundStyle(partyPlayerCount < maxPlayers ? .white : .white.opacity(0.25))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
                             }
-                            .pickerStyle(.segmented)
-                            Text((BotDifficulty(rawValue: difficultyRaw) ?? .normal).blurb)
-                                .font(.caption)
-                                .foregroundStyle(.white.opacity(0.5))
+                        }
+                        .onAppear {
+                            if partyPlayerCount < minPlayers { partyPlayerCount = minPlayers }
+                            if partyPlayerCount > maxPlayers { partyPlayerCount = maxPlayers }
+                        }
+
+                        if kind == .trivia {
+                            SetupCard(title: "Categories", icon: "tag.fill") {
+                                VStack(spacing: 8) {
+                                    LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
+                                        ForEach(TriviaCategory.allCases, id: \.self) { cat in
+                                            let selected = triviaCategories.contains(cat)
+                                            Button {
+                                                if selected { triviaCategories.remove(cat) }
+                                                else { triviaCategories.insert(cat) }
+                                            } label: {
+                                                HStack(spacing: 6) {
+                                                    Image(systemName: cat.icon)
+                                                        .font(.system(size: 11))
+                                                    Text(cat.rawValue)
+                                                        .font(.system(size: 12, weight: .semibold))
+                                                        .lineLimit(1)
+                                                }
+                                                .foregroundStyle(selected ? .white : .white.opacity(0.55))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 8)
+                                                .background(selected ? kind.tileColor.opacity(0.4) : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+                                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? kind.tileColor.opacity(0.8) : Color.white.opacity(0.1), lineWidth: 1))
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                    if !triviaCategories.isEmpty {
+                                        Button("Clear — use all categories") {
+                                            triviaCategories = []
+                                        }
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.45))
+                                        .padding(.top, 2)
+                                    }
+                                }
+                            }
+
+                            SetupCard(title: "Difficulty", icon: "speedometer") {
+                                HStack(spacing: 8) {
+                                    ForEach(TriviaDifficulty.allCases, id: \.self) { diff in
+                                        let selected = triviaDifficulty == diff
+                                        Button {
+                                            triviaDifficulty = selected ? nil : diff
+                                        } label: {
+                                            Text(diff.label)
+                                                .font(.system(size: 13, weight: .semibold))
+                                                .frame(maxWidth: .infinity)
+                                                .padding(.vertical, 10)
+                                                .background(selected ? kind.tileColor.opacity(0.4) : Color.white.opacity(0.07), in: RoundedRectangle(cornerRadius: 10))
+                                                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? kind.tileColor.opacity(0.8) : Color.white.opacity(0.1), lineWidth: 1))
+                                                .foregroundStyle(selected ? .white : .white.opacity(0.6))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                if triviaDifficulty != nil {
+                                    Button("Any difficulty") { triviaDifficulty = nil }
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.45))
+                                        .padding(.top, 2)
+                                }
+                            }
+                        }
+                    }
+
+                    // Bot difficulty (skip for party games — no bots)
+                    if !kind.isPartyGame {
+                        SetupCard(title: "Bot strength", icon: "cpu") {
+                            VStack(alignment: .leading, spacing: 8) {
+                                Picker("", selection: $difficultyRaw) {
+                                    ForEach(BotDifficulty.allCases) { Text($0.title).tag($0.rawValue) }
+                                }
+                                .pickerStyle(.segmented)
+                                Text((BotDifficulty(rawValue: difficultyRaw) ?? .normal).blurb)
+                                    .font(.caption)
+                                    .foregroundStyle(.white.opacity(0.5))
+                            }
                         }
                     }
 
                     // Solo / pass & play
                     SetupCard(title: "On this device", icon: "iphone") {
                         VStack(spacing: 12) {
-                            HStack {
-                                Text("Players here")
-                                    .foregroundStyle(.white.opacity(0.8))
-                                Spacer()
-                                HStack(spacing: 16) {
-                                    Button {
-                                        if humanCount > 1 { humanCount -= 1 }
-                                    } label: {
-                                        Image(systemName: "minus.circle.fill")
-                                            .font(.title3)
-                                            .foregroundStyle(humanCount > 1 ? .white : .white.opacity(0.25))
-                                    }
-                                    .buttonStyle(.plain)
-                                    Text("\(humanCount)")
-                                        .font(.title3.weight(.bold))
-                                        .frame(width: 28)
-                                        .monospacedDigit()
-                                    Button {
-                                        if humanCount < kind.playerCount { humanCount += 1 }
-                                    } label: {
-                                        Image(systemName: "plus.circle.fill")
-                                            .font(.title3)
-                                            .foregroundStyle(humanCount < kind.playerCount ? .white : .white.opacity(0.25))
-                                    }
-                                    .buttonStyle(.plain)
-                                }
-                            }
-                            if humanCount < kind.playerCount {
-                                Text("\(kind.playerCount - humanCount) seat\(kind.playerCount - humanCount == 1 ? "" : "s") fill with bots")
+                            if kind.isPartyGame {
+                                Text("Pass the device around for each player's turn. Set the player count above.")
                                     .font(.caption)
-                                    .foregroundStyle(.white.opacity(0.45))
+                                    .foregroundStyle(.white.opacity(0.5))
                                     .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            SetupActionButton(
-                                label: humanCount > 1 ? "Pass & play" : "Play vs bots",
-                                icon: "play.fill",
-                                color: kind.tileColor
-                            ) {
-                                model.startLocal(kind: kind, options: options, humanCount: humanCount)
-                                dismiss()
+                                SetupActionButton(
+                                    label: "Pass & Play (\(partyPlayerCount) players)",
+                                    icon: "play.fill",
+                                    color: kind.tileColor
+                                ) {
+                                    model.startLocal(kind: kind, options: options, humanCount: partyPlayerCount)
+                                    dismiss()
+                                }
+                            } else {
+                                HStack {
+                                    Text("Players here")
+                                        .foregroundStyle(.white.opacity(0.8))
+                                    Spacer()
+                                    HStack(spacing: 16) {
+                                        Button {
+                                            if humanCount > 1 { humanCount -= 1 }
+                                        } label: {
+                                            Image(systemName: "minus.circle.fill")
+                                                .font(.title3)
+                                                .foregroundStyle(humanCount > 1 ? .white : .white.opacity(0.25))
+                                        }
+                                        .buttonStyle(.plain)
+                                        Text("\(humanCount)")
+                                            .font(.title3.weight(.bold))
+                                            .frame(width: 28)
+                                            .monospacedDigit()
+                                        Button {
+                                            if humanCount < kind.playerCount { humanCount += 1 }
+                                        } label: {
+                                            Image(systemName: "plus.circle.fill")
+                                                .font(.title3)
+                                                .foregroundStyle(humanCount < kind.playerCount ? .white : .white.opacity(0.25))
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                                if humanCount < kind.playerCount {
+                                    Text("\(kind.playerCount - humanCount) seat\(kind.playerCount - humanCount == 1 ? "" : "s") fill with bots")
+                                        .font(.caption)
+                                        .foregroundStyle(.white.opacity(0.45))
+                                        .frame(maxWidth: .infinity, alignment: .leading)
+                                }
+                                SetupActionButton(
+                                    label: humanCount > 1 ? "Pass & play" : "Play vs bots",
+                                    icon: "play.fill",
+                                    color: kind.tileColor
+                                ) {
+                                    model.startLocal(kind: kind, options: options, humanCount: humanCount)
+                                    dismiss()
+                                }
                             }
                         }
                     }

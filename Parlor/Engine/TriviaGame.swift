@@ -102,14 +102,18 @@ struct TriviaGame: GameEngine {
     var currentPlayer: Int { currentSeat }
     var isOver: Bool { currentQ >= Self.questionsPerGame }
 
-    init(playerCount: Int = 4) {
-        numPlayers = max(1, min(4, playerCount))
+    init(playerCount: Int = 4,
+         categories: [TriviaCategory] = [],
+         difficulty: TriviaDifficulty? = nil) {
+        numPlayers = max(2, min(16, playerCount))
         seed = UInt64.random(in: 0...UInt64.max)
         var gen = SplitMix64(seed: seed)
-        let bank = TriviaQuestionBank.all
+        var bank = TriviaQuestionBank.all
+        if !categories.isEmpty { bank = bank.filter { categories.contains($0.cat) } }
+        if let diff = difficulty { bank = bank.filter { $0.diff == diff } }
+        if bank.isEmpty { bank = TriviaQuestionBank.all }  // fallback: no match → use all
         let shuffled = (0..<bank.count).shuffled(using: &gen)
         questionIDs = shuffled.prefix(Self.questionsPerGame).map { bank[$0].id }
-        // Pad to questionsPerGame if bank is small
         while questionIDs.count < Self.questionsPerGame {
             questionIDs.append(bank[Int.random(in: 0..<bank.count, using: &gen)].id)
         }

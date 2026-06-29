@@ -278,54 +278,56 @@ struct TriviaView: View {
     // MARK: - Score row
 
     private func scoreRow(_ g: TriviaGame) -> some View {
-        HStack(spacing: 8) {
-            ForEach(0..<g.numPlayers, id: \.self) { seat in
-                let isMe = session.localHumanSeats.contains(seat)
-                let isCurrent = seat == g.currentSeat && !g.isOver
-                VStack(spacing: 3) {
-                    Text(session.playerName(seat: seat))
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(isMe ? .teal : .white.opacity(0.65))
-                        .lineLimit(1).minimumScaleFactor(0.7)
-                    Text("\(g.scores[seat])")
-                        .font(.system(size: 18, weight: .black, design: .rounded))
-                        .foregroundStyle(isCurrent ? .yellow : .white)
-                        .contentTransition(.numericText())
-                        .monospacedDigit()
-                    if isCurrent {
-                        Text("your turn")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.yellow.opacity(0.75))
-                    } else {
-                        Text("pts")
-                            .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.3))
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-                .background(
-                    ZStack {
-                        RoundedRectangle(cornerRadius: 12)
-                            .fill(isCurrent ? Color.yellow.opacity(0.12) : Color.white.opacity(0.05))
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(0..<g.numPlayers, id: \.self) { seat in
+                    let isMe = session.localHumanSeats.contains(seat)
+                    let isCurrent = seat == g.currentSeat && !g.isOver
+                    VStack(spacing: 3) {
+                        Text(session.playerName(seat: seat))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(isMe ? .teal : .white.opacity(0.65))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                        Text("\(g.scores[seat])")
+                            .font(.system(size: 18, weight: .black, design: .rounded))
+                            .foregroundStyle(isCurrent ? .yellow : .white)
+                            .contentTransition(.numericText())
+                            .monospacedDigit()
                         if isCurrent {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(
-                                    LinearGradient(colors: [.yellow, .orange.opacity(0.6)],
-                                                   startPoint: .topLeading, endPoint: .bottomTrailing),
-                                    lineWidth: scorePulse ? 2 : 1.2
-                                )
-                                .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: scorePulse)
+                            Text("your turn")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.yellow.opacity(0.75))
                         } else {
-                            RoundedRectangle(cornerRadius: 12)
-                                .strokeBorder(.white.opacity(0.06), lineWidth: 0.75)
+                            Text("pts")
+                                .font(.system(size: 8, weight: .semibold))
+                                .foregroundStyle(.white.opacity(0.3))
                         }
                     }
-                )
-                .shadow(color: isCurrent ? .yellow.opacity(0.2) : .clear, radius: 8)
+                    .frame(minWidth: 52)
+                    .padding(.vertical, 8)
+                    .background(
+                        ZStack {
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(isCurrent ? Color.yellow.opacity(0.12) : Color.white.opacity(0.05))
+                            if isCurrent {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(
+                                        LinearGradient(colors: [.yellow, .orange.opacity(0.6)],
+                                                       startPoint: .topLeading, endPoint: .bottomTrailing),
+                                        lineWidth: scorePulse ? 2 : 1.2
+                                    )
+                                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: scorePulse)
+                            } else {
+                                RoundedRectangle(cornerRadius: 12)
+                                    .strokeBorder(.white.opacity(0.06), lineWidth: 0.75)
+                            }
+                        }
+                    )
+                    .shadow(color: isCurrent ? .yellow.opacity(0.2) : .clear, radius: 8)
+                }
             }
+            .padding(.horizontal, 12)
         }
-        .padding(.horizontal, 12)
         .padding(.bottom, 8)
         .onAppear { scorePulse = true }
         .onChange(of: g.currentSeat) { _, _ in scorePulse = true }

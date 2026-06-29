@@ -111,6 +111,26 @@ Scenes push `ArcadeEvent` callbacks into `session.submit(.arcade(event))`.
 - **BreakoutGame (updated)** — 6 power-up types (`BreakoutPowerUp`: widePaddle/multiball/shield/fireball/scoreDouble/extraLife), 3 new brick types (explosive = chain-destroys neighbours within 72px, steel = indestructible from Lv4, moving = SKAction oscillation from Lv3). `shieldHits`, `powerUpsCaught`, `extraLivesGained` stats in `resultText`. `bricksRemaining`/`totalBricks` tracked via `.brickCount(remaining:total:)` event → header progress bar. Fireball mode removes brick `collisionBitMask` (ball passes through) while keeping `contactTestBitMask` for destruction callbacks. Multi-ball: `balls: [SKShapeNode]` array; losing all balls triggers `.ballLost`. Score-double: scene applies `scoreMultiplier` to points before sending `.score(n)` event. Wall contacts fire `.wallBounce` (ball `contactTestBitMask` now includes `Category.wall`). Shield: horizontal bar at y=24 with `Category.shield`; breaks on first ball contact.
 - **MuncherGame** — Ghosts have `GhostType` (.blinky/.pinky/.inky/.clyde) with distinct chase targeting. Scatter/chase phase cycle via `scatterChaseCycle` array (even=scatter, odd=chase). `isScatterPhase: Bool` computed property. `fruitsEaten: Int` tracks bonus fruit pickups (shown in resultText 🍒). View shows a power-pellet timer bar that displays the ghost combo multiplier (`×200`, `×400`, `×800`, `×1600`) when ghosts have been eaten this power-up. "SCATTER" hint label also shown.
 
+### Party Games
+`QuiplashGame` (title **"Prompt Party"**, `Engine/QuiplashGame.swift`, `Views/QuiplashView.swift`) — fill-in-the-blank comedy voting game for 3–8 players. Phases: `.writing` (each player writes an answer to a prompt), `.voting` (everyone votes for their favorite answer), `.revealing` (vote tallies shown), `.over`. `QuiplashPromptBank.all` provides the prompt pool. `currentActor` tracks who writes/votes next. `QuiplashView` uses a `TextField` during writing, answer buttons during voting, and a podium ranking during reveal. `session.localHumanSeats.contains(g.currentActor)` gates local input. `ScoreRow` in `QuiplashView` uses `ScrollView(.horizontal)` to support up to 16 players.
+
+`BluffGame` (title **"Bluff!"**, `Engine/BluffGame.swift`, `Views/BluffView.swift`) — Balderdash-style fake-definition game for 3–8 players. `BluffWordBank.all` provides word cards with real definitions. Phases: `.defining` (each player types a fake definition), `.voting` (players vote for the real one), `.revealing`, `.over`. `shuffledOrders: [[Int]]` pre-generates answer display order per round (each order mixes seat indices + `-1` for the real answer). Scoring: guessing real = 2 pts; your fake fools someone = 1 pt per fool; nobody guesses real = 1 pt everyone. `displayedAnswers(for:)` returns `(label, text, seat)` tuples for the current round. `BluffView` shows lettered A/B/C/D buttons during voting, real-vs-fake reveal with fool-count badges. Bug note: `shuffledOrders` closure must capture `let n = numPlayers` before the `map` (not `self.numPlayers`) to avoid "variable captured before initialization."
+
+`JackAttackGame` (title **"Jack Attack"**, `Engine/JackAttackGame.swift`, `Views/JackAttackView.swift`) — irreverent YDKJ-style trivia for 2–8 players. Questions have 4 multiple-choice answers (A/B/C/D). Players race to answer before time runs out; faster correct answers score more. **Screw mechanic**: each player has 1 screw per round; `Move.jackAttack(.screw(seat))` forces that seat to answer without time bonus. `JackAttackView` shows a circular countdown arc (color-coded green→yellow→red), 2×2 answer grid, and a screw section with bolt-icon buttons. Timer restarts via `.task(id: "\(g.currentQ)-\(g.currentSeat)-\(String(describing: g.screwedSeat))")`.
+
+**TriviaGame** (`Engine/TriviaGame.swift`, `Views/TriviaView.swift`) — supports 2–16 players with category and difficulty filtering. `TriviaView.scoreRow` uses `ScrollView(.horizontal, showsIndicators: false)` with `.frame(minWidth: 52)` per cell to support large player counts. `TriviaCategory.allCases` drives the category picker in `GameSetupSheet`. `GameOptions.triviaCategories: [TriviaCategory]` and `triviaDifficulty: TriviaDifficulty?` filter the question pool.
+
+**GameSetupSheet** (in `RootView.swift`) shows party-game-specific options when `kind.isPartyGame`:
+- Player count stepper (min 2 or 3 depending on game, max 8 or 16)
+- Trivia category multi-select grid (`LazyVGrid` with `TriviaCategory.allCases`)
+- Trivia difficulty picker (Easy/Medium/Hard; tapping selected one deselects → Any)
+- Bot difficulty section is hidden for party games (`if !kind.isPartyGame`)
+- "Pass & Play (N players)" button in the "On this device" section
+
+`GameKind.isPartyGame` and `GameKind.effectivePlayerCount(options:)` are used throughout to distinguish party games from competitive games.
+
+**Tile colors** in `RootView.swift`: `.promptParty` = orange `(0.85, 0.4, 0.15)`, `.bluff` = purple `(0.5, 0.15, 0.75)`, `.jackAttack` = yellow `(0.85, 0.75, 0.1)`.
+
 ### Board Games
 Chess, Checkers, Go — in `BoardGameViews.swift`. Bot logic in `Bots.swift`.
 `BoardGameViews` shows a `capturedBar` beneath the board: chess shows missing pieces grouped by type; checkers shows piece-loss counts, moves-without-capture counter ("no-cap"), and the `lastMoveDesc` text underneath. Checkers board highlights pieces one step from promotion with a hollow crown icon + gold glow ring.
@@ -154,7 +174,8 @@ Bridge bot (`bridgeBotCall`): opens with 13+ HCP only when `game.lastBid == nil`
 - `CardSlotView` — empty pile slot with radial gradient inner glow and dashed border (topLeading-to-bottomTrailing gradient).
 
 ### TableView
-- **Player avatar strip** — shown above the status line for multiplayer games; each seat gets a small circle icon (green ring = active turn, teal dot = local human, person/cpu icon = human/bot). Accessibility: `.accessibilityLabel` on each seat badge ("Seat N, current turn, you").
+- **Player avatar strip** — shown above the status line for multiplayer games; each seat gets a small circle icon (green ring = active turn, teal dot = local human, orange ring = partner seat, person/cpu icon = human/bot). Accessibility: `.accessibilityLabel` on each seat badge ("Seat N, current turn, you").
+- **Partnership detection** — `TableView` computes `partnerSeat = (perspectiveSeat + 2) % 4` for games where `session.lobby.gameKind.isPartnership`. Each `PlayerAvatarCell` receives `isPartner: Bool` so the partner shows an orange pulsing ring + "Partner" label.
 - **Result banner** — `resultBanner(_:)` shows a per-player finish table (🥇🥈🥉 rows) for multiplayer games, sourced from `game.ranking()`. Solo games show only the text result. Includes a `ShareLink` to share result text and slides in with `.spring` transition.
 - `statusLine(_:)` appends "— your move" or "— PlayerName" to `game.statusText`. Status bar uses `lineLimit(2)` + `minimumScaleFactor(0.78)` to accommodate long Chess/Go status strings.
 
@@ -202,6 +223,10 @@ Win-rate is now displayed as a `%` badge (top-right of icon circle) and a colore
 ### CardViews
 `HandView` card taps now fire `.light` haptic feedback when the tapped card is legal. `OpponentHandView` shows a dashed empty-slot outline when `count == 0`, and the `+N` overflow badge is styled with a black pill background. `FeltBackground` renders a subtle canvas noise grain (with `.overlay` blend mode) to simulate felt fiber texture. `PlayerAvatarCell` is a new reusable component extracted from `TableView`.
 
+`PlayerAvatarCell(name:isCurrent:isYou:isBot:isPartner:)` — `isPartner: Bool = false` adds an orange pulsing ring around the avatar circle, an orange top-right dot, and an orange "Partner" micro-label below the name. Uses orange fill gradient for the avatar circle background.
+
+`SeatBadge(name:isCurrent:detail:highlight:)` — `highlight: Bool = false` adds an orange dot in the HStack, orange text color, and semibold font weight. Used in `TrickGameViews` to mark the partner seat (offset == 2 from perspective seat) with a 🤝 emoji appended to the name.
+
 ### ProfilesView
 - Shows per-game ELO + W/L/D record for the active profile's played games (sorted by games played), with a win-rate progress bar under each row and the ELO number color-tiered (`eloColor(_:)`: green ≥1200, yellow 1000–1199, red <1000).
 - ELO delta vs starting rating (1200) shown as green `+N` / red `-N` next to each ELO number. The starting baseline is 1200 (`Elo.initial`), not 1000.
@@ -216,6 +241,31 @@ Win-rate is now displayed as a `%` badge (top-right of icon circle) and a colore
 - **Euchre tricks bar**: shows ⚡ALONE badge, N/3 fraction. Score strip shows 🔥N streak from `teamRoundStreak`. `resultText` shows full trump-split breakdown when ≥2 suits called (e.g. `"♠×4 ♥×2"`).
 - **Spades tricks bar**: shows projected bag delta (+N🎒) and ✓/N/contract progress during playing. Nil bid chips show `shield.fill` icon (green) or `xmark.circle.fill` (red), count of tricks taken if busted.
 - **Hearts moon pulse**: TrickTableView animates a pulsing effect on the moon-candidate chip when a potential moon-shooter is detected.
+- **Partner seat indicator**: `opponentBadge` in `TrickTableView` detects the partner seat (relative offset == 2 from perspective seat) and shows orange `SeatBadge` highlight + 🤝 emoji for partnership games.
+
+## BigScreenWebServer
+
+`BigScreenWebServer` serves an embedded HTML controller page at port 8080. Phones connect via a URL shown by the host (QR code or typed). The web page handles joining, polling, and submitting moves without any native app install.
+
+### API Endpoints
+- `GET /api/lobby` — returns `{gameName, seatsFilled, seatsTotal}`
+- `POST /api/join` — body `{name}`, returns `{sessionID, seat, name, gameName}`
+- `GET /api/state?id=<sid>` — returns game state for the given session
+- `POST /api/move` — body `{id, moveIndex}` or `{id, passLabels}` for Hearts card passing
+
+### State Response Fields
+`apiState` JSON includes: `mySeat`, `myName`, `currentPlayer`, `currentPlayerName`, `isMyTurn`, `isOver`, `waiting`, `statusText`, `resultText`, `seatNames`, `scores`, `teamScores` (for partnership games), `hand` (cards with `label`, `isRed`, `legal`, `moveIdx`), `trick` (array of `{seat, label, isRed}`), `moves` (labeled move list with `index`), `phase`, `passCount`, `topCard`, `books`, `handSizes`. Partnership games also include `partnerSeat` and `partnerName`.
+
+### Controller Page Features
+- **localStorage name persistence**: player name saved after joining, restored to pre-fill input on revisit
+- **Session auto-resume**: `sid` saved in `localStorage`; on page load, tries `GET /api/state?id=<sid>` — if valid, resumes polling without re-joining (fixes "session expired" bug where stale `sid` required a tap to re-validate)
+- **"Session expired" handling**: on expiry, clears `localStorage` and shows Rejoin button with pre-filled name
+- **Compass trick layout**: for card games with a `trick` field, renders cards in compass orientation — `relPos = (seat - mySeat + 4) % 4` maps seats to bottom (you), left, top (across/partner), right positions
+- **Partnership chip**: if `d.partnerName` is in the state, shows an orange "🤝 PartnerName" badge next to your seat badge
+- **Visual playing cards**: `hcard` CSS class renders cards with rank top-left, large suit center, rank bottom-right (rotated 180°); red suits in `#c62828`; legal cards highlighted in `#ffd54f` yellow
+- **Score row**: shows team scores for partnership games (You & Partner vs Opponents); per-seat scores otherwise with you/partner highlighted
+- **Bid grid**: automatically detects bid choices (numeric/Nil/Pass patterns) → 4-column number grid
+- **Hearts pass**: select 3 cards, "Pass Selected (N/3)" button appears when count == 3; submits `{passLabels: [...]}` to `/api/move`
 
 ## Adding a New Game
 

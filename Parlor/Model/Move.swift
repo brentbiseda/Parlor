@@ -217,6 +217,30 @@ enum TriviaMove: Codable, Hashable {
     case timeOut         // question timer expired without answering
 }
 
+// MARK: - Prompt Party (Quiplash-style)
+
+enum QuiplashMove: Codable, Hashable {
+    case answer(String)  // player types their funny answer
+    case vote(Int)       // vote for the answer at the given seat index
+    case advance         // host/view advances after results
+}
+
+// MARK: - Bluff! (Balderdash-style)
+
+enum BluffMove: Codable, Hashable {
+    case define(String)  // player types their fake definition
+    case vote(Int)       // vote for definition at given answer index (0 = real + fakes mixed)
+    case advance
+}
+
+// MARK: - Jack Attack (YDKJ-style)
+
+enum JackAttackMove: Codable, Hashable {
+    case answer(Int, timeUsed: Int)  // option 0–3, seconds taken
+    case screw(Int)                  // force player at seat to answer instead
+    case timeOut
+}
+
 enum UnoColor: String, Codable, Hashable, CaseIterable {
     case red, yellow, green, blue
 }
@@ -335,6 +359,15 @@ extension Move {
         case .marioParty(.playMinigame(let s)): return "Score \(s)"
         case .trivia(.answer(let i)): return ["A","B","C","D"][safe: i] ?? "\(i)"
         case .trivia(.timeOut): return "Time Out"
+        case .quiplash(.answer(let s)): return s.isEmpty ? "…" : s
+        case .quiplash(.vote(let i)): return "Vote \(i + 1)"
+        case .quiplash(.advance): return "Next"
+        case .bluff(.define(let s)): return s.isEmpty ? "…" : s
+        case .bluff(.vote(let i)): return "Vote \(i + 1)"
+        case .bluff(.advance): return "Next"
+        case .jackAttack(.answer(let i, _)): return ["A","B","C","D"][safe: i] ?? "\(i)"
+        case .jackAttack(.screw(let s)): return "Screw P\(s + 1)"
+        case .jackAttack(.timeOut): return "Time Out"
         }
     }
 }
@@ -375,4 +408,7 @@ enum Move: Codable, Hashable {
     case marioParty(MarioPartyMove)
     case solar(SolarEvent)
     case trivia(TriviaMove)
+    case quiplash(QuiplashMove)
+    case bluff(BluffMove)
+    case jackAttack(JackAttackMove)
 }

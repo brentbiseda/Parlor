@@ -7,17 +7,18 @@ struct TableView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject var session: GameSession
     @State private var trophyPulse = false
-    // 2. Turn indicator glow state.
     @State private var turnPulse = false
-    // 3. Medal chip appear animation state.
     @State private var medalsAppeared = false
-    // 5. Game-over confetti dot positions (static colored dots near result banner).
+    @State private var showToast = false
+    @State private var confettiPhase: Double = 0
     private let confettiDots: [(CGFloat, CGFloat, Color)] = [
         (-55, -18, Color(red: 1.0, green: 0.84, blue: 0.0)),
         (50, -12, Color(red: 0.3, green: 0.9, blue: 0.45)),
         (-30, 14, Color(red: 0.2, green: 0.7, blue: 1.0)),
         (65, 20, Color(red: 1.0, green: 0.35, blue: 0.7)),
         (-70, 5, Color(red: 0.65, green: 0.3, blue: 1.0)),
+        (30, -28, Color(red: 1.0, green: 0.5, blue: 0.2)),
+        (-40, 30, Color(red: 0.4, green: 0.9, blue: 0.7)),
     ]
 
     var body: some View {
@@ -113,19 +114,25 @@ struct TableView: View {
                     VStack(spacing: 0) {
                         // Player turn strip for multiplayer games.
                         if game.playerCount > 1 {
+                            let isPartnershipGame = session.lobby.gameKind.isPartnership
+                            // For partnership games, perspective seat's partner is (seat + 2) % 4
+                            let perspSeat = session.perspectiveSeat
+                            let partnerSeat = isPartnershipGame ? (perspSeat + 2) % 4 : -1
                             HStack(spacing: 0) {
                                 ForEach(0..<game.playerCount, id: \.self) { seat in
                                     let isCurrent = seat == game.controller(of: game.currentPlayer)
                                     let isYou = session.localHumanSeats.contains(seat)
                                     let isBot = session.lobby.players[safe: seat]?.isBot == true
+                                    let isPartner = seat == partnerSeat && !isYou
                                     PlayerAvatarCell(
                                         name: session.playerName(seat: seat),
                                         isCurrent: isCurrent,
                                         isYou: isYou,
-                                        isBot: isBot
+                                        isBot: isBot,
+                                        isPartner: isPartner
                                     )
                                     .frame(maxWidth: .infinity)
-                                    .accessibilityLabel("\(session.playerName(seat: seat))\(isCurrent ? ", current turn" : "")\(isYou ? ", you" : "")\(isBot ? ", bot" : "")")
+                                    .accessibilityLabel("\(session.playerName(seat: seat))\(isCurrent ? ", current turn" : "")\(isYou ? ", you" : "")\(isBot ? ", bot" : "")\(isPartner ? ", your partner" : "")")
                                 }
                             }
                             .padding(.horizontal, 20)
@@ -147,11 +154,18 @@ struct TableView: View {
 
                         HStack(spacing: 8) {
                             if session.actionableSeat != nil {
-                                Circle()
-                                    .fill(Color.green)
-                                    .frame(width: 7, height: 7)
-                                    .shadow(color: .green.opacity(turnPulse ? 0.9 : 0.4), radius: 5)
-                                    .accessibilityHidden(true)
+                                ZStack {
+                                    Circle()
+                                        .strokeBorder(Color.green.opacity(turnPulse ? 0.0 : 0.5), lineWidth: 1.5)
+                                        .frame(width: 14, height: 14)
+                                        .scaleEffect(turnPulse ? 1.8 : 1.0)
+                                        .animation(.easeOut(duration: 1.2).repeatForever(autoreverses: false), value: turnPulse)
+                                    Circle()
+                                        .fill(Color.green)
+                                        .frame(width: 7, height: 7)
+                                        .shadow(color: .green.opacity(0.8), radius: 4)
+                                }
+                                .accessibilityHidden(true)
                             }
                             Text(statusLine(game))
                                 .font(.footnote.weight(.semibold))
@@ -201,13 +215,43 @@ struct TableView: View {
                     }
                 }
             }
-            .alert("Oops", isPresented: Binding(
-                get: { session.toast != nil },
-                set: { if !$0 { session.toast = nil } }
-            )) {
-                Button("OK", role: .cancel) {}
-            } message: {
-                Text(session.toast ?? "")
+            .overlay(alignment: .top) {
+                if showToast, let msg = session.toast {
+                    HStack(spacing: 9) {
+                        Image(systemName: "exclamationmark.circle.fill")
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.orange)
+                        Text(msg)
+                            .font(.subheadline.weight(.semibold))
+                            .lineLimit(3)
+                            .multilineTextAlignment(.leading)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 12)
+                    .background {
+                        ZStack {
+                            Capsule().fill(.ultraThinMaterial)
+                            Capsule().fill(Color.orange.opacity(0.18))
+                        }
+                        .overlay(Capsule().strokeBorder(Color.orange.opacity(0.4), lineWidth: 1))
+                    }
+                    .shadow(color: .black.opacity(0.45), radius: 14, y: 6)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 24)
+                    .transition(.move(edge: .top).combined(with: .opacity))
+                }
+            }
+            .onChange(of: session.toast) { _, toast in
+                guard toast != nil else { return }
+                withAnimation(.spring(response: 0.45, dampingFraction: 0.72)) { showToast = true }
+                Task { @MainActor in
+                    try? await Task.sleep(for: .seconds(2.8))
+                    withAnimation(.easeIn(duration: 0.35)) { showToast = false }
+                    try? await Task.sleep(for: .seconds(0.4))
+                    session.toast = nil
+                }
             }
             .onChange(of: session.ended) { _, ended in
                 if ended { model.session = nil }
@@ -312,44 +356,49 @@ struct TableView: View {
         case .trivia:
             TriviaView(session: session)
                 .id(ObjectIdentifier(session))
+        case .promptParty:
+            QuiplashView(session: session)
+        case .bluff:
+            BluffView(session: session)
+        case .jackAttack:
+            JackAttackView(session: session)
         }
     }
 
     var handoffCurtain: some View {
         let seat = session.game.map { $0.controller(of: $0.currentPlayer) } ?? 0
         let name = session.playerName(seat: seat)
+        let accent = session.lobby.gameKind.tileColor
         return ZStack {
             Color.black.opacity(0.92).ignoresSafeArea()
             Rectangle().fill(.ultraThinMaterial).ignoresSafeArea()
-            // Decorative radial glow in background
             RadialGradient(
-                colors: [Color.teal.opacity(0.18), Color.blue.opacity(0.08), .clear],
-                center: .center, startRadius: 10, endRadius: 260
+                colors: [accent.opacity(0.22), accent.opacity(0.06), .clear],
+                center: .center, startRadius: 10, endRadius: 300
             )
             .ignoresSafeArea()
 
             VStack(spacing: 28) {
-                // Icon cluster
                 ZStack {
                     Circle()
                         .fill(
-                            RadialGradient(colors: [Color.teal.opacity(0.35), Color.blue.opacity(0.1), .clear],
+                            RadialGradient(colors: [accent.opacity(0.35), accent.opacity(0.08), .clear],
                                            center: .center, startRadius: 0, endRadius: 65)
                         )
                         .frame(width: 130, height: 130)
                     Circle()
-                        .strokeBorder(Color.teal.opacity(0.3), lineWidth: 1)
+                        .strokeBorder(accent.opacity(0.35), lineWidth: 1.5)
                         .frame(width: 110, height: 110)
                     Circle()
-                        .strokeBorder(Color.white.opacity(0.1), lineWidth: 0.75)
+                        .strokeBorder(.white.opacity(0.1), lineWidth: 0.75)
                         .frame(width: 90, height: 90)
                     Image(systemName: "hand.point.right.fill")
                         .font(.system(size: 48))
                         .foregroundStyle(
-                            LinearGradient(colors: [.white, Color.teal.opacity(0.7)],
+                            LinearGradient(colors: [.white, accent.opacity(0.75)],
                                            startPoint: .top, endPoint: .bottom)
                         )
-                        .shadow(color: Color.teal.opacity(0.5), radius: 12)
+                        .shadow(color: accent.opacity(0.55), radius: 14)
                 }
 
                 VStack(spacing: 10) {
@@ -359,6 +408,9 @@ struct TableView: View {
                     Text("to \(name)")
                         .font(.system(size: 28, weight: .bold))
                         .foregroundStyle(.white)
+                    Text(session.lobby.gameKind.title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(accent.opacity(0.7))
                 }
 
                 Button {
@@ -374,13 +426,13 @@ struct TableView: View {
                     .padding(.vertical, 15)
                     .background(
                         LinearGradient(
-                            colors: [Color.teal, Color(red: 0.05, green: 0.45, blue: 0.5)],
+                            colors: [accent, accent.opacity(0.75)],
                             startPoint: .topLeading, endPoint: .bottomTrailing
                         ),
                         in: RoundedRectangle(cornerRadius: 18)
                     )
                     .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.25), lineWidth: 1))
-                    .shadow(color: Color.teal.opacity(0.4), radius: 12, y: 4)
+                    .shadow(color: accent.opacity(0.45), radius: 14, y: 5)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(.white)
@@ -458,6 +510,9 @@ struct TableView: View {
                     guard !isLoss else { return }
                     withAnimation(.easeOut(duration: 1.6).repeatForever(autoreverses: false)) {
                         trophyPulse = true
+                    }
+                    withAnimation(.linear(duration: 4.0).repeatForever(autoreverses: false)) {
+                        confettiPhase = .pi * 2
                     }
                 }
 
@@ -606,12 +661,16 @@ struct TableView: View {
                 if !isLoss {
                     ForEach(confettiDots.indices, id: \.self) { idx in
                         let dot = confettiDots[idx]
+                        let speed = 0.6 + Double(idx % 3) * 0.35
+                        let floatY = CGFloat(sin(confettiPhase * speed + Double(idx) * 1.4)) * 6
+                        let floatX = CGFloat(cos(confettiPhase * speed * 0.7 + Double(idx) * 0.9)) * 4
+                        let size: CGFloat = 5 + CGFloat(idx % 3) * 3
                         Circle()
                             .fill(dot.2)
-                            .frame(width: 5 + CGFloat(idx % 3) * 3, height: 5 + CGFloat(idx % 3) * 3)
-                            .offset(x: dot.0, y: dot.1)
-                            .opacity(0.65)
-                            .blur(radius: CGFloat(idx % 2) * 0.5)
+                            .frame(width: size, height: size)
+                            .offset(x: dot.0 + floatX, y: dot.1 + floatY)
+                            .opacity(0.7 + Double(idx % 2) * 0.15)
+                            .blur(radius: CGFloat(idx % 3) * 0.4)
                     }
                 }
             }
@@ -650,14 +709,8 @@ struct TableView: View {
                     .multilineTextAlignment(.center)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 6) {
-                        ForEach(parts.dropFirst().prefix(5), id: \.self) { stat in
-                            Text(stat)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.white.opacity(0.82))
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 3)
-                                .background(.white.opacity(0.1), in: Capsule())
-                                .overlay(Capsule().strokeBorder(.white.opacity(0.2), lineWidth: 0.5))
+                        ForEach(parts.dropFirst().prefix(6), id: \.self) { stat in
+                            statPill(stat)
                         }
                     }
                     .padding(.horizontal, 2)
@@ -668,6 +721,48 @@ struct TableView: View {
                 .font(.title3.weight(.bold))
                 .multilineTextAlignment(.center)
         }
+    }
+
+    @ViewBuilder
+    private func statPill(_ stat: String) -> some View {
+        let color = statPillColor(stat)
+        Text(stat)
+            .font(.caption.weight(.semibold))
+            .foregroundStyle((color ?? .white).opacity(0.92))
+            .padding(.horizontal, 9)
+            .padding(.vertical, 4)
+            .background((color ?? .white).opacity(0.14), in: Capsule())
+            .overlay(Capsule().strokeBorder((color ?? .white).opacity(0.32), lineWidth: 0.75))
+    }
+
+    private func statPillColor(_ stat: String) -> Color? {
+        if stat.contains("🌙") || stat.contains("moon") || stat.contains("Moon") {
+            return Color(red: 0.55, green: 0.65, blue: 1.0)
+        }
+        if stat.contains("🔥") || stat.contains("streak") || stat.contains("Streak") {
+            return Color.orange
+        }
+        if stat.contains("⭐") || stat.contains("best") || stat.contains("Best") || stat.contains("record") {
+            return Color(red: 1.0, green: 0.82, blue: 0.2)
+        }
+        if stat.contains("🎯") || stat.contains("combo") || stat.contains("Combo") ||
+           stat.contains("chain") || stat.contains("Chain") || stat.contains("×") {
+            return Color(red: 0.3, green: 0.88, blue: 0.58)
+        }
+        if stat.contains("perfect") || stat.contains("Perfect") || stat.contains("✨") {
+            return Color(red: 0.55, green: 0.92, blue: 0.48)
+        }
+        if stat.contains("pts") || stat.contains("score") || stat.contains("Score") ||
+           stat.contains("lvl") || stat.contains("Lv") {
+            return Color(red: 0.45, green: 0.72, blue: 1.0)
+        }
+        if stat.contains("💀") || stat.contains("lives") || stat.contains("deaths") {
+            return Color(red: 0.88, green: 0.28, blue: 0.28)
+        }
+        if stat.contains("🎲") || stat.contains("rounds") || stat.contains("Round") {
+            return Color(red: 0.7, green: 0.5, blue: 0.9)
+        }
+        return nil
     }
 }
 
@@ -684,22 +779,40 @@ struct LobbyWaitView: View {
     }
 
     var body: some View {
-        ScrollView {
+        let accentColor = session.lobby.gameKind.tileColor
+        return ScrollView {
             VStack(spacing: 24) {
                 // Game icon with animated ring for the host-searching state.
                 ZStack {
                     Circle()
-                        .strokeBorder(Color.teal.opacity(0.18 * (1 - scanPulse)), lineWidth: 2)
-                        .frame(width: 90, height: 90)
-                        .scaleEffect(1 + scanPulse * 0.5)
+                        .strokeBorder(accentColor.opacity(0.12 * (1 - scanPulse)), lineWidth: 2.5)
+                        .frame(width: 110, height: 110)
+                        .scaleEffect(1 + scanPulse * 0.55)
                     Circle()
-                        .fill(Color.teal.opacity(0.12))
+                        .strokeBorder(accentColor.opacity(0.18 * (1 - scanPulse)), lineWidth: 1.5)
+                        .frame(width: 90, height: 90)
+                        .scaleEffect(1 + scanPulse * 0.35)
+                    Circle()
+                        .fill(
+                            LinearGradient(colors: [accentColor.opacity(0.22), accentColor.opacity(0.08)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                        )
+                        .frame(width: 72, height: 72)
+                    Circle()
+                        .strokeBorder(
+                            LinearGradient(colors: [accentColor.opacity(0.6), accentColor.opacity(0.25)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing),
+                            lineWidth: 1.5)
                         .frame(width: 72, height: 72)
                     Image(systemName: session.lobby.gameKind.symbolName)
                         .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
+                        .foregroundStyle(
+                            LinearGradient(colors: [.white, accentColor.opacity(0.85)],
+                                           startPoint: .top, endPoint: .bottom)
+                        )
+                        .shadow(color: accentColor.opacity(0.5), radius: 8)
                 }
-                .shadow(color: Color.teal.opacity(0.4), radius: 16)
+                .shadow(color: accentColor.opacity(0.4), radius: 20, y: 4)
 
                 VStack(spacing: 6) {
                     Text(session.lobby.gameKind.title)
@@ -739,9 +852,25 @@ struct LobbyWaitView: View {
                                 .background(.white, in: RoundedRectangle(cornerRadius: 16))
                         }
 
-                        Text(webURL.absoluteString)
-                            .font(.system(.caption, design: .monospaced))
-                            .foregroundStyle(.teal)
+                        HStack(spacing: 8) {
+                            Text(webURL.absoluteString)
+                                .font(.system(.caption, design: .monospaced))
+                                .foregroundStyle(accentColor)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Button {
+                                UIPasteboard.general.string = webURL.absoluteString
+                                UINotificationFeedbackGenerator().notificationOccurred(.success)
+                            } label: {
+                                Image(systemName: "doc.on.doc.fill")
+                                    .font(.caption)
+                                    .foregroundStyle(accentColor)
+                                    .padding(6)
+                                    .background(accentColor.opacity(0.15), in: Circle())
+                                    .overlay(Circle().strokeBorder(accentColor.opacity(0.3), lineWidth: 1))
+                            }
+                            .buttonStyle(.plain)
+                        }
 
                         Text("Or open Parlor → **Join a nearby game**" + (session.isBigScreen ? "\nMirror this device with AirPlay for the full effect." : ""))
                             .font(.caption)
@@ -750,8 +879,8 @@ struct LobbyWaitView: View {
                     }
                     .padding(18)
                     .frame(maxWidth: 400)
-                    .background(.teal.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
-                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.teal.opacity(0.35), lineWidth: 1))
+                    .background(accentColor.opacity(0.10), in: RoundedRectangle(cornerRadius: 20))
+                    .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(accentColor.opacity(0.35), lineWidth: 1))
                 }
 
                 // Seat roster.
@@ -763,10 +892,13 @@ struct LobbyWaitView: View {
                             ZStack {
                                 Circle()
                                     .fill(filled
-                                        ? LinearGradient(colors: [Color.teal, Color.teal.opacity(0.6)],
+                                        ? LinearGradient(colors: [accentColor, accentColor.opacity(0.65)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing)
                                         : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)],
                                                          startPoint: .topLeading, endPoint: .bottomTrailing))
+                                    .frame(width: 38, height: 38)
+                                Circle()
+                                    .strokeBorder(filled ? .white.opacity(0.28) : .white.opacity(0.08), lineWidth: 1)
                                     .frame(width: 38, height: 38)
                                 Image(systemName: filled ? "person.fill" : "person")
                                     .font(.system(size: 17, weight: .semibold))
@@ -786,10 +918,11 @@ struct LobbyWaitView: View {
                             if isMe {
                                 Text("you")
                                     .font(.caption.weight(.bold))
-                                    .foregroundStyle(.teal)
+                                    .foregroundStyle(accentColor)
                                     .padding(.horizontal, 8)
                                     .padding(.vertical, 3)
-                                    .background(.teal.opacity(0.18), in: Capsule())
+                                    .background(accentColor.opacity(0.18), in: Capsule())
+                                    .overlay(Capsule().strokeBorder(accentColor.opacity(0.35), lineWidth: 0.75))
                             } else if !filled && session.role == .host {
                                 Image(systemName: "antenna.radiowaves.left.and.right")
                                     .font(.caption)
@@ -801,15 +934,15 @@ struct LobbyWaitView: View {
                         .padding(.vertical, 10)
                         .background(
                             filled
-                                ? AnyShapeStyle(LinearGradient(colors: [.white.opacity(0.15), .white.opacity(0.08)],
+                                ? AnyShapeStyle(LinearGradient(colors: [accentColor.opacity(0.14), .white.opacity(0.05)],
                                                                startPoint: .topLeading, endPoint: .bottomTrailing))
                                 : AnyShapeStyle(.white.opacity(0.05)),
                             in: RoundedRectangle(cornerRadius: 14))
                         .overlay(
                             RoundedRectangle(cornerRadius: 14)
-                                .strokeBorder(.white.opacity(filled ? 0.18 : 0.07), lineWidth: 1)
+                                .strokeBorder(filled ? accentColor.opacity(0.28) : .white.opacity(0.07), lineWidth: 1)
                         )
-                        .shadow(color: filled ? Color.teal.opacity(0.15) : .clear, radius: 8, y: 2)
+                        .shadow(color: filled ? accentColor.opacity(0.18) : .clear, radius: 8, y: 2)
                         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: filled)
                     }
                 }
@@ -825,11 +958,11 @@ struct LobbyWaitView: View {
                             .frame(minWidth: 220)
                             .padding(.vertical, 15)
                             .background(
-                                LinearGradient(colors: [Color.teal, Color(red: 0.05, green: 0.42, blue: 0.46)],
+                                LinearGradient(colors: [accentColor, accentColor.opacity(0.75)],
                                                startPoint: .topLeading, endPoint: .bottomTrailing),
                                 in: RoundedRectangle(cornerRadius: 18))
                             .overlay(RoundedRectangle(cornerRadius: 18).strokeBorder(.white.opacity(0.25), lineWidth: 1))
-                            .shadow(color: Color.teal.opacity(0.5), radius: 12, y: 5)
+                            .shadow(color: accentColor.opacity(0.5), radius: 12, y: 5)
                     }
                     .buttonStyle(.plain)
                     .foregroundStyle(.white)

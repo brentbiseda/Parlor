@@ -48,12 +48,13 @@ final class GameSession: ObservableObject {
         role = .local
         transport = nil
         self.myName = myName
-        let humans = max(1, min(humanCount, kind.playerCount))
+        let count = kind.effectivePlayerCount(options: options)
+        let humans = max(1, min(humanCount, count))
         var players: [PlayerInfo] = (0..<humans).map {
             PlayerInfo(id: $0 == 0 ? Identity.playerID : "local-\($0)",
                        name: humans == 1 ? myName : "Player \($0 + 1)")
         }
-        while players.count < kind.playerCount {
+        while players.count < count {
             players.append(PlayerInfo(id: "bot-\(players.count)", name: "Bot \(players.count + 1)", isBot: true))
         }
         lobby = LobbyState(gameKind: kind, options: options, hostID: Identity.playerID, players: players)
@@ -142,7 +143,7 @@ final class GameSession: ObservableObject {
     // MARK: - Lobby
 
     var seatsFilled: Int { lobby.players.count }
-    var seatsTotal: Int { lobby.gameKind.playerCount }
+    var seatsTotal: Int { lobby.gameKind.effectivePlayerCount(options: lobby.options) }
 
     func playerName(seat: Int) -> String {
         lobby.players[safe: seat]?.name ?? "Seat \(seat + 1)"

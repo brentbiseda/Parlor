@@ -106,13 +106,15 @@ struct AnyGame: Codable {
 
     private func redactedEngine(for seat: Int) -> any GameEngine {
         switch engine {
-        case let g as HeartsGame: return g.redacted(for: seat)
-        case let g as SpadesGame: return g.redacted(for: seat)
-        case let g as EuchreGame: return g.redacted(for: seat)
-        case let g as BridgeGame: return g.redacted(for: seat)
-        case let g as UnoGame: return g.redacted(for: seat)
-        case let g as EightsGame: return g.redacted(for: seat)
-        case let g as GoFishGame: return g.redacted(for: seat)
+        case let g as HeartsGame:    return g.redacted(for: seat)
+        case let g as SpadesGame:    return g.redacted(for: seat)
+        case let g as EuchreGame:    return g.redacted(for: seat)
+        case let g as BridgeGame:    return g.redacted(for: seat)
+        case let g as UnoGame:       return g.redacted(for: seat)
+        case let g as EightsGame:    return g.redacted(for: seat)
+        case let g as GoFishGame:    return g.redacted(for: seat)
+        case let g as QuiplashGame:  return g.redacted(for: seat)
+        case let g as BluffGame:     return g.redacted(for: seat)
         default: return engine
         }
     }
@@ -152,7 +154,10 @@ struct AnyGame: Codable {
         case .baseball: engine = try c.decode(BaseballGame.self, forKey: .data)
         case .soccer: engine = try c.decode(SoccerGame.self, forKey: .data)
         case .hockey: engine = try c.decode(HockeyGame.self, forKey: .data)
-        case .trivia: engine = try c.decode(TriviaGame.self, forKey: .data)
+        case .trivia:       engine = try c.decode(TriviaGame.self,       forKey: .data)
+        case .promptParty:  engine = try c.decode(QuiplashGame.self,     forKey: .data)
+        case .bluff:        engine = try c.decode(BluffGame.self,        forKey: .data)
+        case .jackAttack:   engine = try c.decode(JackAttackGame.self,   forKey: .data)
         }
     }
 
@@ -189,7 +194,10 @@ struct AnyGame: Codable {
         case let g as CheckersGame: try c.encode(g, forKey: .data)
         case let g as GoGame: try c.encode(g, forKey: .data)
         case let g as MarioPartyGame: try c.encode(g, forKey: .data)
-        case let g as TriviaGame:     try c.encode(g, forKey: .data)
+        case let g as TriviaGame:      try c.encode(g, forKey: .data)
+        case let g as QuiplashGame:    try c.encode(g, forKey: .data)
+        case let g as BluffGame:       try c.encode(g, forKey: .data)
+        case let g as JackAttackGame:  try c.encode(g, forKey: .data)
         default: throw EncodingError.invalidValue(engine, .init(codingPath: [], debugDescription: "Unknown engine"))
         }
     }
@@ -226,7 +234,12 @@ struct AnyGame: Codable {
         case .baseball: return AnyGame(BaseballGame())
         case .soccer: return AnyGame(SoccerGame())
         case .hockey:  return AnyGame(HockeyGame())
-        case .trivia:  return AnyGame(TriviaGame())
+        case .trivia:      return AnyGame(TriviaGame(playerCount: options.partyPlayerCount,
+                                                     categories: options.triviaCategories,
+                                                     difficulty: options.triviaDifficulty))
+        case .promptParty: return AnyGame(QuiplashGame(playerCount: options.partyPlayerCount))
+        case .bluff:       return AnyGame(BluffGame(playerCount: options.partyPlayerCount))
+        case .jackAttack:  return AnyGame(JackAttackGame(playerCount: options.partyPlayerCount))
         }
     }
 }

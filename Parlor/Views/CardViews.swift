@@ -409,10 +409,10 @@ struct HandView: View {
 struct OpponentHandView: View {
     let count: Int
     var width: CGFloat = 26
+    @State private var alertPulse = false
 
     var body: some View {
         Group { innerBody }
-            // Improvement 12: animate fan layout when count changes
             .animation(.easeInOut(duration: 0.25), value: count)
     }
 
@@ -447,15 +447,28 @@ struct OpponentHandView: View {
                         .offset(x: CGFloat(visible - 1) * width * spreadFactor + width * 0.85,
                                 y: -width * 0.1)
                 } else if count <= 2 {
-                    // Low-card alarm: highlight an opponent close to going out.
-                    Text("\(count)")
-                        .font(.system(size: width * 0.34, weight: .heavy, design: .rounded))
-                        .foregroundStyle(.white)
-                        .frame(width: width * 0.5, height: width * 0.5)
-                        .background(Color.red.opacity(0.92), in: Circle())
-                        .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
-                        .offset(x: CGFloat(visible - 1) * width * spreadFactor + width * 0.7,
-                                y: -width * 0.22)
+                    // Low-card alarm: pulsing badge when opponent is close to going out.
+                    ZStack {
+                        Circle()
+                            .strokeBorder(Color.red.opacity(alertPulse ? 0.0 : 0.7), lineWidth: 2)
+                            .frame(width: width * 0.72, height: width * 0.72)
+                            .scaleEffect(alertPulse ? 1.6 : 1.0)
+                        Text("\(count)")
+                            .font(.system(size: width * 0.34, weight: .heavy, design: .rounded))
+                            .foregroundStyle(.white)
+                            .frame(width: width * 0.5, height: width * 0.5)
+                            .background(Color.red.opacity(0.92), in: Circle())
+                            .overlay(Circle().strokeBorder(.white.opacity(0.85), lineWidth: 1.5))
+                            .shadow(color: .red.opacity(alertPulse ? 0.9 : 0.35), radius: alertPulse ? 8 : 3)
+                            .scaleEffect(alertPulse ? 1.06 : 1.0)
+                    }
+                    .offset(x: CGFloat(visible - 1) * width * spreadFactor + width * 0.7,
+                            y: -width * 0.22)
+                    .onAppear {
+                        withAnimation(.easeInOut(duration: 0.75).repeatForever(autoreverses: true)) {
+                            alertPulse = true
+                        }
+                    }
                 }
             }
             .frame(width: width + width * spreadFactor * CGFloat(max(visible - 1, 0)) + (count > 8 ? width * 1.2 : 0),
@@ -471,6 +484,7 @@ struct PlayerAvatarCell: View {
     let isCurrent: Bool
     let isYou: Bool
     var isBot: Bool = false
+    var isPartner: Bool = false
     @State private var pulse: CGFloat = 0
 
     var body: some View {
@@ -481,10 +495,17 @@ struct PlayerAvatarCell: View {
                         .strokeBorder(Color.green.opacity(0.55 * (1 - pulse)), lineWidth: 3)
                         .frame(width: 34, height: 34)
                         .scaleEffect(1 + pulse * 0.35)
+                } else if isPartner {
+                    Circle()
+                        .strokeBorder(Color.orange.opacity(0.55), lineWidth: 2)
+                        .frame(width: 32, height: 32)
                 }
                 Circle()
                     .fill(isCurrent
                           ? LinearGradient(colors: [Color.green.opacity(0.45), Color.green.opacity(0.2)],
+                                           startPoint: .topLeading, endPoint: .bottomTrailing)
+                          : isPartner
+                          ? LinearGradient(colors: [Color.orange.opacity(0.3), Color.orange.opacity(0.1)],
                                            startPoint: .topLeading, endPoint: .bottomTrailing)
                           : LinearGradient(colors: [Color.white.opacity(0.1), Color.white.opacity(0.05)],
                                            startPoint: .topLeading, endPoint: .bottomTrailing))
@@ -494,9 +515,9 @@ struct PlayerAvatarCell: View {
                         .strokeBorder(Color.green, lineWidth: 2)
                         .frame(width: 28, height: 28)
                 }
-                Image(systemName: isYou ? "person.fill" : "cpu")
+                Image(systemName: isYou ? "person.fill" : (isBot ? "cpu" : "person.fill"))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(isCurrent ? .white : .white.opacity(0.5))
+                    .foregroundStyle(isCurrent ? .white : isPartner ? .orange.opacity(0.9) : .white.opacity(0.5))
             }
             .overlay(alignment: .topTrailing) {
                 if isYou {
@@ -504,18 +525,27 @@ struct PlayerAvatarCell: View {
                         .fill(Color.teal)
                         .frame(width: 7, height: 7)
                         .offset(x: 2, y: -2)
+                } else if isPartner && !isCurrent {
+                    Circle()
+                        .fill(Color.orange)
+                        .frame(width: 7, height: 7)
+                        .offset(x: 2, y: -2)
                 }
             }
             Text(name)
                 .font(.system(size: 9, weight: isCurrent ? .bold : .regular))
-                .foregroundStyle(isCurrent ? .white : .white.opacity(0.45))
+                .foregroundStyle(isCurrent ? .white : isPartner ? .orange.opacity(0.85) : .white.opacity(0.45))
                 .lineLimit(1)
                 .frame(maxWidth: .infinity)
-            // Micro-label: "You" for local human, "🤖" for bots
+            // Micro-label: "You" / "Partner" / "🤖"
             if isYou {
                 Text("You")
                     .font(.system(size: 7, weight: .semibold))
                     .foregroundStyle(.teal.opacity(0.9))
+            } else if isPartner {
+                Text("Partner")
+                    .font(.system(size: 7, weight: .semibold))
+                    .foregroundStyle(.orange.opacity(0.9))
             } else if isBot {
                 Text("🤖")
                     .font(.system(size: 7))
@@ -542,6 +572,7 @@ struct SeatBadge: View {
     let name: String
     let isCurrent: Bool
     var detail: String? = nil
+    var highlight: Bool = false   // partner seat in partnership games
     @State private var pulse: CGFloat = 0.6
 
     var body: some View {
@@ -559,12 +590,16 @@ struct SeatBadge: View {
                         .fill(isCurrent
                               ? LinearGradient(colors: [.yellow, Color(red: 1.0, green: 0.75, blue: 0.1)],
                                                startPoint: .topLeading, endPoint: .bottomTrailing)
+                              : highlight
+                              ? LinearGradient(colors: [.orange.opacity(0.85), .orange.opacity(0.5)],
+                                               startPoint: .topLeading, endPoint: .bottomTrailing)
                               : LinearGradient(colors: [.white.opacity(0.4), .white.opacity(0.2)],
                                                startPoint: .topLeading, endPoint: .bottomTrailing))
                         .frame(width: 9, height: 9)
                 }
                 Text(name)
-                    .font(.footnote.weight(isCurrent ? .bold : .medium))
+                    .font(.footnote.weight(isCurrent ? .bold : highlight ? .semibold : .medium))
+                    .foregroundStyle(isCurrent ? .white : highlight ? .orange.opacity(0.9) : .white)
                     .lineLimit(1)
             }
             if let detail {

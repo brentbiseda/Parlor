@@ -11,8 +11,11 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     case pinball, breakout, muncher, hopper, centipede, snake, bomberman, solarStriker
     // Sports
     case football, baseball, soccer, hockey
-    // Trivia
+    // Trivia & party
     case trivia
+    case promptParty   // Quiplash-style fill-in-blank comedy
+    case bluff         // Balderdash-style fake definitions
+    case jackAttack    // You Don't Know Jack-style irreverent trivia
 
     var id: String { rawValue }
 
@@ -48,21 +51,38 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .soccer: return "Penalty Shootout"
         case .hockey: return "Air Hockey"
         case .trivia: return "Trivia Blast"
+        case .promptParty: return "Prompt Party"
+        case .bluff: return "Bluff!"
+        case .jackAttack: return "Jack Attack"
         }
     }
 
+    /// Maximum player count (or fixed count for non-variable games).
     var playerCount: Int {
         switch self {
         case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper,
              .pinball, .breakout, .muncher, .hopper, .centipede, .snake, .bomberman, .solarStriker,
              .football, .baseball, .soccer, .hockey:
             return 1
-        case .trivia:
-            return 4
         case .chess, .checkers, .go:
             return 2
         case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish, .marioParty:
             return 4
+        // Variable-count party games return their maximum here.
+        case .trivia, .jackAttack:
+            return 16
+        case .promptParty, .bluff:
+            return 8
+        }
+    }
+
+    /// Actual player count taking into account per-session options.
+    func effectivePlayerCount(options: GameOptions) -> Int {
+        switch self {
+        case .trivia, .promptParty, .bluff, .jackAttack:
+            return options.partyPlayerCount
+        default:
+            return playerCount
         }
     }
 
@@ -72,6 +92,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     var hasHiddenInfo: Bool {
         switch self {
         case .hearts, .spades, .euchre, .bridge, .uno, .eights, .gofish: return true
+        case .promptParty, .bluff: return true  // players' answers are hidden until reveal
         default: return false
         }
     }
@@ -83,6 +104,13 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
     var isPartnership: Bool {
         switch self {
         case .spades, .euchre, .bridge: return true
+        default: return false
+        }
+    }
+
+    var isPartyGame: Bool {
+        switch self {
+        case .trivia, .promptParty, .bluff, .jackAttack: return true
         default: return false
         }
     }
@@ -115,6 +143,9 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .bomberman: return "burst.fill"
         case .solarStriker: return "paperplane.fill"
         case .trivia: return "questionmark.bubble.fill"
+        case .promptParty: return "pencil.and.scribble"
+        case .bluff: return "theatermasks.fill"
+        case .jackAttack: return "bolt.shield.fill"
         case .football: return "football.fill"
         case .baseball: return "baseball.fill"
         case .soccer: return "soccerball"
@@ -153,7 +184,10 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .baseball: return "Solo · 10 pitches"
         case .soccer: return "Solo · shoot 5, save 5"
         case .hockey: return "Solo · first to 7"
-        case .trivia: return "4 players · 15 questions"
+        case .trivia: return "2–16 players · pick categories"
+        case .promptParty: return "3–8 players · write funny answers"
+        case .bluff: return "3–8 players · fake definitions"
+        case .jackAttack: return "2–16 players · speed trivia with screws"
         }
     }
 
@@ -177,7 +211,7 @@ enum GameKind: String, Codable, CaseIterable, Identifiable {
         case .solitaire, .freecell, .mahjong, .tetris, .capsules, .minesweeper: return .puzzles
         case .pinball, .breakout, .muncher, .hopper, .centipede, .snake, .bomberman, .solarStriker: return .arcade
         case .football, .baseball, .soccer, .hockey: return .sports
-        case .trivia: return .boards
+        case .trivia, .promptParty, .bluff, .jackAttack: return .boards
         }
     }
 }
@@ -208,14 +242,25 @@ struct GameOptions: Codable, Hashable {
     var botDifficulty: BotDifficulty = .normal
     /// PinballTheme id.
     var pinballLayout: String = "classic"
+    /// Number of players for variable-count party games (trivia, promptParty, bluff, jackAttack).
+    var partyPlayerCount: Int = 4
+    /// Trivia category filter — empty means all categories.
+    var triviaCategories: [TriviaCategory] = []
+    /// Trivia difficulty filter — nil means mixed.
+    var triviaDifficulty: TriviaDifficulty? = nil
 
     init(goBoardSize: Int = 9, klondikeDrawThree: Bool = false, klondikeMaxPasses: Int = 0,
-         botDifficulty: BotDifficulty = .normal, pinballLayout: String = "classic") {
+         botDifficulty: BotDifficulty = .normal, pinballLayout: String = "classic",
+         partyPlayerCount: Int = 4, triviaCategories: [TriviaCategory] = [],
+         triviaDifficulty: TriviaDifficulty? = nil) {
         self.goBoardSize = goBoardSize
         self.klondikeDrawThree = klondikeDrawThree
         self.klondikeMaxPasses = klondikeMaxPasses
         self.botDifficulty = botDifficulty
         self.pinballLayout = pinballLayout
+        self.partyPlayerCount = partyPlayerCount
+        self.triviaCategories = triviaCategories
+        self.triviaDifficulty = triviaDifficulty
     }
 
     init(from decoder: Decoder) throws {
@@ -225,5 +270,8 @@ struct GameOptions: Codable, Hashable {
         klondikeMaxPasses = try c.decodeIfPresent(Int.self, forKey: .klondikeMaxPasses) ?? 0
         botDifficulty = try c.decodeIfPresent(BotDifficulty.self, forKey: .botDifficulty) ?? .normal
         pinballLayout = try c.decodeIfPresent(String.self, forKey: .pinballLayout) ?? "classic"
+        partyPlayerCount = try c.decodeIfPresent(Int.self, forKey: .partyPlayerCount) ?? 4
+        triviaCategories = try c.decodeIfPresent([TriviaCategory].self, forKey: .triviaCategories) ?? []
+        triviaDifficulty = try c.decodeIfPresent(TriviaDifficulty.self, forKey: .triviaDifficulty)
     }
 }

@@ -374,13 +374,21 @@ struct TrickTableView: View {
         }
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
-                Button("Scores", systemImage: "list.number") { showScores = true }
+                Button {
+                    showScores = true
+                } label: {
+                    Image(systemName: "list.number")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.9))
+                        .padding(7)
+                        .background(.white.opacity(0.1), in: Circle())
+                        .overlay(Circle().strokeBorder(.white.opacity(0.2), lineWidth: 0.75))
+                }
             }
         }
-        .alert("Scores", isPresented: $showScores) {
-            Button("Done", role: .cancel) {}
-        } message: {
-            Text(adapter?.scoreLines.joined(separator: "\n") ?? "")
+        .sheet(isPresented: $showScores) {
+            ScoreSheetView(lines: adapter?.scoreLines ?? [],
+                           gameName: session.lobby.gameKind.title)
         }
     }
 
@@ -869,10 +877,14 @@ struct TrickTableView: View {
         let count = adapter.hands[seat].isEmpty
             ? adapter.hands[session.perspectiveSeat].count
             : adapter.hands[seat].count
+        let isPartnership = session.lobby.gameKind.isPartnership
+        let isPartner = isPartnership && offset == 2  // offset 2 = directly across = partner
+        let displayName = seatName(seat) + (isPartner ? " 🤝" : "")
         return VStack(spacing: 4) {
-            SeatBadge(name: seatName(seat),
+            SeatBadge(name: displayName,
                       isCurrent: !game.isOver && game.currentPlayer == seat,
-                      detail: adapter.seatDetail(seat))
+                      detail: adapter.seatDetail(seat),
+                      highlight: isPartner)
             if adapter.faceUpSeat == seat {
                 dummyCards(seat: seat, adapter: adapter, game: game)
             } else {
@@ -1396,5 +1408,181 @@ struct BridgeAuctionPanel: View {
         }
         .padding(8)
         .background(.black.opacity(0.25), in: RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+// MARK: - Score Sheet
+
+private struct ScoreSheetView: View {
+    let lines: [String]
+    let gameName: String
+    @Environment(\.dismiss) private var dismiss
+    @State private var appeared = false
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color(red: 0.08, green: 0.10, blue: 0.16), Color(red: 0.04, green: 0.05, blue: 0.10)],
+                startPoint: .top, endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                // Drag handle
+                Capsule()
+                    .fill(.white.opacity(0.2))
+                    .frame(width: 36, height: 4)
+                    .padding(.top, 10)
+                    .padding(.bottom, 16)
+
+                // Header
+                HStack(spacing: 10) {
+                    Image(systemName: "list.number")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .frame(width: 36, height: 36)
+                        .background(.yellow.opacity(0.15), in: Circle())
+                        .overlay(Circle().strokeBorder(.yellow.opacity(0.3), lineWidth: 1))
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Scores")
+                            .font(.title2.weight(.bold))
+                            .foregroundStyle(.white)
+                        Text(gameName)
+                            .font(.caption)
+                            .foregroundStyle(.white.opacity(0.5))
+                    }
+                    Spacer()
+                    Button {
+                        dismiss()
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(.white.opacity(0.35))
+                            .symbolRenderingMode(.hierarchical)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+
+                Divider()
+                    .background(.white.opacity(0.1))
+
+                // Score lines
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ForEach(Array(lines.enumerated()), id: \.offset) { idx, line in
+                            if line.isEmpty {
+                                Divider()
+                                    .background(.white.opacity(0.08))
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 20)
+                                    .opacity(appeared ? 1 : 0)
+                                    .animation(.easeOut(duration: 0.3).delay(Double(idx) * 0.06), value: appeared)
+                            } else {
+                                scoreLine(line, index: idx)
+                                    .padding(.horizontal, 20)
+                                    .padding(.vertical, 7)
+                                    .opacity(appeared ? 1 : 0)
+                                    .offset(y: appeared ? 0 : 12)
+                                    .animation(.spring(response: 0.4, dampingFraction: 0.8).delay(Double(idx) * 0.055), value: appeared)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 8)
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                        appeared = true
+                    }
+                }
+
+                // Done button
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Done")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                        .background(.white.opacity(0.9), in: RoundedRectangle(cornerRadius: 14))
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 28)
+                .padding(.top, 12)
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+        .presentationBackground(.clear)
+    }
+
+    @ViewBuilder
+    private func scoreLine(_ line: String, index: Int) -> some View {
+        let isHeader = line.hasSuffix(":") || line.hasPrefix("Round history") || line.hasPrefix("Last round")
+        let isRoundRow = line.hasPrefix("R") && line.count < 30 && line.first == "R"
+        let isMoonLine = line.contains("🌙")
+        let accentColor: Color = isMoonLine ? Color(red: 0.55, green: 0.45, blue: 0.95) : .yellow
+
+        if isHeader {
+            Text(line)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.45))
+                .textCase(.uppercase)
+                .tracking(0.8)
+        } else if isRoundRow {
+            HStack {
+                let parts = line.split(separator: ":", maxSplits: 1)
+                let roundLabel = parts.first.map(String.init) ?? line
+                let roundData = parts.dropFirst().first.map(String.init) ?? ""
+                Text(roundLabel + ":")
+                    .font(.system(size: 13, weight: .bold, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .frame(width: 36, alignment: .leading)
+                Text(roundData)
+                    .font(.system(size: 13, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.8))
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 5)
+            .background(.white.opacity(0.04), in: RoundedRectangle(cornerRadius: 8))
+        } else {
+            // Main score line
+            HStack(alignment: .center, spacing: 8) {
+                // Extract number/score if present
+                let colonIdx = line.firstIndex(of: ":")
+                let label = colonIdx.map { String(line[line.startIndex..<$0]) } ?? line
+                let rest = colonIdx.map { String(line[line.index(after: $0)...]).trimmingCharacters(in: .whitespaces) } ?? ""
+
+                HStack(spacing: 6) {
+                    if isMoonLine {
+                        Text("🌙")
+                            .font(.system(size: 14))
+                    }
+                    Text(label)
+                        .font(.system(size: 14, weight: .bold, design: .rounded))
+                        .foregroundStyle(accentColor)
+                }
+                .frame(minWidth: 50, alignment: .leading)
+
+                if !rest.isEmpty {
+                    Text(rest)
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.85))
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.8)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(.white.opacity(0.06))
+                    .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(accentColor.opacity(0.15), lineWidth: 0.75))
+            )
+        }
     }
 }
